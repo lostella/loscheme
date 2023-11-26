@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, collections::btree_map::IterMut, iter::Peekable};
 
 #[derive(Debug, PartialEq)]
 enum Token {
@@ -64,43 +64,98 @@ impl FromStr for Atom {
     }
 }
 
+
 // NOTE: not sure this is the best way
 // see: https://rust-unofficial.github.io/too-many-lists/
-enum Expression {
+enum Expr {
     Atomic(Atom),
-    Composed(Vec<Box<Expression>>),
+    Composed(Vec<Box<Expr>>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct ParseExpressionError;
+struct ParseExprError;
 
-impl FromStr for Expression {
-    type Err = ParseExpressionError};
+// def read_from_tokens(tokens: list) -> Exp:
+//     "Read an expression from a sequence of tokens."
+//     if len(tokens) == 0:
+//         raise SyntaxError("unexpected EOF")
+//     token = tokens.pop(0)
+//     if token == "(":
+//         L = []
+//         while tokens[0] != ")":
+//             L.append(read_from_tokens(tokens))
+//         tokens.pop(0)  # pop off ')'
+//         return L
+//     elif token == ")":
+//         raise SyntaxError("unexpected )")
+//     else:
+//         return atom(token)
 
-    fn from_str(input: &str) -> Result<Expression, Self::Err> {
-        let tokens = tokenize(input);
+impl<'a> Expr {
+    fn from_peekable_tokens<I>(tokens: &mut Peekable<I>) -> Result<Self, &str>
+    where I: Iterator<Item = &'a Token> {
+        // TODO implement here
 
         // if tokens is empty, return error
+        let token = tokens.next().ok_or("unexpected end of tokens")?;
 
-        // keep counter of open parenthesis
-        // if first token is parenthesis
-        // - initialize counter to 1
-        // - set current expression to composed
-        // else
-        // - initialize counter to 0
-        // - set current expression as atomic
+        match token {
+            Token::OpenParen => {
+                let mut subexprs = Vec::<Box<Expr>>::new();
+                while tokens.peek().unwrap() != Token::CloseParen {
+                    let next_subexpr = Self::from_peekable_tokens(tokens)?;
+                    subexprs.push(Box::new(next_subexpr))
+                }
+                tokens.next();
+                Ok(Expr::Composed(subexprs))
+            }
+            Token::CloseParen => {
+                Err("unexpected closed parenthesis")
+            }
+            Token::Other(s) => {
+                Ok(Expr::Atomic(Atom::Symbol(s.to_string())))
+            }
+        }
+    }
 
-        // for each token:
-        // - if current expression is atomic, return error
-        // - 
-        // if counter goes below zero, return error
-
-        // check that counter is zero
+    fn from_tokens(tokens: &[Token]) -> Result<Self, &str> {
+        Self::from_peekable_tokens(&mut tokens.iter().peekable())
     }
 }
 
+// impl FromStr for Expr {
+//     fn from_str(input: &str) -> Result<Expr, Self::Err> {
+//         let mut tokens = tokenize(input).into_iter();
+//         let current_token = tokens.next().ok_or(ParseExprError)?;
+
+//         // if tokens is empty, return error
+//         if tokens.len() == 0 {
+//             return Err(ParseExprError)
+//         }
+
+//         return Ok(Expr::Atomic(Atom::Symbol("a".to_string())))
+
+//         // keep counter of open parenthesis
+//         // if first token is parenthesis
+//         // - initialize counter to 1
+//         // - set current expression to composed
+//         // else
+//         // - initialize counter to 0
+//         // - set current expression as atomic
+
+//         // for each token:
+//         // - if current expression is atomic, return error
+//         // - 
+//         // if counter goes below zero, return error
+
+//         // check that counter is zero
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use super::*;
 
     #[test]
@@ -132,5 +187,20 @@ mod tests {
         assert_eq!(Atom::from_str("abc").unwrap(), Atom::Symbol("abc".to_string()));
         assert_eq!(Atom::from_str("1").unwrap(), Atom::IntegerNumber(1));
         assert_eq!(Atom::from_str("-42").unwrap(), Atom::IntegerNumber(-42));
+    }
+
+    #[test]
+    fn test_expr() {
+        let c1 = Expr::Composed(vec![
+            Box::new(Expr::Atomic(Atom::Symbol("a".to_string()))),
+            Box::new(Expr::Atomic(Atom::IntegerNumber(1))),
+        ]);
+        let c2 = Expr::Composed(vec![
+            Box::new(Expr::Atomic(Atom::Symbol("b".to_string()))),
+            Box::new(Expr::Atomic(Atom::IntegerNumber(2))),
+        ]);
+        let c3 = Expr::Composed(vec![Box::new(c1), Box::new(c2)]);
+        let tokens = tokenize("(define (add x y) (+ :x y))");
+        let expr = Expr::from_tokens(&tokens);
     }
 }
