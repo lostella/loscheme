@@ -1,35 +1,36 @@
-use std::{str::FromStr, collections::btree_map::IterMut, iter::Peekable};
+use std::collections::VecDeque;
+use std::{collections::btree_map::IterMut, iter::Peekable, str::FromStr};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 enum Token {
     OpenParen,
     CloseParen,
     Other(String),
 }
 
-fn tokenize(input: &str) -> Vec<Token> {
-    let mut tokens = Vec::new();
+fn tokenize(input: &str) -> VecDeque<Token> {
+    let mut tokens = VecDeque::new();
     let mut current_token = String::new();
 
     for ch in input.chars() {
         match ch {
             '(' => {
                 if !current_token.is_empty() {
-                    tokens.push(Token::Other(current_token.clone()));
+                    tokens.push_back(Token::Other(current_token.clone()));
                     current_token.clear();
                 }
-                tokens.push(Token::OpenParen);
+                tokens.push_back(Token::OpenParen);
             }
             ')' => {
                 if !current_token.is_empty() {
-                    tokens.push(Token::Other(current_token.clone()));
+                    tokens.push_back(Token::Other(current_token.clone()));
                     current_token.clear();
                 }
-                tokens.push(Token::CloseParen);
+                tokens.push_back(Token::CloseParen);
             }
             c if c.is_whitespace() => {
                 if !current_token.is_empty() {
-                    tokens.push(Token::Other(current_token.clone()));
+                    tokens.push_back(Token::Other(current_token.clone()));
                     current_token.clear();
                 }
             }
@@ -39,13 +40,13 @@ fn tokenize(input: &str) -> Vec<Token> {
 
     // Check if there's any remaining token at the end
     if !current_token.is_empty() {
-        tokens.push(Token::Other(current_token));
+        tokens.push_back(Token::Other(current_token));
     }
 
     tokens
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum Atom {
     IntegerNumber(i32),
     Symbol(String),
@@ -60,13 +61,13 @@ impl FromStr for Atom {
             Ok(n) => return Ok(Atom::IntegerNumber(n)),
             Err(_e) => (),
         }
-        return Ok(Atom::Symbol(input.to_string()))
+        return Ok(Atom::Symbol(input.to_string()));
     }
 }
 
-
 // NOTE: not sure this is the best way
 // see: https://rust-unofficial.github.io/too-many-lists/
+#[derive(Debug, PartialEq, Eq)]
 enum Expr {
     Atomic(Atom),
     Composed(Vec<Box<Expr>>),
@@ -75,82 +76,53 @@ enum Expr {
 #[derive(Debug, PartialEq, Eq)]
 struct ParseExprError;
 
-// def read_from_tokens(tokens: list) -> Exp:
-//     "Read an expression from a sequence of tokens."
-//     if len(tokens) == 0:
-//         raise SyntaxError("unexpected EOF")
-//     token = tokens.pop(0)
-//     if token == "(":
-//         L = []
-//         while tokens[0] != ")":
-//             L.append(read_from_tokens(tokens))
-//         tokens.pop(0)  # pop off ')'
-//         return L
-//     elif token == ")":
-//         raise SyntaxError("unexpected )")
-//     else:
-//         return atom(token)
-
-impl<'a> Expr {
-    fn from_peekable_tokens<I>(tokens: &mut Peekable<I>) -> Result<Self, &str>
-    where I: Iterator<Item = &'a Token> {
-        // TODO implement here
-
-        // if tokens is empty, return error
-        let token = tokens.next().ok_or("unexpected end of tokens")?;
-
-        match token {
-            Token::OpenParen => {
-                let mut subexprs = Vec::<Box<Expr>>::new();
-                while tokens.peek().unwrap() != Token::CloseParen {
-                    let next_subexpr = Self::from_peekable_tokens(tokens)?;
-                    subexprs.push(Box::new(next_subexpr))
+impl Expr {
+    fn _from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
+        match tokens.pop_front() {
+            Some(token) => match token {
+                Token::OpenParen => {
+                    let mut composed_expr = Vec::new();
+                    while let Some(peeked) = tokens.front().cloned() {
+                        if peeked == Token::CloseParen {
+                            tokens.pop_front(); // Consume the ')'
+                            return Ok(Expr::Composed(composed_expr));
+                        } else {
+                            if let Ok(sub_expr) = Self::_from_tokens(tokens) {
+                                composed_expr.push(Box::new(sub_expr));
+                            } else {
+                                return Err("Failed to parse sub-expression");
+                            }
+                        }
+                    }
+                    Err("Unmatched '('")
                 }
-                tokens.next();
-                Ok(Expr::Composed(subexprs))
-            }
-            Token::CloseParen => {
-                Err("unexpected closed parenthesis")
-            }
-            Token::Other(s) => {
-                Ok(Expr::Atomic(Atom::Symbol(s.to_string())))
-            }
+                Token::CloseParen => Err("Unmatched ')'"),
+                Token::Other(s) => {
+                    // Try to parse as Atom
+                    if let Ok(atom) = Atom::from_str(&s) {
+                        Ok(Expr::Atomic(atom))
+                    } else {
+                        Err("Failed to parse as Atom")
+                    }
+                }
+            },
+            None => Err("No more tokens"),
         }
     }
 
-    fn from_tokens(tokens: &[Token]) -> Result<Self, &str> {
-        Self::from_peekable_tokens(&mut tokens.iter().peekable())
+    fn from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
+        let res = Self::_from_tokens(tokens);
+        match &res {
+            Ok(e) => {
+                if tokens.len() > 0 {
+                    return Err("Unexpected tokens");
+                }
+            }
+            Err(e) => (),
+        }
+        res
     }
 }
-
-// impl FromStr for Expr {
-//     fn from_str(input: &str) -> Result<Expr, Self::Err> {
-//         let mut tokens = tokenize(input).into_iter();
-//         let current_token = tokens.next().ok_or(ParseExprError)?;
-
-//         // if tokens is empty, return error
-//         if tokens.len() == 0 {
-//             return Err(ParseExprError)
-//         }
-
-//         return Ok(Expr::Atomic(Atom::Symbol("a".to_string())))
-
-//         // keep counter of open parenthesis
-//         // if first token is parenthesis
-//         // - initialize counter to 1
-//         // - set current expression to composed
-//         // else
-//         // - initialize counter to 0
-//         // - set current expression as atomic
-
-//         // for each token:
-//         // - if current expression is atomic, return error
-//         // - 
-//         // if counter goes below zero, return error
-
-//         // check that counter is zero
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -184,23 +156,67 @@ mod tests {
 
     #[test]
     fn test_atom() {
-        assert_eq!(Atom::from_str("abc").unwrap(), Atom::Symbol("abc".to_string()));
+        assert_eq!(
+            Atom::from_str("abc").unwrap(),
+            Atom::Symbol("abc".to_string())
+        );
         assert_eq!(Atom::from_str("1").unwrap(), Atom::IntegerNumber(1));
         assert_eq!(Atom::from_str("-42").unwrap(), Atom::IntegerNumber(-42));
     }
 
     #[test]
     fn test_expr() {
-        let c1 = Expr::Composed(vec![
-            Box::new(Expr::Atomic(Atom::Symbol("a".to_string()))),
-            Box::new(Expr::Atomic(Atom::IntegerNumber(1))),
+        let expr_ref = Expr::Composed(vec![
+            Box::new(Expr::Composed(vec![
+                Box::new(Expr::Atomic(Atom::Symbol("a".to_string()))),
+                Box::new(Expr::Atomic(Atom::IntegerNumber(1))),
+            ])),
+            Box::new(Expr::Composed(vec![
+                Box::new(Expr::Atomic(Atom::Symbol("b".to_string()))),
+                Box::new(Expr::Atomic(Atom::IntegerNumber(2))),
+            ])),
         ]);
-        let c2 = Expr::Composed(vec![
-            Box::new(Expr::Atomic(Atom::Symbol("b".to_string()))),
-            Box::new(Expr::Atomic(Atom::IntegerNumber(2))),
+        let mut tokens = tokenize("((a 1) (b 2))");
+        let expr = Expr::from_tokens(&mut tokens).unwrap();
+
+        assert_eq!(expr, expr_ref);
+
+        let expr_ref = Expr::Composed(vec![
+            Box::new(Expr::Atomic(Atom::Symbol("define".to_string()))),
+            Box::new(Expr::Composed(vec![
+                Box::new(Expr::Atomic(Atom::Symbol("add".to_string()))),
+                Box::new(Expr::Atomic(Atom::Symbol("x".to_string()))),
+                Box::new(Expr::Atomic(Atom::Symbol("y".to_string()))),
+            ])),
+            Box::new(Expr::Composed(vec![
+                Box::new(Expr::Atomic(Atom::Symbol("+".to_string()))),
+                Box::new(Expr::Atomic(Atom::Symbol(":x".to_string()))),
+                Box::new(Expr::Atomic(Atom::Symbol("y".to_string()))),
+            ])),
         ]);
-        let c3 = Expr::Composed(vec![Box::new(c1), Box::new(c2)]);
-        let tokens = tokenize("(define (add x y) (+ :x y))");
-        let expr = Expr::from_tokens(&tokens);
+        let mut tokens = tokenize("(define (add x y) (+ :x y))");
+        let expr = Expr::from_tokens(&mut tokens).unwrap();
+
+        assert_eq!(expr, expr_ref);
+
+        let mut tokens = tokenize("(define ((add x y) (+ :x y))");
+        let expr = Expr::from_tokens(&mut tokens);
+
+        assert_eq!(expr, Err("Unmatched '('"));
+
+        let mut tokens = tokenize(") abc");
+        let expr = Expr::from_tokens(&mut tokens);
+
+        assert_eq!(expr, Err("Unmatched ')'"));
+
+        let mut tokens = tokenize("(define (add x y)) (+ :x y))");
+        let expr = Expr::from_tokens(&mut tokens);
+
+        assert_eq!(expr, Err("Unexpected tokens"));
+
+        let mut tokens = tokenize("");
+        let expr = Expr::from_tokens(&mut tokens);
+
+        assert_eq!(expr, Err("No more tokens"));
     }
 }
