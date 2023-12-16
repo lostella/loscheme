@@ -262,7 +262,7 @@ mod tests {
         global_environment.set("x", Value::Int(42));
         global_environment.set("y", Value::Str("hello".to_string()));
 
-        let child_environment = global_environment.create_child();
+        let mut child_environment = global_environment.create_child();
         child_environment.set("x", Value::Float(3.14));
 
         // Accessing 'x' in the child environment
