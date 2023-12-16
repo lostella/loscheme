@@ -77,7 +77,7 @@ enum Expr {
 struct ParseExprError;
 
 impl Expr {
-    fn _from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
+    fn from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
         match tokens.pop_front() {
             Some(token) => match token {
                 Token::OpenParen => {
@@ -87,7 +87,7 @@ impl Expr {
                             tokens.pop_front(); // Consume the ')'
                             return Ok(Expr::Composed(composed_expr));
                         } else {
-                            if let Ok(sub_expr) = Self::_from_tokens(tokens) {
+                            if let Ok(sub_expr) = Self::from_tokens(tokens) {
                                 composed_expr.push(Box::new(sub_expr));
                             } else {
                                 return Err("Failed to parse sub-expression");
@@ -108,19 +108,6 @@ impl Expr {
             },
             None => Err("No more tokens"),
         }
-    }
-
-    fn from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
-        let res = Self::_from_tokens(tokens);
-        match &res {
-            Ok(e) => {
-                if tokens.len() > 0 {
-                    return Err("Unexpected tokens");
-                }
-            }
-            Err(e) => (),
-        }
-        res
     }
 }
 
@@ -208,11 +195,6 @@ mod tests {
         let expr = Expr::from_tokens(&mut tokens);
 
         assert_eq!(expr, Err("Unmatched ')'"));
-
-        let mut tokens = tokenize("(define (add x y)) (+ :x y))");
-        let expr = Expr::from_tokens(&mut tokens);
-
-        assert_eq!(expr, Err("Unexpected tokens"));
 
         let mut tokens = tokenize("");
         let expr = Expr::from_tokens(&mut tokens);
