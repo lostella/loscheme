@@ -1,4 +1,4 @@
-use loscheme::{tokenize, Expr};
+use loscheme::{parse_tokens, tokenize};
 use std::io::{stdin, stdout, Write};
 
 fn main() {
@@ -12,10 +12,11 @@ fn main() {
             .read_line(&mut s)
             .expect("Did not enter a correct string");
 
-        let res = Expr::from_tokens(&mut tokenize(&s));
+        let mut tokens = tokenize(&s);
+        let res = parse_tokens(&mut tokens);
 
         match res {
-            Ok(expr) => println!("{:?}", expr),
+            Ok(exprs) => println!("{:?}", exprs),
             Err(s) => println!("{}", s),
         }
     }

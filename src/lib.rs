@@ -106,6 +106,18 @@ impl Expr {
     }
 }
 
+pub fn parse_tokens(tokens: &mut VecDeque<Token>) -> Result<Vec<Expr>, &'static str> {
+    let mut expressions = Vec::<Expr>::new();
+    while tokens.len() > 0 {
+        let res = Expr::from_tokens(tokens);
+        match res {
+            Ok(expr) => expressions.push(expr),
+            Err(s) => return Err(s),
+        }
+    }
+    Ok(expressions)
+}
+
 #[cfg(test)]
 mod tests {
     use std::vec;
