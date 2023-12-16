@@ -81,14 +81,14 @@ impl Expr {
         match tokens.pop_front() {
             Some(token) => match token {
                 Token::OpenParen => {
-                    let mut composed_expr = Vec::new();
+                    let mut sub_expressions = Vec::new();
                     while let Some(peeked) = tokens.front().cloned() {
                         if peeked == Token::CloseParen {
-                            tokens.pop_front(); // Consume the ')'
-                            return Ok(Expr::Composed(composed_expr));
+                            tokens.pop_front();
+                            return Ok(Expr::Composed(sub_expressions));
                         } else {
-                            if let Ok(sub_expr) = Self::from_tokens(tokens) {
-                                composed_expr.push(Box::new(sub_expr));
+                            if let Ok(expr) = Self::from_tokens(tokens) {
+                                sub_expressions.push(Box::new(expr));
                             } else {
                                 return Err("Failed to parse sub-expression");
                             }
@@ -98,7 +98,6 @@ impl Expr {
                 }
                 Token::CloseParen => Err("Unmatched ')'"),
                 Token::Other(s) => {
-                    // Try to parse as Atom
                     if let Ok(atom) = Atom::from_str(&s) {
                         Ok(Expr::Atomic(atom))
                     } else {
