@@ -1,14 +1,14 @@
 use std::collections::VecDeque;
-use std::{str::FromStr};
+use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Clone)]
-enum Token {
+pub enum Token {
     OpenParen,
     CloseParen,
     Other(String),
 }
 
-fn tokenize(input: &str) -> VecDeque<Token> {
+pub fn tokenize(input: &str) -> VecDeque<Token> {
     let mut tokens = VecDeque::new();
     let mut current_token = String::new();
 
@@ -47,7 +47,7 @@ fn tokenize(input: &str) -> VecDeque<Token> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum Atom {
+pub enum Atom {
     IntegerNumber(i32),
     Symbol(String),
 }
@@ -66,7 +66,7 @@ impl FromStr for Atom {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum Expr {
+pub enum Expr {
     Atomic(Atom),
     Composed(Vec<Expr>),
 }
@@ -75,7 +75,7 @@ enum Expr {
 struct ParseExprError;
 
 impl Expr {
-    fn from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
+    pub fn from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
         match tokens.pop_front() {
             Some(token) => match token {
                 Token::OpenParen => {
@@ -177,9 +177,9 @@ mod tests {
             ]),
         ]);
         let mut tokens = tokenize("(define (add x y) (+ :x y))");
-        let expr = Expr::from_tokens(&mut tokens).unwrap();
+        let expr = Expr::from_tokens(&mut tokens);
 
-        assert_eq!(expr, expr_ref);
+        assert_eq!(expr, Ok(expr_ref));
 
         let mut tokens = tokenize("(define ((add x y) (+ :x y))");
         let expr = Expr::from_tokens(&mut tokens);
