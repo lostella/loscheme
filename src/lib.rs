@@ -118,39 +118,46 @@ pub fn parse_tokens(tokens: &mut VecDeque<Token>) -> Result<Vec<Expr>, &'static 
     Ok(expressions)
 }
 
-struct Environment {
-    // TODO this should really map "symbols" to a bunch of different things
-    // - values (of different types)
-    // - functions (built-in and custom defined)
-    // - ...?
-    stack: Vec<HashMap<String, String>>,
+#[derive(Debug)]
+enum Value {
+    Int(i32),
+    Str(String),
+    Bool(bool),
+    Float(f64),
 }
 
-impl Environment {
+#[derive(Debug)]
+struct Environment<'a> {
+    values: HashMap<String, Value>,
+    parent: Option<&'a Environment<'a>>,
+}
+
+impl<'a> Environment<'a> {
     fn new() -> Self {
-        Environment { stack: Vec::new() }
-    }
-
-    fn push(&mut self, map: HashMap<String, String>) {
-        self.stack.push(map);
-    }
-
-    fn pop(&mut self) {
-        self.stack.pop();
-    }
-
-    fn get(&self, key: &str) -> Option<&String> {
-        for map in self.stack.iter().rev() {
-            if let Some(value) = map.get(key) {
-                return Some(value);
-            }
+        Environment {
+            values: HashMap::new(),
+            parent: None,
         }
-        None
     }
 
-    fn set(&mut self, key: String, value: String) {
-        if let Some(top_map) = self.stack.last_mut() {
-            top_map.insert(key, value);
+    fn create_child(&'a self) -> Self {
+        Environment {
+            values: HashMap::new(),
+            parent: Some(self),
+        }
+    }
+
+    fn set(&mut self, name: &str, value: Value) {
+        self.values.insert(name.to_string(), value);
+    }
+
+    fn get(&self, name: &str) -> Option<&Value> {
+        if let Some(value) = self.values.get(name) {
+            Some(value)
+        } else if let Some(parent) = self.parent {
+            parent.get(name)
+        } else {
+            None
         }
     }
 }
@@ -251,24 +258,26 @@ mod tests {
 
     #[test]
     fn test_environment() {
-        let mut env = Environment::new();
+        let mut global_environment = Environment::new();
+        global_environment.set("x", Value::Int(42));
+        global_environment.set("y", Value::Str("hello".to_string()));
 
-        env.push(HashMap::new());
-        env.set("key1".to_string(), "value1".to_string());
+        let child_environment = global_environment.create_child();
+        child_environment.set("x", Value::Float(3.14));
 
-        assert_eq!(env.get("key1"), Some(&"value1".to_string()));
+        // Accessing 'x' in the child environment
+        assert_eq!(child_environment.get("x"), Some(&Value::Float(3.14)));
 
-        env.push(HashMap::new());
-        env.set("key1".to_string(), "value2".to_string());
+        // Accessing 'y' in the child environment (falls back to global)
+        assert_eq!(child_environment.get("y"), Some(&Value::Str("hello".to_string())));
 
-        assert_eq!(env.get("key1"), Some(&"value2".to_string()));
+        // Accessing 'z' in the child environment (not defined anywhere)
+        assert_eq!(child_environment.get("z"), None);
 
-        env.pop();
+        // Accessing 'x' in the global environment
+        assert_eq!(global_environment.get("x"), Some(&Value::Int(42)));
 
-        assert_eq!(env.get("key1"), Some(&"value1".to_string()));
-
-        env.pop();
-
-        assert_eq!(env.get("key1"), None);
+        // Accessing 'y' in the global environment
+        assert_eq!(global_environment.get("y"), Some(&Value::Str("hello".to_string())));
     }
 }
