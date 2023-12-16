@@ -108,7 +108,7 @@ impl Expr {
 
 pub fn parse_tokens(tokens: &mut VecDeque<Token>) -> Result<Vec<Expr>, &'static str> {
     let mut expressions = Vec::<Expr>::new();
-    while tokens.len() > 0 {
+    while !tokens.is_empty() {
         let res = Expr::from_tokens(tokens);
         match res {
             Ok(expr) => expressions.push(expr),
