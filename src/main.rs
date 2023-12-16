@@ -8,6 +8,7 @@ fn main() {
         print!("loscheme> ");
         let _ = stdout().flush();
 
+        s.clear();
         stdin()
             .read_line(&mut s)
             .expect("Did not enter a correct string");
@@ -16,7 +17,10 @@ fn main() {
         let res = parse_tokens(&mut tokens);
 
         match res {
-            Ok(exprs) => println!("{:?}", exprs),
+            Ok(exprs) => {
+                // TODO evaluate all expressions instead
+                println!("{:?}", exprs);
+            },
             Err(s) => println!("{}", s),
         }
     }

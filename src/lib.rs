@@ -191,11 +191,13 @@ mod tests {
         let mut tokens = tokenize("(define (add x y) (+ :x y))");
         let expr = Expr::from_tokens(&mut tokens);
 
+        assert_eq!(tokens.len(), 0);
         assert_eq!(expr, Ok(expr_ref));
 
         let mut tokens = tokenize("(define ((add x y) (+ :x y))");
         let expr = Expr::from_tokens(&mut tokens);
 
+        assert_eq!(tokens.len(), 0);
         assert_eq!(expr, Err("Unmatched '('"));
 
         let mut tokens = tokenize(") abc");
@@ -206,6 +208,7 @@ mod tests {
         let mut tokens = tokenize("");
         let expr = Expr::from_tokens(&mut tokens);
 
+        assert_eq!(tokens.len(), 0);
         assert_eq!(expr, Err("No more tokens"));
     }
 }
