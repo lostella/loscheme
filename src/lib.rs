@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -75,7 +75,7 @@ pub enum Expr {
 struct ParseExprError;
 
 impl Expr {
-    pub fn from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
+    fn from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
         match tokens.pop_front() {
             Some(token) => match token {
                 Token::OpenParen => {
@@ -116,6 +116,43 @@ pub fn parse_tokens(tokens: &mut VecDeque<Token>) -> Result<Vec<Expr>, &'static 
         }
     }
     Ok(expressions)
+}
+
+struct Environment {
+    // TODO this should really map "symbols" to a bunch of different things
+    // - values (of different types)
+    // - functions (built-in and custom defined)
+    // - ...?
+    stack: Vec<HashMap<String, String>>,
+}
+
+impl Environment {
+    fn new() -> Self {
+        Environment { stack: Vec::new() }
+    }
+
+    fn push(&mut self, map: HashMap<String, String>) {
+        self.stack.push(map);
+    }
+
+    fn pop(&mut self) {
+        self.stack.pop();
+    }
+
+    fn get(&self, key: &str) -> Option<&String> {
+        for map in self.stack.iter().rev() {
+            if let Some(value) = map.get(key) {
+                return Some(value);
+            }
+        }
+        None
+    }
+
+    fn set(&mut self, key: String, value: String) {
+        if let Some(top_map) = self.stack.last_mut() {
+            top_map.insert(key, value);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -210,5 +247,28 @@ mod tests {
 
         assert_eq!(tokens.len(), 0);
         assert_eq!(expr, Err("No more tokens"));
+    }
+
+    #[test]
+    fn test_environment() {
+        let mut env = Environment::new();
+
+        env.push(HashMap::new());
+        env.set("key1".to_string(), "value1".to_string());
+
+        assert_eq!(env.get("key1"), Some(&"value1".to_string()));
+
+        env.push(HashMap::new());
+        env.set("key1".to_string(), "value2".to_string());
+
+        assert_eq!(env.get("key1"), Some(&"value2".to_string()));
+
+        env.pop();
+
+        assert_eq!(env.get("key1"), Some(&"value1".to_string()));
+
+        env.pop();
+
+        assert_eq!(env.get("key1"), None);
     }
 }
