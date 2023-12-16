@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::{collections::btree_map::IterMut, iter::Peekable, str::FromStr};
+use std::{str::FromStr};
 
 #[derive(Debug, PartialEq, Clone)]
 enum Token {
@@ -61,16 +61,14 @@ impl FromStr for Atom {
             Ok(n) => return Ok(Atom::IntegerNumber(n)),
             Err(_e) => (),
         }
-        return Ok(Atom::Symbol(input.to_string()));
+        Ok(Atom::Symbol(input.to_string()))
     }
 }
 
-// NOTE: not sure this is the best way
-// see: https://rust-unofficial.github.io/too-many-lists/
 #[derive(Debug, PartialEq, Eq)]
 enum Expr {
     Atomic(Atom),
-    Composed(Vec<Box<Expr>>),
+    Composed(Vec<Expr>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -86,12 +84,10 @@ impl Expr {
                         if peeked == Token::CloseParen {
                             tokens.pop_front();
                             return Ok(Expr::Composed(sub_expressions));
+                        } else if let Ok(expr) = Self::from_tokens(tokens) {
+                            sub_expressions.push(expr);
                         } else {
-                            if let Ok(expr) = Self::from_tokens(tokens) {
-                                sub_expressions.push(Box::new(expr));
-                            } else {
-                                return Err("Failed to parse sub-expression");
-                            }
+                            return Err("Failed to parse sub-expression");
                         }
                     }
                     Err("Unmatched '('")
@@ -153,14 +149,14 @@ mod tests {
     #[test]
     fn test_expr() {
         let expr_ref = Expr::Composed(vec![
-            Box::new(Expr::Composed(vec![
-                Box::new(Expr::Atomic(Atom::Symbol("a".to_string()))),
-                Box::new(Expr::Atomic(Atom::IntegerNumber(1))),
-            ])),
-            Box::new(Expr::Composed(vec![
-                Box::new(Expr::Atomic(Atom::Symbol("b".to_string()))),
-                Box::new(Expr::Atomic(Atom::IntegerNumber(2))),
-            ])),
+            Expr::Composed(vec![
+                Expr::Atomic(Atom::Symbol("a".to_string())),
+                Expr::Atomic(Atom::IntegerNumber(1)),
+            ]),
+            Expr::Composed(vec![
+                Expr::Atomic(Atom::Symbol("b".to_string())),
+                Expr::Atomic(Atom::IntegerNumber(2)),
+            ]),
         ]);
         let mut tokens = tokenize("((a 1) (b 2))");
         let expr = Expr::from_tokens(&mut tokens).unwrap();
@@ -168,17 +164,17 @@ mod tests {
         assert_eq!(expr, expr_ref);
 
         let expr_ref = Expr::Composed(vec![
-            Box::new(Expr::Atomic(Atom::Symbol("define".to_string()))),
-            Box::new(Expr::Composed(vec![
-                Box::new(Expr::Atomic(Atom::Symbol("add".to_string()))),
-                Box::new(Expr::Atomic(Atom::Symbol("x".to_string()))),
-                Box::new(Expr::Atomic(Atom::Symbol("y".to_string()))),
-            ])),
-            Box::new(Expr::Composed(vec![
-                Box::new(Expr::Atomic(Atom::Symbol("+".to_string()))),
-                Box::new(Expr::Atomic(Atom::Symbol(":x".to_string()))),
-                Box::new(Expr::Atomic(Atom::Symbol("y".to_string()))),
-            ])),
+            Expr::Atomic(Atom::Symbol("define".to_string())),
+            Expr::Composed(vec![
+                Expr::Atomic(Atom::Symbol("add".to_string())),
+                Expr::Atomic(Atom::Symbol("x".to_string())),
+                Expr::Atomic(Atom::Symbol("y".to_string())),
+            ]),
+            Expr::Composed(vec![
+                Expr::Atomic(Atom::Symbol("+".to_string())),
+                Expr::Atomic(Atom::Symbol(":x".to_string())),
+                Expr::Atomic(Atom::Symbol("y".to_string())),
+            ]),
         ]);
         let mut tokens = tokenize("(define (add x y) (+ :x y))");
         let expr = Expr::from_tokens(&mut tokens).unwrap();
