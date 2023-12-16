@@ -118,7 +118,7 @@ pub fn parse_tokens(tokens: &mut VecDeque<Token>) -> Result<Vec<Expr>, &'static 
     Ok(expressions)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 enum Value {
     Int(i32),
     Str(String),
