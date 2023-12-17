@@ -1,19 +1,20 @@
-use loscheme::{parse_tokens, tokenize};
+use loscheme::{parse_tokens, tokenize, Environment};
 use std::io::{stdin, stdout, Write};
 
 fn main() {
-    let mut s = String::new();
+    let mut environment = Environment::new();
+    let mut user_input = String::new();
 
     loop {
         print!("loscheme> ");
         let _ = stdout().flush();
 
-        s.clear();
+        user_input.clear();
         stdin()
-            .read_line(&mut s)
+            .read_line(&mut user_input)
             .expect("Did not enter a correct string");
 
-        let mut tokens = tokenize(&s);
+        let mut tokens = tokenize(&user_input);
         let res = parse_tokens(&mut tokens);
 
         match res {

@@ -1,4 +1,4 @@
-use std::collections::{VecDeque, HashMap};
+use std::collections::{HashMap, VecDeque};
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -46,9 +46,41 @@ pub fn tokenize(input: &str) -> VecDeque<Token> {
     tokens
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
+pub enum Value {
+    Integer(i32),
+    Bool(bool),
+    Float(f32),
+}
+
+impl FromStr for Value {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<Value, Self::Err> {
+        if input.chars().nth(0) == Some('#') {
+            match &input[1..] {
+                "t" | "true" => return Ok(Value::Bool(true)),
+                "f" | "false" => return Ok(Value::Bool(false)),
+                _ => return Err(())
+            }
+        }
+        let as_i32 = input.parse::<i32>();
+        match as_i32 {
+            Ok(n) => return Ok(Value::Integer(n)),
+            Err(_e) => (),
+        }
+        let as_f32 = input.parse::<f32>();
+        match as_f32 {
+            Ok(r) => return Ok(Value::Float(r)),
+            Err(_e) => (),
+        }
+        Err(())
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Atom {
-    IntegerNumber(i32),
+    Literal(Value),
     Symbol(String),
 }
 
@@ -56,16 +88,16 @@ impl FromStr for Atom {
     type Err = ();
 
     fn from_str(input: &str) -> Result<Atom, Self::Err> {
-        let as_i32 = input.parse::<i32>();
-        match as_i32 {
-            Ok(n) => return Ok(Atom::IntegerNumber(n)),
+        let as_value = Value::from_str(input);
+        match as_value {
+            Ok(v) => return Ok(Atom::Literal(v)),
             Err(_e) => (),
         }
         Ok(Atom::Symbol(input.to_string()))
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Atomic(Atom),
     Composed(Vec<Expr>),
@@ -118,22 +150,14 @@ pub fn parse_tokens(tokens: &mut VecDeque<Token>) -> Result<Vec<Expr>, &'static 
     Ok(expressions)
 }
 
-#[derive(Debug, PartialEq)]
-enum Value {
-    Int(i32),
-    Str(String),
-    Bool(bool),
-    Float(f64),
-}
-
 #[derive(Debug)]
-struct Environment<'a> {
+pub struct Environment<'a> {
     values: HashMap<String, Value>,
     parent: Option<&'a Environment<'a>>,
 }
 
 impl<'a> Environment<'a> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Environment {
             values: HashMap::new(),
             parent: None,
@@ -198,8 +222,14 @@ mod tests {
             Atom::from_str("abc").unwrap(),
             Atom::Symbol("abc".to_string())
         );
-        assert_eq!(Atom::from_str("1").unwrap(), Atom::IntegerNumber(1));
-        assert_eq!(Atom::from_str("-42").unwrap(), Atom::IntegerNumber(-42));
+        assert_eq!(
+            Atom::from_str("1").unwrap(),
+            Atom::Literal(Value::Integer(1))
+        );
+        assert_eq!(
+            Atom::from_str("-42").unwrap(),
+            Atom::Literal(Value::Integer(-42))
+        );
     }
 
     #[test]
@@ -207,11 +237,11 @@ mod tests {
         let expr_ref = Expr::Composed(vec![
             Expr::Composed(vec![
                 Expr::Atomic(Atom::Symbol("a".to_string())),
-                Expr::Atomic(Atom::IntegerNumber(1)),
+                Expr::Atomic(Atom::Literal(Value::Integer(1))),
             ]),
             Expr::Composed(vec![
                 Expr::Atomic(Atom::Symbol("b".to_string())),
-                Expr::Atomic(Atom::IntegerNumber(2)),
+                Expr::Atomic(Atom::Literal(Value::Integer(2))),
             ]),
         ]);
         let mut tokens = tokenize("((a 1) (b 2))");
@@ -259,8 +289,8 @@ mod tests {
     #[test]
     fn test_environment() {
         let mut global_environment = Environment::new();
-        global_environment.set("x", Value::Int(42));
-        global_environment.set("y", Value::Str("hello".to_string()));
+        global_environment.set("x", Value::Integer(42));
+        global_environment.set("y", Value::Bool(false));
 
         let mut child_environment = global_environment.create_child();
         child_environment.set("x", Value::Float(3.14));
@@ -269,15 +299,21 @@ mod tests {
         assert_eq!(child_environment.get("x"), Some(&Value::Float(3.14)));
 
         // Accessing 'y' in the child environment (falls back to global)
-        assert_eq!(child_environment.get("y"), Some(&Value::Str("hello".to_string())));
+        assert_eq!(
+            child_environment.get("y"),
+            Some(&Value::Bool(false))
+        );
 
         // Accessing 'z' in the child environment (not defined anywhere)
         assert_eq!(child_environment.get("z"), None);
 
         // Accessing 'x' in the global environment
-        assert_eq!(global_environment.get("x"), Some(&Value::Int(42)));
+        assert_eq!(global_environment.get("x"), Some(&Value::Integer(42)));
 
         // Accessing 'y' in the global environment
-        assert_eq!(global_environment.get("y"), Some(&Value::Str("hello".to_string())));
+        assert_eq!(
+            global_environment.get("y"),
+            Some(&Value::Bool(false))
+        );
     }
 }
