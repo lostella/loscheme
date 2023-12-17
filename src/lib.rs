@@ -79,27 +79,9 @@ impl FromStr for Value {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Atom {
+pub enum Expr {
     Literal(Value),
     Symbol(String),
-}
-
-impl FromStr for Atom {
-    type Err = ();
-
-    fn from_str(input: &str) -> Result<Atom, Self::Err> {
-        let as_value = Value::from_str(input);
-        match as_value {
-            Ok(v) => return Ok(Atom::Literal(v)),
-            Err(_e) => (),
-        }
-        Ok(Atom::Symbol(input.to_string()))
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Expr {
-    Atomic(Atom),
     Composed(Vec<Expr>),
 }
 
@@ -123,10 +105,10 @@ impl Expr {
                 }
                 Token::CloseParen => Err("Unmatched ')'"),
                 Token::Other(s) => {
-                    if let Ok(atom) = Atom::from_str(&s) {
-                        Ok(Expr::Atomic(atom))
+                    if let Ok(atom) = Value::from_str(&s) {
+                        Ok(Expr::Literal(atom))
                     } else {
-                        Err("Failed to parse as Atom")
+                        Ok(Expr::Symbol(s))
                     }
                 }
             },
@@ -231,22 +213,6 @@ mod tests {
         ];
 
         assert_eq!(tokens, expected_tokens);
-    }
-
-    #[test]
-    fn test_atom() {
-        assert_eq!(
-            Atom::from_str("abc").unwrap(),
-            Atom::Symbol("abc".to_string())
-        );
-        assert_eq!(
-            Atom::from_str("1").unwrap(),
-            Atom::Literal(Value::Integer(1))
-        );
-        assert_eq!(
-            Atom::from_str("-42").unwrap(),
-            Atom::Literal(Value::Integer(-42))
-        );
     }
 
     #[test]
