@@ -142,8 +142,8 @@ impl FromStr for Expr {
     type Err = ();
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let mut tokens = tokenize(&str);
-        let res = Expr::from_tokens(tokens);
+        let mut tokens = tokenize(input);
+        let res = Expr::from_tokens(&mut tokens);
         match res {
             Ok(expr) => Ok(expr),
             Err(s) => Err(()),
