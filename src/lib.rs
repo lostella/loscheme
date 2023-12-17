@@ -2,10 +2,10 @@ use std::collections::{HashMap, VecDeque};
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Token {
+pub enum Token<'a> {
     OpenParen,
     CloseParen,
-    Other(&str),
+    Other(&'a str),
 }
 
 pub fn tokenize(input: &str) -> VecDeque<Token> {
@@ -16,21 +16,21 @@ pub fn tokenize(input: &str) -> VecDeque<Token> {
         match ch {
             '(' => {
                 if !current_token.is_empty() {
-                    tokens.push_back(Token::Other(current_token.clone()));
+                    tokens.push_back(Token::Other(&current_token.clone()));
                     current_token.clear();
                 }
                 tokens.push_back(Token::OpenParen);
             }
             ')' => {
                 if !current_token.is_empty() {
-                    tokens.push_back(Token::Other(current_token.clone()));
+                    tokens.push_back(Token::Other(&current_token.clone()));
                     current_token.clear();
                 }
                 tokens.push_back(Token::CloseParen);
             }
             c if c.is_whitespace() => {
                 if !current_token.is_empty() {
-                    tokens.push_back(Token::Other(current_token.clone()));
+                    tokens.push_back(Token::Other(&current_token.clone()));
                     current_token.clear();
                 }
             }
@@ -40,7 +40,7 @@ pub fn tokenize(input: &str) -> VecDeque<Token> {
 
     // Check if there's any remaining token at the end
     if !current_token.is_empty() {
-        tokens.push_back(Token::Other(current_token));
+        tokens.push_back(Token::Other(&current_token));
     }
 
     tokens
@@ -79,14 +79,14 @@ impl FromStr for Value {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Expr {
+pub enum Expr<'a> {
     Literal(Value),
-    Symbol(&str),
-    Composed(Vec<Expr>),
+    Symbol(&'a str),
+    Composed(Vec<Expr<'a>>),
 }
 
-impl Expr {
-    fn from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
+impl Expr<'_> {
+    fn from_tokens<'a>(tokens: &'a mut VecDeque<Token<'a>>) -> Result<Expr<'a>, &'static str> {
         match tokens.pop_front() {
             Some(token) => match token {
                 Token::OpenParen => {
@@ -117,7 +117,7 @@ impl Expr {
     }
 }
 
-impl FromStr for Expr {
+impl FromStr for Expr<'_> {
     type Err = ();
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
