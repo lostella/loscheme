@@ -103,9 +103,6 @@ pub enum Expr {
     Composed(Vec<Expr>),
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct ParseExprError;
-
 impl Expr {
     fn from_tokens(tokens: &mut VecDeque<Token>) -> Result<Expr, &'static str> {
         match tokens.pop_front() {
@@ -151,10 +148,11 @@ impl FromStr for Expr {
     }
 }
 
-pub fn parse_tokens(tokens: &mut VecDeque<Token>) -> Result<Vec<Expr>, &'static str> {
+pub fn parse_str(input: &str) -> Result<Vec<Expr>, &'static str> {
+    let mut tokens = tokenize(input);
     let mut expressions = Vec::<Expr>::new();
     while !tokens.is_empty() {
-        let res = Expr::from_tokens(tokens);
+        let res = Expr::from_tokens(&mut tokens);
         match res {
             Ok(expr) => expressions.push(expr),
             Err(s) => return Err(s),
