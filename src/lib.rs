@@ -138,6 +138,19 @@ impl Expr {
     }
 }
 
+impl FromStr for Expr {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let mut tokens = tokenize(&str);
+        let res = Expr::from_tokens(tokens);
+        match res {
+            Ok(expr) => Ok(expr),
+            Err(s) => Err(()),
+        }
+    }
+}
+
 pub fn parse_tokens(tokens: &mut VecDeque<Token>) -> Result<Vec<Expr>, &'static str> {
     let mut expressions = Vec::<Expr>::new();
     while !tokens.is_empty() {
@@ -235,6 +248,64 @@ mod tests {
         assert_eq!(
             Atom::from_str("-42").unwrap(),
             Atom::Literal(Value::Integer(-42))
+        );
+    }
+
+    #[test]
+    fn parse_integer_literal() {
+        assert_eq!(Expr::from_str("42"), Ok(Expr::Atomic(Atom::Literal(Value::Integer(42)))));
+    }
+
+    #[test]
+    fn parse_boolean_literal() {
+        assert_eq!(Expr::from_str("#t"), Ok(Expr::Atomic(Atom::Literal(Value::Bool(true)))));
+        assert_eq!(Expr::from_str("#f"), Ok(Expr::Atomic(Atom::Literal(Value::Bool(false)))));
+    }
+
+    #[test]
+    fn parse_float_literal() {
+        assert_eq!(Expr::from_str("3.14"), Ok(Expr::Atomic(Atom::Literal(Value::Float(3.14)))));
+    }
+
+    #[test]
+    fn parse_symbol() {
+        assert_eq!(Expr::from_str("variable"), Ok(Expr::Atomic(Atom::Symbol("variable".to_string()))));
+    }
+
+    #[test]
+    fn parse_nested_expression() {
+        assert_eq!(
+            Expr::from_str("(+ 1 2)"),
+            Ok(Expr::Composed(vec![
+                Expr::Atomic(Atom::Symbol("+".to_string())),
+                Expr::Atomic(Atom::Literal(Value::Integer(1))),
+                Expr::Atomic(Atom::Literal(Value::Integer(2)))
+            ]))
+        );
+    }
+
+    #[test]
+    fn parse_complex_expression() {
+        assert_eq!(
+            Expr::from_str("(if (> x 0) (* x 2) (- x 1))"),
+            Ok(Expr::Composed(vec![
+                Expr::Atomic(Atom::Symbol("if".to_string())),
+                Expr::Composed(vec![
+                    Expr::Atomic(Atom::Symbol(">".to_string())),
+                    Expr::Atomic(Atom::Symbol("x".to_string())),
+                    Expr::Atomic(Atom::Literal(Value::Integer(0)))
+                ]),
+                Expr::Composed(vec![
+                    Expr::Atomic(Atom::Symbol("*".to_string())),
+                    Expr::Atomic(Atom::Symbol("x".to_string())),
+                    Expr::Atomic(Atom::Literal(Value::Integer(2)))
+                ]),
+                Expr::Composed(vec![
+                    Expr::Atomic(Atom::Symbol("-".to_string())),
+                    Expr::Atomic(Atom::Symbol("x".to_string())),
+                    Expr::Atomic(Atom::Literal(Value::Integer(1)))
+                ])
+            ]))
         );
     }
 
