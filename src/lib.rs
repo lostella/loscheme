@@ -198,16 +198,16 @@ mod tests {
 
         let expected_tokens = vec![
             Token::OpenParen,
-            Token::Other("define".to_string()),
+            Token::Other("define"),
             Token::OpenParen,
-            Token::Other("add".to_string()),
-            Token::Other("x".to_string()),
-            Token::Other("y".to_string()),
+            Token::Other("add"),
+            Token::Other("x"),
+            Token::Other("y"),
             Token::CloseParen,
             Token::OpenParen,
-            Token::Other("+".to_string()),
-            Token::Other(":x".to_string()),
-            Token::Other("y".to_string()),
+            Token::Other("+"),
+            Token::Other(":x"),
+            Token::Other("y"),
             Token::CloseParen,
             Token::CloseParen,
         ];
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn parse_symbol() {
-        assert_eq!(Expr::from_str("variable"), Ok(Expr::Symbol("variable".to_string())));
+        assert_eq!(Expr::from_str("variable"), Ok(Expr::Symbol("variable")));
     }
 
     #[test]
@@ -241,7 +241,7 @@ mod tests {
         assert_eq!(
             Expr::from_str("(+ 1 2)"),
             Ok(Expr::Composed(vec![
-                Expr::Symbol("+".to_string()),
+                Expr::Symbol("+"),
                 Expr::Literal(Value::Integer(1)),
                 Expr::Literal(Value::Integer(2))
             ]))
@@ -253,20 +253,20 @@ mod tests {
         assert_eq!(
             Expr::from_str("(if (> x 0) (* x 2) (- x 1))"),
             Ok(Expr::Composed(vec![
-                Expr::Symbol("if".to_string()),
+                Expr::Symbol("if"),
                 Expr::Composed(vec![
-                    Expr::Symbol(">".to_string()),
-                    Expr::Symbol("x".to_string()),
+                    Expr::Symbol(">"),
+                    Expr::Symbol("x"),
                     Expr::Literal(Value::Integer(0))
                 ]),
                 Expr::Composed(vec![
-                    Expr::Symbol("*".to_string()),
-                    Expr::Symbol("x".to_string()),
+                    Expr::Symbol("*"),
+                    Expr::Symbol("x"),
                     Expr::Literal(Value::Integer(2))
                 ]),
                 Expr::Composed(vec![
-                    Expr::Symbol("-".to_string()),
-                    Expr::Symbol("x".to_string()),
+                    Expr::Symbol("-"),
+                    Expr::Symbol("x"),
                     Expr::Literal(Value::Integer(1))
                 ])
             ]))
@@ -277,11 +277,11 @@ mod tests {
     fn test_expr() {
         let expr_ref = Expr::Composed(vec![
             Expr::Composed(vec![
-                Expr::Symbol("a".to_string()),
+                Expr::Symbol("a"),
                 Expr::Literal(Value::Integer(1)),
             ]),
             Expr::Composed(vec![
-                Expr::Symbol("b".to_string()),
+                Expr::Symbol("b"),
                 Expr::Literal(Value::Integer(2)),
             ]),
         ]);
@@ -291,16 +291,16 @@ mod tests {
         assert_eq!(expr, expr_ref);
 
         let expr_ref = Expr::Composed(vec![
-            Expr::Symbol("define".to_string()),
+            Expr::Symbol("define"),
             Expr::Composed(vec![
-                Expr::Symbol("add".to_string()),
-                Expr::Symbol("x".to_string()),
-                Expr::Symbol("y".to_string()),
+                Expr::Symbol("add"),
+                Expr::Symbol("x"),
+                Expr::Symbol("y"),
             ]),
             Expr::Composed(vec![
-                Expr::Symbol("+".to_string()),
-                Expr::Symbol(":x".to_string()),
-                Expr::Symbol("y".to_string()),
+                Expr::Symbol("+"),
+                Expr::Symbol(":x"),
+                Expr::Symbol("y"),
             ]),
         ]);
         let mut tokens = tokenize("(define (add x y) (+ :x y))");
