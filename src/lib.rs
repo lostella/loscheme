@@ -5,7 +5,7 @@ use std::str::FromStr;
 pub enum Token {
     OpenParen,
     CloseParen,
-    Other(String),
+    Other(&str),
 }
 
 pub fn tokenize(input: &str) -> VecDeque<Token> {
@@ -81,7 +81,7 @@ impl FromStr for Value {
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     Literal(Value),
-    Symbol(String),
+    Symbol(&str),
     Composed(Vec<Expr>),
 }
 
@@ -125,7 +125,7 @@ impl FromStr for Expr {
         let res = Expr::from_tokens(&mut tokens);
         match res {
             Ok(expr) => Ok(expr),
-            Err(s) => Err(()),
+            Err(_s) => Err(()),
         }
     }
 }
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn parse_float_literal() {
-        assert_eq!(Expr::from_str("3.14"), Ok(Expr::Literal(Value::Float(3.14))));
+        assert_eq!(Expr::from_str("3.2"), Ok(Expr::Literal(Value::Float(3.2))));
     }
 
     #[test]
