@@ -217,23 +217,23 @@ mod tests {
 
     #[test]
     fn parse_integer_literal() {
-        assert_eq!(Expr::from_str("42"), Ok(Expr::Atomic(Atom::Literal(Value::Integer(42)))));
+        assert_eq!(Expr::from_str("42"), Ok(Expr::Literal(Value::Integer(42))));
     }
 
     #[test]
     fn parse_boolean_literal() {
-        assert_eq!(Expr::from_str("#t"), Ok(Expr::Atomic(Atom::Literal(Value::Bool(true)))));
-        assert_eq!(Expr::from_str("#f"), Ok(Expr::Atomic(Atom::Literal(Value::Bool(false)))));
+        assert_eq!(Expr::from_str("#t"), Ok(Expr::Literal(Value::Bool(true))));
+        assert_eq!(Expr::from_str("#f"), Ok(Expr::Literal(Value::Bool(false))));
     }
 
     #[test]
     fn parse_float_literal() {
-        assert_eq!(Expr::from_str("3.14"), Ok(Expr::Atomic(Atom::Literal(Value::Float(3.14)))));
+        assert_eq!(Expr::from_str("3.14"), Ok(Expr::Literal(Value::Float(3.14))));
     }
 
     #[test]
     fn parse_symbol() {
-        assert_eq!(Expr::from_str("variable"), Ok(Expr::Atomic(Atom::Symbol("variable".to_string()))));
+        assert_eq!(Expr::from_str("variable"), Ok(Expr::Symbol("variable".to_string())));
     }
 
     #[test]
@@ -241,9 +241,9 @@ mod tests {
         assert_eq!(
             Expr::from_str("(+ 1 2)"),
             Ok(Expr::Composed(vec![
-                Expr::Atomic(Atom::Symbol("+".to_string())),
-                Expr::Atomic(Atom::Literal(Value::Integer(1))),
-                Expr::Atomic(Atom::Literal(Value::Integer(2)))
+                Expr::Symbol("+".to_string()),
+                Expr::Literal(Value::Integer(1)),
+                Expr::Literal(Value::Integer(2))
             ]))
         );
     }
@@ -253,21 +253,21 @@ mod tests {
         assert_eq!(
             Expr::from_str("(if (> x 0) (* x 2) (- x 1))"),
             Ok(Expr::Composed(vec![
-                Expr::Atomic(Atom::Symbol("if".to_string())),
+                Expr::Symbol("if".to_string()),
                 Expr::Composed(vec![
-                    Expr::Atomic(Atom::Symbol(">".to_string())),
-                    Expr::Atomic(Atom::Symbol("x".to_string())),
-                    Expr::Atomic(Atom::Literal(Value::Integer(0)))
+                    Expr::Symbol(">".to_string()),
+                    Expr::Symbol("x".to_string()),
+                    Expr::Literal(Value::Integer(0))
                 ]),
                 Expr::Composed(vec![
-                    Expr::Atomic(Atom::Symbol("*".to_string())),
-                    Expr::Atomic(Atom::Symbol("x".to_string())),
-                    Expr::Atomic(Atom::Literal(Value::Integer(2)))
+                    Expr::Symbol("*".to_string()),
+                    Expr::Symbol("x".to_string()),
+                    Expr::Literal(Value::Integer(2))
                 ]),
                 Expr::Composed(vec![
-                    Expr::Atomic(Atom::Symbol("-".to_string())),
-                    Expr::Atomic(Atom::Symbol("x".to_string())),
-                    Expr::Atomic(Atom::Literal(Value::Integer(1)))
+                    Expr::Symbol("-".to_string()),
+                    Expr::Symbol("x".to_string()),
+                    Expr::Literal(Value::Integer(1))
                 ])
             ]))
         );
@@ -277,12 +277,12 @@ mod tests {
     fn test_expr() {
         let expr_ref = Expr::Composed(vec![
             Expr::Composed(vec![
-                Expr::Atomic(Atom::Symbol("a".to_string())),
-                Expr::Atomic(Atom::Literal(Value::Integer(1))),
+                Expr::Symbol("a".to_string()),
+                Expr::Literal(Value::Integer(1)),
             ]),
             Expr::Composed(vec![
-                Expr::Atomic(Atom::Symbol("b".to_string())),
-                Expr::Atomic(Atom::Literal(Value::Integer(2))),
+                Expr::Symbol("b".to_string()),
+                Expr::Literal(Value::Integer(2)),
             ]),
         ]);
         let mut tokens = tokenize("((a 1) (b 2))");
@@ -291,16 +291,16 @@ mod tests {
         assert_eq!(expr, expr_ref);
 
         let expr_ref = Expr::Composed(vec![
-            Expr::Atomic(Atom::Symbol("define".to_string())),
+            Expr::Symbol("define".to_string()),
             Expr::Composed(vec![
-                Expr::Atomic(Atom::Symbol("add".to_string())),
-                Expr::Atomic(Atom::Symbol("x".to_string())),
-                Expr::Atomic(Atom::Symbol("y".to_string())),
+                Expr::Symbol("add".to_string()),
+                Expr::Symbol("x".to_string()),
+                Expr::Symbol("y".to_string()),
             ]),
             Expr::Composed(vec![
-                Expr::Atomic(Atom::Symbol("+".to_string())),
-                Expr::Atomic(Atom::Symbol(":x".to_string())),
-                Expr::Atomic(Atom::Symbol("y".to_string())),
+                Expr::Symbol("+".to_string()),
+                Expr::Symbol(":x".to_string()),
+                Expr::Symbol("y".to_string()),
             ]),
         ]);
         let mut tokens = tokenize("(define (add x y) (+ :x y))");
