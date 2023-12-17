@@ -156,6 +156,12 @@ pub struct Environment<'a> {
     parent: Option<&'a Environment<'a>>,
 }
 
+impl<'a> Default for Environment<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Environment<'a> {
     pub fn new() -> Self {
         Environment {

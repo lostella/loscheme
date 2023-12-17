@@ -2,7 +2,7 @@ use loscheme::{parse_tokens, tokenize, Environment};
 use std::io::{stdin, stdout, Write};
 
 fn main() {
-    let mut environment = Environment::new();
+    let _environment = Environment::new();
     let mut user_input = String::new();
 
     loop {
