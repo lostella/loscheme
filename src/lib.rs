@@ -10,37 +10,39 @@ pub enum Token<'a> {
 
 pub fn tokenize(input: &str) -> VecDeque<Token> {
     let mut tokens = VecDeque::new();
-    let mut current_token = String::new();
+    let mut start_idx = 0;
+    let mut end_idx = 0;
 
-    for ch in input.chars() {
-        match ch {
-            '(' => {
-                if !current_token.is_empty() {
-                    tokens.push_back(Token::Other(&current_token.clone()));
-                    current_token.clear();
+    while end_idx < input.len() {
+        match input.chars().nth(end_idx) {
+            Some('(') => {
+                if start_idx != end_idx {
+                    tokens.push_back(Token::Other(&input[start_idx..end_idx]));
                 }
                 tokens.push_back(Token::OpenParen);
+                start_idx = end_idx + 1;
             }
-            ')' => {
-                if !current_token.is_empty() {
-                    tokens.push_back(Token::Other(&current_token.clone()));
-                    current_token.clear();
+            Some(')') => {
+                if start_idx != end_idx {
+                    tokens.push_back(Token::Other(&input[start_idx..end_idx]));
                 }
                 tokens.push_back(Token::CloseParen);
+                start_idx = end_idx + 1;
             }
-            c if c.is_whitespace() => {
-                if !current_token.is_empty() {
-                    tokens.push_back(Token::Other(&current_token.clone()));
-                    current_token.clear();
+            Some(c) if c.is_whitespace() => {
+                if start_idx != end_idx {
+                    tokens.push_back(Token::Other(&input[start_idx..end_idx]));
                 }
+                start_idx = end_idx + 1;
             }
-            _ => current_token.push(ch),
+            _ => (),
         }
+        end_idx += 1
     }
 
     // Check if there's any remaining token at the end
-    if !current_token.is_empty() {
-        tokens.push_back(Token::Other(&current_token));
+    if start_idx != end_idx {
+        tokens.push_back(Token::Other(&input[start_idx..end_idx]));
     }
 
     tokens
@@ -61,7 +63,7 @@ impl FromStr for Value {
             match &input[1..] {
                 "t" | "true" => return Ok(Value::Bool(true)),
                 "f" | "false" => return Ok(Value::Bool(false)),
-                _ => return Err(())
+                _ => return Err(()),
             }
         }
         let as_i32 = input.parse::<i32>();
@@ -276,14 +278,8 @@ mod tests {
     #[test]
     fn test_expr() {
         let expr_ref = Expr::Composed(vec![
-            Expr::Composed(vec![
-                Expr::Symbol("a"),
-                Expr::Literal(Value::Integer(1)),
-            ]),
-            Expr::Composed(vec![
-                Expr::Symbol("b"),
-                Expr::Literal(Value::Integer(2)),
-            ]),
+            Expr::Composed(vec![Expr::Symbol("a"), Expr::Literal(Value::Integer(1))]),
+            Expr::Composed(vec![Expr::Symbol("b"), Expr::Literal(Value::Integer(2))]),
         ]);
         let mut tokens = tokenize("((a 1) (b 2))");
         let expr = Expr::from_tokens(&mut tokens).unwrap();
@@ -306,14 +302,14 @@ mod tests {
         let mut tokens = tokenize("(define (add x y) (+ :x y))");
         let expr = Expr::from_tokens(&mut tokens);
 
-        assert_eq!(tokens.len(), 0);
         assert_eq!(expr, Ok(expr_ref));
+        assert_eq!(tokens.len(), 0);
 
         let mut tokens = tokenize("(define ((add x y) (+ :x y))");
         let expr = Expr::from_tokens(&mut tokens);
 
-        assert_eq!(tokens.len(), 0);
         assert_eq!(expr, Err("Unmatched '('"));
+        assert_eq!(tokens.len(), 0);
 
         let mut tokens = tokenize(") abc");
         let expr = Expr::from_tokens(&mut tokens);
@@ -323,8 +319,8 @@ mod tests {
         let mut tokens = tokenize("");
         let expr = Expr::from_tokens(&mut tokens);
 
-        assert_eq!(tokens.len(), 0);
         assert_eq!(expr, Err("No more tokens"));
+        assert_eq!(tokens.len(), 0);
     }
 
     #[test]
@@ -340,10 +336,7 @@ mod tests {
         assert_eq!(child_environment.get("x"), Some(&Value::Float(3.14)));
 
         // Accessing 'y' in the child environment (falls back to global)
-        assert_eq!(
-            child_environment.get("y"),
-            Some(&Value::Bool(false))
-        );
+        assert_eq!(child_environment.get("y"), Some(&Value::Bool(false)));
 
         // Accessing 'z' in the child environment (not defined anywhere)
         assert_eq!(child_environment.get("z"), None);
@@ -352,9 +345,6 @@ mod tests {
         assert_eq!(global_environment.get("x"), Some(&Value::Integer(42)));
 
         // Accessing 'y' in the global environment
-        assert_eq!(
-            global_environment.get("y"),
-            Some(&Value::Bool(false))
-        );
+        assert_eq!(global_environment.get("y"), Some(&Value::Bool(false)));
     }
 }

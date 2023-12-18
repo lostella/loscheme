@@ -20,7 +20,7 @@ fn main() {
             Ok(exprs) => {
                 // TODO evaluate all expressions instead
                 println!("{:?}", exprs);
-            },
+            }
             Err(s) => println!("{}", s),
         }
     }
