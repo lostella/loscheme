@@ -31,7 +31,7 @@ fn parse_tokens(tokens: &mut Vec<String>) -> Result<Expr, &'static str> {
             tokens.remove(0); // Remove the closing ')'
             Ok(Expr::List(list))
         }
-        ")" => panic!("Unexpected ')'"),
+        ")" => Err("Unexpected ')'"),
         _ => {
             if let Ok(num) = token.parse::<f64>() {
                 Ok(Expr::Number(num))
@@ -123,7 +123,7 @@ fn builtin_subtract(args: &[Value]) -> Result<Value, &'static str> {
         });
         Ok(Value::Number(result))
     } else {
-        panic!("Expected at least one argument");
+        Err("Expected at least one argument");
     }
 }
 
@@ -147,13 +147,13 @@ fn builtin_divide(args: &[Value]) -> Result<Value, &'static str> {
         });
         Ok(Value::Number(result))
     } else {
-        panic!("Expected at least one argument");
+        Err("Expected at least one argument");
     }
 }
 
 fn builtin_equal(args: &[Value]) -> Result<Value, &'static str> {
     if args.len() != 2 {
-        panic!("Expected exactly two arguments");
+        Err("Expected exactly two arguments");
     }
     match (&args[0], &args[1]) {
         (Value::Number(a), Value::Number(b)) => Ok(Value::Number(if a == b { 1.0 } else { 0.0 })),
@@ -163,7 +163,7 @@ fn builtin_equal(args: &[Value]) -> Result<Value, &'static str> {
 
 fn builtin_greater_than(args: &[Value]) -> Result<Value, &'static str> {
     if args.len() != 2 {
-        panic!("Expected exactly two arguments");
+        Err("Expected exactly two arguments");
     }
     match (&args[0], &args[1]) {
         (Value::Number(a), Value::Number(b)) => Ok(Value::Number(if a > b { 1.0 } else { 0.0 })),
@@ -173,7 +173,7 @@ fn builtin_greater_than(args: &[Value]) -> Result<Value, &'static str> {
 
 fn builtin_less_than(args: &[Value]) -> Result<Value, &'static str> {
     if args.len() != 2 {
-        panic!("Expected exactly two arguments");
+        Err("Expected exactly two arguments");
     }
     match (&args[0], &args[1]) {
         (Value::Number(a), Value::Number(b)) => Ok(Value::Number(if a < b { 1.0 } else { 0.0 })),
@@ -205,7 +205,7 @@ fn builtin_or(args: &[Value]) -> Result<Value, &'static str> {
 
 fn builtin_not(args: &[Value]) -> Result<Value, &'static str> {
     if args.len() != 1 {
-        panic!("Expected exactly one argument");
+        Err("Expected exactly one argument");
     }
     match &args[0] {
         Value::Number(0.0) => Ok(Value::Number(1.0)),
@@ -216,7 +216,7 @@ fn builtin_not(args: &[Value]) -> Result<Value, &'static str> {
 
 fn builtin_if(args: &[Expr], env: &mut Env) -> Result<Value, &'static str> {
     if args.len() != 3 {
-        panic!("if expects exactly three arguments");
+        Err("if expects exactly three arguments");
     }
     let cond = eval_expr(args[0].clone(), env);
     match cond {
@@ -228,7 +228,7 @@ fn builtin_if(args: &[Expr], env: &mut Env) -> Result<Value, &'static str> {
 
 fn builtin_car(args: &[Value]) -> Result<Value, &'static str> {
     if args.len() != 1 {
-        panic!("car expects exactly one argument");
+        Err("car expects exactly one argument");
     }
     match &args[0] {
         Value::List(lst) => Ok(lst.first().cloned().expect("List is empty")),
@@ -238,7 +238,7 @@ fn builtin_car(args: &[Value]) -> Result<Value, &'static str> {
 
 fn builtin_cdr(args: &[Value]) -> Result<Value, &'static str> {
     if args.len() != 1 {
-        panic!("cdr expects exactly one argument");
+        Err("cdr expects exactly one argument");
     }
     match &args[0] {
         Value::List(lst) => Ok(Value::List(lst[1..].to_vec())),
@@ -248,7 +248,7 @@ fn builtin_cdr(args: &[Value]) -> Result<Value, &'static str> {
 
 fn builtin_cons(args: &[Value]) -> Result<Value, &'static str> {
     if args.len() != 2 {
-        panic!("cons expects exactly two arguments");
+        Err("cons expects exactly two arguments");
     }
     match &args[1] {
         Value::List(lst) => {
