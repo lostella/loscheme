@@ -124,7 +124,7 @@ fn builtin_multiply(args: &[Value]) -> Result<Value, &'static str> {
 
 fn builtin_subtract(args: &[Value]) -> Result<Value, &'static str> {
     let numbers = values_to_f64s(args)?;
-    if numbers.len() < 1 {
+    if numbers.is_empty() {
         return Err("Expected at least one argument");
     }
     let mut acc = *numbers[0];
@@ -136,7 +136,7 @@ fn builtin_subtract(args: &[Value]) -> Result<Value, &'static str> {
 
 fn builtin_divide(args: &[Value]) -> Result<Value, &'static str> {
     let numbers = values_to_f64s(args)?;
-    if numbers.len() < 1 {
+    if numbers.is_empty() {
         return Err("Expected at least one argument");
     }
     let mut acc = *numbers[0];
