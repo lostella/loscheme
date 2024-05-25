@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn test_sequence_of_expressions() {
-        let mut env = basic_env();
+        let mut env = standard_env();
         
         // Test define
         assert_eq!(eval_expression("(define x 10)", &mut env), Value::Number(10.0));
