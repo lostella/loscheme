@@ -132,4 +132,30 @@ mod tests {
             ])
         )
     }
+
+    fn eval_expression(input: &str, env: &mut Env) -> Value {
+        let expr = parse(input);
+        eval(expr, env)
+    }
+
+    #[test]
+    fn test_sequence_of_expressions() {
+        let mut env = basic_env();
+        
+        // Test define
+        assert_eq!(eval_expression("(define x 10)", &mut env), Value::Number(10.0));
+        
+        // Test usage of defined variable
+        assert_eq!(eval_expression("(+ x 5)", &mut env), Value::Number(15.0));
+        
+        // Test redefining the variable
+        assert_eq!(eval_expression("(define x 20)", &mut env), Value::Number(20.0));
+        
+        // Test usage of redefined variable
+        assert_eq!(eval_expression("(+ x 5)", &mut env), Value::Number(25.0));
+        
+        // Test a new variable and a more complex expression
+        assert_eq!(eval_expression("(define y 30)", &mut env), Value::Number(30.0));
+        assert_eq!(eval_expression("(+ x y 10)", &mut env), Value::Number(60.0));
+    }
 }
