@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 fn tokenize(input: &str) -> Vec<String> {
     input.replace('(', " ( ").replace(')', " ) ").split_whitespace().map(|s| s.to_string()).collect()
 }
@@ -35,8 +37,6 @@ pub fn parse(input: &str) -> Expr {
     let mut tokens = tokenize(input);
     parse_tokens(&mut tokens)
 }
-
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
