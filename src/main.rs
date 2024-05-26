@@ -2,7 +2,8 @@ use loscheme::{eval, standard_env};
 use std::io::{self, Write};
 
 fn main() {
-    let mut env = standard_env();
+    let base_env = standard_env();
+    let mut env = base_env.create_scope();
 
     loop {
         print!("loscheme> ");
