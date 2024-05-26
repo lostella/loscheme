@@ -303,7 +303,7 @@ fn builtin_list(args: &[Value]) -> Result<Value, &'static str> {
     Ok(Value::List(args.to_vec()))
 }
 
-pub fn standard_env() -> Env {
+pub fn standard_env() -> Env<'static> {
     let mut env = Env::new();
     env.insert("+".to_string(), Value::Function(builtin_add));
     env.insert("-".to_string(), Value::Function(builtin_subtract));
