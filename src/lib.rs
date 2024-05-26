@@ -304,7 +304,7 @@ fn builtin_list(args: &[Value]) -> Result<Value, &'static str> {
 }
 
 pub fn standard_env() -> Env {
-    let mut env = HashMap::new();
+    let mut env = Env::new();
     env.insert("+".to_string(), Value::Function(builtin_add));
     env.insert("-".to_string(), Value::Function(builtin_subtract));
     env.insert("*".to_string(), Value::Function(builtin_multiply));
