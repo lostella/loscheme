@@ -344,16 +344,16 @@ mod tests {
     fn test_env() {
         // Create a new Env
         let mut env1 = ScopedHashMap::new();
-        env1.insert("key1".to_string(), "value1".to_string());
+        env1.insert("key1", "value1");
 
         // Create a new child Env with env1 as the parent Env
         let mut env2 = env1.create_scope();
-        env2.insert("key2".to_string(), "value2".to_string());
+        env2.insert("key2", "value2");
 
         // Get values from env2
-        assert_eq!(env2.get(&"key1".to_string()), Some(&"value1".to_string()));
-        assert_eq!(env2.get(&"key2".to_string()), Some(&"value2".to_string()));
-        assert_eq!(env2.get(&"key3".to_string()), None);
+        assert_eq!(env2.get(&"key1"), Some(&"value1"));
+        assert_eq!(env2.get(&"key2"), Some(&"value2"));
+        assert_eq!(env2.get(&"key3"), None);
 
         // Insert a new value into env2
         env2.insert("key3".to_string(), "value3".to_string());
