@@ -55,12 +55,12 @@ pub enum Value {
 }
 
 #[derive(Debug)]
-pub struct Env<'a> {
-    map: HashMap<String, Value>,
-    parent: Option<&'a Env<'a>>,
+pub struct Env<'a, K, V> {
+    map: HashMap<K, V>,
+    parent: Option<&'a Env<'a, K, V>>,
 }
 
-impl<'a> Env<'a> {
+impl<'a, K, V> Env<'a, K, V> {
     // Create a new Env
     fn new() -> Self {
         Env {
@@ -70,7 +70,7 @@ impl<'a> Env<'a> {
     }
 
     // Create a new Env with the current Env as its parent Env
-    fn create_child(&'a self) -> Env<'a> {
+    fn create_child(&'a self) -> Env<'a, K, V> {
         Env {
             map: HashMap::new(),
             parent: Some(self),
@@ -78,7 +78,7 @@ impl<'a> Env<'a> {
     }
 
     // Get a value from the Env, searching recursively in parent Envs if necessary
-    fn get(&self, key: &String) -> Option<&Value> {
+    fn get(&self, key: &K) -> Option<&V> {
         if let Some(value) = self.map.get(key) {
             Some(value)
         } else {
@@ -90,12 +90,12 @@ impl<'a> Env<'a> {
     }
 
     // Insert a value into the Env
-    fn insert(&mut self, key: String, value: Value) {
+    fn insert(&mut self, key: K, value: V) {
         self.map.insert(key, value);
     }
 
     // Remove a value from the Env
-    fn remove(&mut self, key: &String) -> Option<Value> {
+    fn remove(&mut self, key: &K) -> Option<V> {
         self.map.remove(key)
     }
 }
