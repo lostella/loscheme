@@ -54,7 +54,51 @@ pub enum Value {
     List(Vec<Value>),
 }
 
-type Env = HashMap<String, Value>;
+#[derive(Debug)]
+struct Env<'a> {
+    map: HashMap<String, Value>,
+    parent: Option<&'a Env<'a>>,
+}
+
+impl<'a> Env<'a> {
+    // Create a new Env
+    fn new() -> Self {
+        Env {
+            map: HashMap::new(),
+            parent: None,
+        }
+    }
+
+    // Create a new Env with the current Env as its parent Env
+    fn create_child(&'a self) -> Env<'a> {
+        Env {
+            map: HashMap::new(),
+            parent: Some(self),
+        }
+    }
+
+    // Get a value from the Env, searching recursively in parent Envs if necessary
+    fn get(&self, key: &Key) -> Option<&Value> {
+        if let Some(value) = self.map.get(key) {
+            Some(value)
+        } else {
+            match self.parent {
+                Some(parent_env) => parent_env.get(key),
+                None => None,
+            }
+        }
+    }
+
+    // Insert a value into the Env
+    fn insert(&mut self, key: Key, value: Value) {
+        self.map.insert(key, value);
+    }
+
+    // Remove a value from the Env
+    fn remove(&mut self, key: &Key) -> Option<Value> {
+        self.map.remove(key)
+    }
+}
 
 fn define(args: &[Expr], env: &mut Env) -> Result<Value, &'static str> {
     if args.len() != 2 {
