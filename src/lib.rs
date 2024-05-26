@@ -348,13 +348,13 @@ mod tests {
         env2.insert("key2".to_string(), "value2".to_string());
 
         // Get values from env2
-        assert_eq!(env2.get(&"key1".to_string()), Some("value1"));
-        assert_eq!(env2.get(&"key2".to_string()), Some("value2"));
+        assert_eq!(env2.get(&"key1".to_string()), Some("value1".to_string()));
+        assert_eq!(env2.get(&"key2".to_string()), Some("value2".to_string()));
         assert_eq!(env2.get(&"key3".to_string()), None);
         
         // Insert a new value into env2
         env2.insert("key3".to_string(), "value3".to_string());
-        assert_eq!(env2.get(&"key3".to_string()), Some("value3"));
+        assert_eq!(env2.get(&"key3".to_string()), Some("value3".to_string()));
         assert_eq!(env1.get(&"key3".to_string()), None);
         
         // Remove a value from env2
