@@ -55,7 +55,7 @@ pub enum Value {
 }
 
 #[derive(Debug)]
-struct Env<'a> {
+pub struct Env<'a> {
     map: HashMap<String, Value>,
     parent: Option<&'a Env<'a>>,
 }
