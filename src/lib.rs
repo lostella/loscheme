@@ -342,11 +342,11 @@ mod tests {
 
     #[test]
     fn test_env() {
-        // Create a new Env
+        // Create a new ScopedHashMap
         let mut env1 = ScopedHashMap::new();
         env1.insert("key1", "value1");
 
-        // Create a new child Env with env1 as the parent Env
+        // Create a new scope env2 on top of env1
         let mut env2 = env1.create_scope();
         env2.insert("key2", "value2");
 
@@ -356,13 +356,13 @@ mod tests {
         assert_eq!(env2.get(&"key3"), None);
 
         // Insert a new value into env2
-        env2.insert("key3".to_string(), "value3".to_string());
-        assert_eq!(env2.get(&"key3".to_string()), Some(&"value3".to_string()));
-        assert_eq!(env1.get(&"key3".to_string()), None);
+        env2.insert("key3", "value3");
+        assert_eq!(env2.get(&"key3"), Some(&"value3"));
+        assert_eq!(env1.get(&"key3"), None);
 
         // Remove a value from env2
-        env2.remove(&"key3".to_string());
-        assert_eq!(env2.get(&"key3".to_string()), None);
+        env2.remove(&"key3");
+        assert_eq!(env2.get(&"key3"), None);
     }
 
     #[test]
