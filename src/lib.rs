@@ -338,6 +338,31 @@ mod tests {
     }
 
     #[test]
+    fn test_env() {
+        // Create a new Env
+        let mut env1 = Env::new();
+        env1.insert("key1".to_string(), "value1".to_string());
+
+        // Create a new child Env with env1 as the parent Env
+        let mut env2 = env1.create_child();
+        env2.insert("key2".to_string(), "value2".to_string());
+
+        // Get values from env2
+        assert_eq!(env2.get(&"key1".to_string()), Some("value1"));
+        assert_eq!(env2.get(&"key2".to_string()), Some("value2"));
+        assert_eq!(env2.get(&"key3".to_string()), None);
+        
+        // Insert a new value into env2
+        env2.insert("key3".to_string(), "value3".to_string());
+        assert_eq!(env2.get(&"key3".to_string()), Some("value3"));
+        assert_eq!(env1.get(&"key3".to_string()), None);
+        
+        // Remove a value from env2
+        env2.remove(&"key3".to_string());
+        assert_eq!(env2.get(&"key3".to_string()), None);
+    }
+
+    #[test]
     fn test_parse() {
         let result = parse("(define (a x) (* x 2))");
         assert_eq!(
