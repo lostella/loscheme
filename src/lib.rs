@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 
 fn tokenize(input: &str) -> Vec<String> {
     input
@@ -55,12 +56,12 @@ pub enum Value {
 }
 
 #[derive(Debug)]
-pub struct Env<'a, K, V> {
+pub struct Env<'a, K: PartialEq + Eq + Hash, V> {
     map: HashMap<K, V>,
     parent: Option<&'a Env<'a, K, V>>,
 }
 
-impl<'a, K, V> Env<'a, K, V> {
+impl<'a, K: PartialEq + Eq + Hash, V> Env<'a, K, V> {
     // Create a new Env
     fn new() -> Self {
         Env {
@@ -100,7 +101,7 @@ impl<'a, K, V> Env<'a, K, V> {
     }
 }
 
-fn define(args: &[Expr], env: &mut Env) -> Result<Value, &'static str> {
+fn define(args: &[Expr], env: &mut Env<String, Value>) -> Result<Value, &'static str> {
     if args.len() != 2 {
         return Err("define expects exactly two arguments");
     }
@@ -113,7 +114,7 @@ fn define(args: &[Expr], env: &mut Env) -> Result<Value, &'static str> {
     res
 }
 
-pub fn eval_expr(expr: Expr, env: &mut Env) -> Result<Value, &'static str> {
+pub fn eval_expr(expr: Expr, env: &mut Env<String, Value>) -> Result<Value, &'static str> {
     match expr {
         Expr::Number(num) => Ok(Value::Number(num)),
         Expr::Symbol(sym) => match env.get(&sym).cloned() {
@@ -139,7 +140,7 @@ pub fn eval_expr(expr: Expr, env: &mut Env) -> Result<Value, &'static str> {
     }
 }
 
-pub fn eval(input: &str, env: &mut Env) -> Result<Value, &'static str> {
+pub fn eval(input: &str, env: &mut Env<String, Value>) -> Result<Value, &'static str> {
     let res = parse(input);
     match res {
         Ok(expr) => eval_expr(expr, env),
@@ -253,7 +254,7 @@ fn builtin_not(args: &[Value]) -> Result<Value, &'static str> {
     }
 }
 
-fn builtin_if(args: &[Expr], env: &mut Env) -> Result<Value, &'static str> {
+fn builtin_if(args: &[Expr], env: &mut Env<String, Value>) -> Result<Value, &'static str> {
     if args.len() != 3 {
         return Err("if expects exactly three arguments");
     }
@@ -303,7 +304,7 @@ fn builtin_list(args: &[Value]) -> Result<Value, &'static str> {
     Ok(Value::List(args.to_vec()))
 }
 
-pub fn standard_env() -> Env<'static> {
+pub fn standard_env() -> Env<'static, String, Value> {
     let mut env = Env::new();
     env.insert("+".to_string(), Value::Function(builtin_add));
     env.insert("-".to_string(), Value::Function(builtin_subtract));
@@ -348,13 +349,13 @@ mod tests {
         env2.insert("key2".to_string(), "value2".to_string());
 
         // Get values from env2
-        assert_eq!(env2.get(&"key1".to_string()), Some("value1".to_string()));
-        assert_eq!(env2.get(&"key2".to_string()), Some("value2".to_string()));
+        assert_eq!(env2.get(&"key1".to_string()), Some(&"value1".to_string()));
+        assert_eq!(env2.get(&"key2".to_string()), Some(&"value2".to_string()));
         assert_eq!(env2.get(&"key3".to_string()), None);
         
         // Insert a new value into env2
         env2.insert("key3".to_string(), "value3".to_string());
-        assert_eq!(env2.get(&"key3".to_string()), Some("value3".to_string()));
+        assert_eq!(env2.get(&"key3".to_string()), Some(&"value3".to_string()));
         assert_eq!(env1.get(&"key3".to_string()), None);
         
         // Remove a value from env2
