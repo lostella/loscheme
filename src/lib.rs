@@ -78,7 +78,7 @@ impl<'a> Env<'a> {
     }
 
     // Get a value from the Env, searching recursively in parent Envs if necessary
-    fn get(&self, key: &Key) -> Option<&Value> {
+    fn get(&self, key: &String) -> Option<&Value> {
         if let Some(value) = self.map.get(key) {
             Some(value)
         } else {
@@ -90,12 +90,12 @@ impl<'a> Env<'a> {
     }
 
     // Insert a value into the Env
-    fn insert(&mut self, key: Key, value: Value) {
+    fn insert(&mut self, key: String, value: Value) {
         self.map.insert(key, value);
     }
 
     // Remove a value from the Env
-    fn remove(&mut self, key: &Key) -> Option<Value> {
+    fn remove(&mut self, key: &String) -> Option<Value> {
         self.map.remove(key)
     }
 }
