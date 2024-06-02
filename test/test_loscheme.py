@@ -29,7 +29,7 @@ from loscheme import Environment, parse, evaluate_expression
             (f (f 4 a) (+ 3 2))
             """
             ),
-            [None, 13, 31],
+            [None, 13, None, 31],
         ),
     ],
 )
