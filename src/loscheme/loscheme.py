@@ -11,7 +11,7 @@ def tokenize(code: str):
     return code.replace("(", " ( ").replace(")", " ) ").split()
 
 
-Expression = Union[str, int, list]
+Expression = Union[str, int, float, list]
 
 
 def parse_tokens_single(tokens: list) -> Expression:
