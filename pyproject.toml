@@ -1,0 +1,14 @@
+[project]
+name = "loscheme"
+version = "0.1.0"
+authors = [
+    { name = "Lorenzo Stella", email = "lorenzostella@gmail.com" }
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "mypy",
+    "pytest"
+]
