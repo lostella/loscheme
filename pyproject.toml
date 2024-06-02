@@ -6,6 +6,9 @@ authors = [
 ]
 dependencies = []
 
+[project.scripts]
+loscheme = "loscheme:main"
+
 [project.optional-dependencies]
 dev = [
     "black",

@@ -1,3 +1,4 @@
+import argparse
 import math
 from ast import literal_eval
 from typing import Union
@@ -64,10 +65,44 @@ class Procedure:
         local_env = self.env.create_child()
         for param, arg in zip(self.params, args):
             local_env.set(param, arg)
-        value = evaluate_expression(self.body[0], local_env)
+        value = local_env.eval(self.body[0])
         for expr in self.body[1:]:
-            value = evaluate_expression(expr, local_env)
+            value = local_env.eval(expr)
         return value
+
+
+def builtin_add(args):
+    return sum(args)
+
+
+def builtin_mult(args):
+    return math.prod(args)
+
+
+def builtin_sub(args):
+    res = args[0]
+    for arg in args[1:]:
+        res -= arg
+    return res
+
+
+def builtin_div(args):
+    res = args[0]
+    for arg in args[1:]:
+        res /= arg
+    return res
+
+
+def builtin_lt(args):
+    return args[0] < args[1]
+
+
+def builtin_gt(args):
+    return args[0] > args[1]
+
+
+def builtin_eq(args):
+    return args[0] == args[1]
 
 
 class Environment:
@@ -91,73 +126,109 @@ class Environment:
     @classmethod
     def standard_environment(cls) -> "Environment":
         env = cls()
-        env.set("+", lambda args: sum(args))
-        env.set("*", lambda args: math.prod(args))
-        env.set("<", lambda args: args[0] < args[1])
-        env.set(">", lambda args: args[0] > args[1])
-        env.set("=", lambda args: args[0] == args[1])
+        env.set("+", builtin_add)
+        env.set("*", builtin_mult)
+        env.set("-", builtin_sub)
+        env.set("/", builtin_div)
+        env.set("<", builtin_lt)
+        env.set(">", builtin_gt)
+        env.set("=", builtin_eq)
         return env
 
+    def eval(self, expr: Expression):
+        """
+        Evaluate an expression in the given environment.
+        """
+        if isinstance(expr, str):
+            return self.get(expr)
 
-def evaluate_expression(expression: Expression, env: Environment):
-    """
-    Evaluate an expression in the given environment.
-    """
-    if isinstance(expression, str):
-        return env.get(expression)
+        if isinstance(expr, (int, float)):
+            return expr
 
-    if isinstance(expression, int):
-        return expression
+        assert isinstance(expr, list)
 
-    assert isinstance(expression, list)
+        if expr[0] == "define":
+            _, var, subexpr = expr
+            self.set(var, self.eval(subexpr))
+            return None
 
-    if expression[0] == "define":
-        _, var, value = expression
-        env.set(var, evaluate_expression(value, env))
-        return None
+        if expr[0] == "lambda":
+            _, params, *body = expr
+            return Procedure(params, body, self)
 
-    if expression[0] == "lambda":
-        _, params, *body = expression
-        return Procedure(params, body, env)
+        if expr[0] == "if":
+            _, cond, branch_true, branch_false = expr
+            if self.eval(cond):
+                return self.eval(branch_true)
+            return self.eval(branch_false)
 
-    if expression[0] == "if":
-        _, cond, branch_true, branch_false = expression
-        if evaluate_expression(cond, env):
-            return evaluate_expression(branch_true, env)
-        return evaluate_expression(branch_false, env)
+        if expr[0] == "let":
+            _, inits, *body = expr
+            local_env = self.create_child()
+            for symbol, subexpr in inits:
+                local_env.set(symbol, local_env.eval(subexpr))
+            value = local_env.eval(body[0])
+            for subexpr in body[1:]:
+                value = local_env.eval(subexpr)
+            return value
 
-    if expression[0] == "let":
-        _, inits, *body = expression
-        local_env = env.create_child()
-        for symbol, expr in inits:
-            local_env.set(symbol, evaluate_expression(expr, local_env))
-        value = evaluate_expression(body[0], local_env)
-        for expr in body[1:]:
-            value = evaluate_expression(expr, local_env)
-        return value
+        if expr[0] == "begin":
+            value = self.eval(expr[1])
+            for subexpr in expr[2:]:
+                value = self.eval(subexpr)
+            return value
 
-    if expression[0] == "begin":
-        value = evaluate_expression(expression[1], env)
-        for expr in expression[2:]:
-            value = evaluate_expression(expr, env)
-        return value
-
-    procedure = evaluate_expression(expression[0], env)
-    args = [evaluate_expression(arg, env) for arg in expression[1:]]
-    return procedure(args)
+        procedure = self.eval(expr[0])
+        args = [self.eval(arg) for arg in expr[1:]]
+        return procedure(args)
 
 
 def repl():
     env = Environment.standard_environment().create_child()
+
     while True:
-        code = input(">>> ")
-        if code == "(exit)":
+        try:
+            code = input(">>> ")
+        except KeyboardInterrupt:
+            print()
+            continue
+        except EOFError:
             break
+
         expressions = parse(code)
-        for expression in expressions:
+
+        for expr in expressions:
             try:
-                result = evaluate_expression(expression, env)
+                result = env.eval(expr)
                 print(result)
             except Exception as err:
                 print(err)
                 break
+
+
+def run(path: str):
+    env = Environment.standard_environment().create_child()
+
+    with open(path, "r") as f:
+        code = f.read()
+
+    expressions = parse(code)
+
+    for expr in expressions:
+        try:
+            result = env.eval(expr)
+            print(result)
+        except Exception as err:
+            print(err)
+            break
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="loscheme")
+    parser.add_argument("--path", help="path to the script to execute", default=None)
+    args = parser.parse_args()
+
+    if args.path is None:
+        repl()
+    else:
+        run(args.path)

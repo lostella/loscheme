@@ -1,6 +1,6 @@
 import pytest
 
-from loscheme import Environment, parse, evaluate_expression
+from loscheme import Environment, parse
 
 
 CODE_VALUES = [
@@ -16,6 +16,14 @@ CODE_VALUES = [
         (if (= a 5) 0 1)
         """,
         [None, None, 7, None, 5, 42, 99, 0],
+    ),
+    (
+        """
+        (define a 42.1)
+        (define b 37)
+        (- a b)
+        """,
+        [None, None, 5.100000000000001],
     ),
     (
         """
@@ -57,6 +65,17 @@ CODE_VALUES = [
         """,
         [None, 68, 3, 42, 3],
     ),
+    (
+        """
+        (define fact
+            (lambda (n) (
+                if (< n 2)
+                   1
+                   (* n (fact (- n 1))))))
+        (fact 11)
+        """,
+        [None, 39916800],
+    ),
 ]
 
 
@@ -66,6 +85,5 @@ def test_eval(code: str, values: list):
     expressions = parse(code)
     assert len(expressions) == len(values)
 
-    for expression, value in zip(expressions, values):
-        result = evaluate_expression(expression, env)
-        assert result == value
+    for expr, value in zip(expressions, values):
+        assert env.eval(expr) == value
