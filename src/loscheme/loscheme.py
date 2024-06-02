@@ -125,7 +125,7 @@ def evaluate_expression(expression: Expression, env: Environment):
 
     if expression[0] == "let":
         _, inits, *body = expression
-        local_env = env.get_child()
+        local_env = env.create_child()
         for symbol, expr in inits:
             local_env.set(symbol, evalute_expression(expr, local_env))
         value = evaluate_expression(body[0], local_env)
