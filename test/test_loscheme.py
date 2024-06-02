@@ -10,22 +10,24 @@ from loscheme import Environment, parse, evaluate_expression
     [
         (
             textwrap.dedent(
-                """
-                (define a 3)
-                (define b 4)
-                (+ a b)
+            """
+            (define a 3)
+            (define b 4)
+            (+ a b)
             """
             ),
             [None, None, 7],
         ),
         (
             textwrap.dedent(
-                """
-                (define f (lambda (x y) (+ (* 2 x) y)))
-                (f 4 5)
+            """
+            (define f (lambda (x y) (+ (* 2 x) y)))
+            (f 4 5)
+            (define a 5)
+            (f (f 4 a) (+ 3 2))
             """
             ),
-            [None, 13],
+            [None, 13, 31],
         ),
     ],
 )
