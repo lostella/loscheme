@@ -32,6 +32,17 @@ from loscheme import Environment, parse, evaluate_expression
         ),
         (
             """
+            (define a 4)
+            (define x 100)
+            (define f (lambda (x) (+ 3 5) (+ a x)))
+            (f 3)
+            (define a 21)
+            (f 4)
+            """,
+            [None, None, None, 7, None, 25],
+        ),
+        (
+            """
             (define a 3)
             (begin (define a 5) (+ a 9))
             a
