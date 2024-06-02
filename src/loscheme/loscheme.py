@@ -148,8 +148,14 @@ class Environment:
         assert isinstance(expr, list)
 
         if expr[0] == "define":
-            _, var, subexpr = expr
-            self.set(var, self.eval(subexpr))
+            _, binding, *body = expr
+            if isinstance(binding, str):
+                assert len(body) == 1
+                self.set(binding, self.eval(body[0]))
+            else:
+                assert isinstance(binding, list)
+                name, *params = binding
+                self.set(name, Procedure(params, body, self))
             return None
 
         if expr[0] == "lambda":

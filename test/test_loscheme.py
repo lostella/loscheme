@@ -76,6 +76,16 @@ CODE_VALUES = [
         """,
         [None, 39916800],
     ),
+    (
+        """
+        (define (fact n) (
+            if (< n 2)
+                1
+                (* n (fact (- n 1)))))
+        (fact 6)
+        """,
+        [None, 720],
+    ),
 ]
 
 
