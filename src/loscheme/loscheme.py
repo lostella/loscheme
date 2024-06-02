@@ -95,7 +95,7 @@ class Environment:
         return env
 
 
-def evaluate_expression(expression: Expression, env: Environment) -> Expression:
+def evaluate_expression(expression: Expression, env: Environment):
     """
     Evaluate an expression in the given environment.
     """
