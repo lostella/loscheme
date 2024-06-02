@@ -60,7 +60,7 @@ class Procedure:
         self.body = body
         self.env = env
 
-    def __call__(self, *args):
+    def __call__(self, args):
         env = Environment(self.env)
         for param, arg in zip(self.params, args):
             env.set(param, arg)
@@ -89,8 +89,8 @@ class Environment:
     @classmethod
     def standard_environment(cls) -> "Environment":
         env = cls()
-        env.set("+", lambda *args: sum(args))
-        env.set("*", lambda *args: math.prod(args))
+        env.set("+", lambda args: sum(args))
+        env.set("*", lambda args: math.prod(args))
         return env
 
 
@@ -111,7 +111,7 @@ def evaluate_expression(expression: Expression, env: Environment):
     else:
         procedure = evaluate_expression(expression[0], env)
         args = [evaluate_expression(arg, env) for arg in expression[1:]]
-        return procedure(*args)
+        return procedure(args)
 
 
 def repl():
