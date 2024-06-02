@@ -78,13 +78,31 @@ CODE_VALUES = [
     ),
     (
         """
-        (define (fact n) (
+        (define (fib n) (
             if (< n 2)
-                1
-                (* n (fact (- n 1)))))
-        (fact 6)
+               n
+               (+ (fib (- n 1)) (fib (- n 2)))))
+        (fib 20)
         """,
-        [None, 720],
+        [None, 6765],
+    ),
+    (
+        """
+        (define (sqrt x)
+            (define (square x) (* x x))
+            (define (average x y) (/ (+ x y) 2))
+            (define (good-enough? guess)
+                (< (abs (- (square guess) x)) 0.001))
+            (define (improve guess)
+                (average guess (/ x guess)))
+            (define (sqrt-iter guess)
+                (if (good-enough? guess)
+                    guess
+                    (sqrt-iter (improve guess))))
+            (sqrt-iter 1.0))
+        (sqrt 2)
+        """,
+        [None, 1.4142156862745097],
     ),
 ]
 

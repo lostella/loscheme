@@ -105,6 +105,14 @@ def builtin_eq(args):
     return args[0] == args[1]
 
 
+def builtin_abs(args):
+    return abs(args[0])
+
+
+def builtin_square(args):
+    return args[0] ** 2
+
+
 class Environment:
     def __init__(self, parent=None):
         self.parent = parent
@@ -133,6 +141,7 @@ class Environment:
         env.set("<", builtin_lt)
         env.set(">", builtin_gt)
         env.set("=", builtin_eq)
+        env.set("abs", builtin_abs)
         return env
 
     def eval(self, expr: Expression):
