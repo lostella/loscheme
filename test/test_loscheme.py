@@ -21,7 +21,7 @@ from loscheme import Environment, parse, evaluate_expression
         (
             textwrap.dedent(
                 """
-                (define f (lambda (x y) (+ (2 * x) y)))
+                (define f (lambda (x y) (+ (* 2 x) y)))
                 (f 4 5)
             """
             ),
