@@ -34,6 +34,16 @@ from loscheme import Environment, parse, evaluate_expression
             ),
             [None, 13, None, 31],
         ),
+        (
+            textwrap.dedent(
+            """
+            (define a 3)
+            (begin (define a 5) (+ a 9))
+            a
+            """
+            ),
+            [None, 14, 3],
+        ),
     ],
 )
 def test_eval(code: str, values: list):
