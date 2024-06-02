@@ -14,9 +14,11 @@ from loscheme import Environment, parse, evaluate_expression
             (define a 3)
             (define b 4)
             (+ a b)
+            (define a 5)
+            a
             """
             ),
-            [None, None, 7],
+            [None, None, 7, None, 5],
         ),
         (
             textwrap.dedent(
