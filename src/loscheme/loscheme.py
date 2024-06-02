@@ -105,21 +105,33 @@ def evaluate_expression(expression: Expression, env: Environment):
         return env.get(expression)
     elif isinstance(expression, int):
         return expression
-    elif expression[0] == "define":
+
+    assert isinstance(expression, list)
+
+    if expression[0] == "define":
         _, var, value = expression
         env.set(var, evaluate_expression(value, env))
-    elif expression[0] == "lambda":
+        return None
+
+    if expression[0] == "lambda":
         _, params, body = expression
         return Procedure(params, body, env)
-    elif expression[0] == "if":
+
+    if expression[0] == "if":
         _, cond, branch_true, branch_false = expression
         if evaluate_expression(cond, env):
             return evaluate_expression(branch_true, env)
         return evaluate_expression(branch_false, env)
-    else:
-        procedure = evaluate_expression(expression[0], env)
-        args = [evaluate_expression(arg, env) for arg in expression[1:]]
-        return procedure(args)
+
+    if expression[0] == "begin":
+        value = evaluate_expression(expression[1], env)
+        for expr in expression[2:]:
+            value = evaluate_expression(expr, env)
+        return value
+
+    procedure = evaluate_expression(expression[0], env)
+    args = [evaluate_expression(arg, env) for arg in expression[1:]]
+    return procedure(args)
 
 
 def repl():
