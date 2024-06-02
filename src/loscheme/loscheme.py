@@ -91,6 +91,9 @@ class Environment:
         env = cls()
         env.set("+", lambda args: sum(args))
         env.set("*", lambda args: math.prod(args))
+        env.set("<", lambda args: args[0] < args[1])
+        env.set(">", lambda args: args[0] > args[1])
+        env.set("=", lambda args: args[0] == args[1])
         return env
 
 
