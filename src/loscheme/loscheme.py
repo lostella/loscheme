@@ -108,6 +108,11 @@ def evaluate_expression(expression: Expression, env: Environment):
     elif expression[0] == "lambda":
         _, params, body = expression
         return Procedure(params, body, env)
+    elif expression[0] == "if":
+        _, cond, branch_true, branch_false = expression
+        if evaluate_expression(cond, env):
+            return evaluate_expression(branch_true, env)
+        return evaluate_expression(branch_false, env)
     else:
         procedure = evaluate_expression(expression[0], env)
         args = [evaluate_expression(arg, env) for arg in expression[1:]]
