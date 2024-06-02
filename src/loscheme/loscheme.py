@@ -65,7 +65,7 @@ class Procedure:
         env = Environment(self.env)
         for param, arg in zip(self.params, args):
             env.set(param, arg)
-        return evaluate(self.body, env)
+        return evaluate_expression(self.body, env)
 
 
 class Environment:

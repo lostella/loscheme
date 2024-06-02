@@ -17,7 +17,16 @@ from loscheme import Environment, parse, evaluate_expression
             """
             ),
             [None, None, 7],
-        )
+        ),
+        (
+            textwrap.dedent(
+                """
+                (define f (lambda (x y) (+ (2 * x) y)))
+                (f 4 5)
+            """
+            ),
+            [None, 13],
+        ),
     ],
 )
 def test_eval(code: str, values: list):
