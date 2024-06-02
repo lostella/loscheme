@@ -38,6 +38,14 @@ from loscheme import Environment, parse, evaluate_expression
             """,
             [None, 14, 5],
         ),
+        (
+            """
+            (define a 3)
+            (let ((a 17) (b 4)) (+ a b) (* a b))
+            a
+            """,
+            [None, 68, 3],
+        ),
     ],
 )
 def test_eval(code: str, values: list):
