@@ -16,9 +16,12 @@ from loscheme import Environment, parse, evaluate_expression
             (+ a b)
             (define a 5)
             a
+            (if (< a 6) 42 27)
+            (if (> a 13) 65 99)
+            (if (= a 5) 0 1)
             """
             ),
-            [None, None, 7, None, 5],
+            [None, None, 7, None, 5, 42, 99, 0],
         ),
         (
             textwrap.dedent(
