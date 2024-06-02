@@ -123,6 +123,16 @@ def evaluate_expression(expression: Expression, env: Environment):
             return evaluate_expression(branch_true, env)
         return evaluate_expression(branch_false, env)
 
+    if expression[0] == "let":
+        _, inits, body = expression
+        local_env = env.get_child()
+        for symbol, expr in inits:
+            local_env.set(symbol, evalute_expression(expr, local_env))
+        value = evaluate_expression(body[0], local_env)
+        for expr in body[1:]:
+            value = evaluate_expression(expr, local_env)
+        return value
+
     if expression[0] == "begin":
         value = evaluate_expression(expression[1], env)
         for expr in expression[2:]:
