@@ -81,7 +81,7 @@ CODE_VALUES = [
 
 @pytest.mark.parametrize("code, values", CODE_VALUES)
 def test_eval(code: str, values: list):
-    env = Environment.standard_environment().create_child()
+    env = Environment.create_standard().create_child()
     expressions = parse(code)
     assert len(expressions) == len(values)
 

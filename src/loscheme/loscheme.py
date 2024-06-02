@@ -124,7 +124,7 @@ class Environment:
         return Environment(self)
 
     @classmethod
-    def standard_environment(cls) -> "Environment":
+    def create_standard(cls) -> "Environment":
         env = cls()
         env.set("+", builtin_add)
         env.set("*", builtin_mult)
@@ -184,7 +184,7 @@ class Environment:
 
 
 def repl():
-    env = Environment.standard_environment().create_child()
+    env = Environment.create_standard().create_child()
 
     while True:
         try:
@@ -207,7 +207,7 @@ def repl():
 
 
 def run(path: str):
-    env = Environment.standard_environment().create_child()
+    env = Environment.create_standard().create_child()
 
     with open(path, "r") as f:
         code = f.read()
