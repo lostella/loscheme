@@ -188,7 +188,7 @@ def repl():
 
     while True:
         try:
-            code = input(">>> ")
+            code = input("λscm> ")
         except KeyboardInterrupt:
             print()
             continue

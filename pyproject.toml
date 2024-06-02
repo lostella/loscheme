@@ -7,7 +7,7 @@ authors = [
 dependencies = []
 
 [project.scripts]
-loscheme = "loscheme:main"
+lscm = "loscheme:main"
 
 [project.optional-dependencies]
 dev = [
