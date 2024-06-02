@@ -31,7 +31,6 @@ def parse_tokens_single(tokens: list) -> Expression:
     else:
         try:
             value = literal_eval(token)
-            assert isinstance(value, Expression)
             return value
         except:
             return token  # it's just a symbol
