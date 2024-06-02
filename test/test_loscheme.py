@@ -54,8 +54,10 @@ from loscheme import Environment, parse, evaluate_expression
             (define a 3)
             (let ((a 17) (b 4)) (+ a b) (* a b))
             a
+            (let ((b 42)) (define a b) a)
+            a
             """,
-            [None, 68, 3],
+            [None, 68, 3, 42, 3],
         ),
     ],
 )
