@@ -61,10 +61,13 @@ class Procedure:
         self.env = env
 
     def __call__(self, args):
-        env = Environment(self.env)
+        local_env = self.env.create_child()
         for param, arg in zip(self.params, args):
-            env.set(param, arg)
-        return evaluate_expression(self.body, env)
+            local_env.set(param, arg)
+        value = evaluate_expression(self.body[0], local_env)
+        for expr in self.body[1:]:
+            value = evaluate_expression(expr, local_env)
+        return value
 
 
 class Environment:
@@ -75,10 +78,9 @@ class Environment:
     def get(self, name):
         if name in self.variables:
             return self.variables[name]
-        elif self.parent is not None:
+        if self.parent is not None:
             return self.parent.get(name)
-        else:
-            raise ValueError(f"Undefined variable: {name}")
+        raise ValueError(f"Undefined variable: {name}")
 
     def set(self, name, value):
         self.variables[name] = value
@@ -103,7 +105,8 @@ def evaluate_expression(expression: Expression, env: Environment):
     """
     if isinstance(expression, str):
         return env.get(expression)
-    elif isinstance(expression, int):
+
+    if isinstance(expression, int):
         return expression
 
     assert isinstance(expression, list)
@@ -114,7 +117,7 @@ def evaluate_expression(expression: Expression, env: Environment):
         return None
 
     if expression[0] == "lambda":
-        _, params, body = expression
+        _, params, *body = expression
         return Procedure(params, body, env)
 
     if expression[0] == "if":
