@@ -6,6 +6,15 @@ from loscheme import Environment, parse
 CODE_VALUES = [
     (
         """
+        42
+        23.10
+        #t
+        #f
+        """,
+        [42, 23.1, True, False],
+    ),
+    (
+        """
         (define a 3)
         (define b 4)
         (+ a b)
@@ -103,6 +112,24 @@ CODE_VALUES = [
         (sqrt 2)
         """,
         [None, 1.4142156862745097],
+    ),
+    (
+        """
+        (define (square x) (* x x))
+        (define (average x y) (/ (+ x y) 2))
+        (define (good-enough? guess x)
+            (< (abs (- (square guess) x)) 0.001))
+        (define (improve guess x)
+            (average guess (/ x guess)))
+        (define (sqrt x)
+            (define (sqrt-iter guess)
+                (if (good-enough? guess x)
+                    guess
+                    (sqrt-iter (improve guess x))))
+            (sqrt-iter 1.0))
+        (sqrt 2)
+        """,
+        [None, None, None, None, None, 1.4142156862745097],
     ),
 ]
 

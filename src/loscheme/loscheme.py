@@ -14,6 +14,22 @@ def tokenize(code: str):
 Expression = Union[str, int, float, list]
 
 
+simple_literals = {
+    "#t": True,
+    "#f": False,
+}
+
+
+def parse_symbol_or_literal(token):
+    if token in simple_literals:
+        return simple_literals[token]
+    try:
+        value = literal_eval(token)
+        return value
+    except Exception:
+        return token  # it's just a symbol
+
+
 def parse_tokens_single(tokens: list) -> Expression:
     """
     Parse a sequence of tokens into an expression.
@@ -30,11 +46,7 @@ def parse_tokens_single(tokens: list) -> Expression:
     elif token == ")":
         raise SyntaxError("Unexpected closing parenthesis")
     else:
-        try:
-            value = literal_eval(token)
-            return value
-        except:
-            return token  # it's just a symbol
+        return parse_symbol_or_literal(token)
 
 
 def parse_tokens_multi(tokens: list) -> list:
