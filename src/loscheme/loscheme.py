@@ -168,6 +168,10 @@ class Environment:
 
         assert isinstance(expr, list)
 
+        if expr[0] == "quote":
+            _, value = expr
+            return value
+
         if expr[0] == "define":
             _, binding, *body = expr
             if isinstance(binding, str):

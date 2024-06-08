@@ -1,6 +1,6 @@
 import pytest
 
-from loscheme import Environment, parse
+from loscheme import Environment, parse, Expression
 
 
 CODE_VALUES = [
@@ -12,6 +12,15 @@ CODE_VALUES = [
         #f
         """,
         [42, 23.1, True, False],
+    ),
+    (
+        """
+        (quote 3)
+        (quote hello)
+        (quote (1 2 3))
+        (quote #f)
+        """,
+        [3, "hello", [1, 2, 3], False],
     ),
     (
         """
