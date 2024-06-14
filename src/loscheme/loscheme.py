@@ -81,6 +81,11 @@ class Procedure:
         self.env = env
 
     def __call__(self, args):
+        assert len(args) == len(self.params), (
+            f"Procedure takes {len(self.params)} parameters ("
+            f"{', '.join(param.name for param in self.params)}), "
+            f"but {len(args)} arguments were given"
+        )
         local_env = self.env.create_child()
         for param, arg in zip(self.params, args):
             local_env.set(param.name, arg)
