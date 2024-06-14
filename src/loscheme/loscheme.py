@@ -159,7 +159,7 @@ class Environment:
 
     def get(self, name: str):
         if self.is_special_form(name):
-            raise ValueError(f"Cannot use special form '{}' as variable")
+            raise ValueError(f"Cannot use special form as variable: {name}")
         if name in self.variables:
             return self.variables[name]
         if self.parent is not None:
@@ -168,7 +168,7 @@ class Environment:
 
     def set(self, name: str, value):
         if self.is_special_form(name):
-            raise ValueError(f"Cannot use special form '{}' as variable")
+            raise ValueError(f"Cannot use special form as variable: {name}")
         self.variables[name] = value
 
     def create_child(self) -> "Environment":
