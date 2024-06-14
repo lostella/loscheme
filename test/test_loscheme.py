@@ -20,6 +20,7 @@ CODE_VALUES = [
         (quote (1 2 3))
         (quote #f)
         (quote (f a b 42))
+        (quote ())
         """,
         [
             3,
@@ -27,6 +28,7 @@ CODE_VALUES = [
             [1, 2, 3],
             False,
             [Symbol("f"), Symbol("a"), Symbol("b"), 42],
+            [],
         ],
     ),
     (
