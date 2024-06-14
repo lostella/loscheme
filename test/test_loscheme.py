@@ -1,6 +1,6 @@
 import pytest
 
-from loscheme import Environment, parse, Expression
+from loscheme import Environment, parse, Symbol
 
 
 CODE_VALUES = [
@@ -19,8 +19,40 @@ CODE_VALUES = [
         (quote hello)
         (quote (1 2 3))
         (quote #f)
+        (quote (f a b 42))
         """,
-        [3, "hello", [1, 2, 3], False],
+        [
+            3,
+            Symbol("hello"),
+            [1, 2, 3],
+            False,
+            [Symbol("f"), Symbol("a"), Symbol("b"), 42],
+        ],
+    ),
+    (
+        """
+        (define a (list 2 3))
+        (define b (cons 1 a))
+        (car b)
+        (cdr b)
+        """,
+        [None, None, 1, [2, 3]],
+    ),
+    (
+        """
+        (eq? 1 1)
+        (eq? (quote 1) (quote 1))
+        (eq? (list 1 2 3) (list 1 2 3))
+        (eq? 1 2)
+        (eq? (quote 1) (quote 2))
+        (equal? 1 1)
+        (equal? (quote 1) (quote 1))
+        (equal? (list 1 2 3) (list 1 2 3))
+        (equal? 1 2)
+        (equal? (quote 1) (quote 2))
+        (equal? (list 1 2 3) (list 1 2 42))
+        """,
+        [True, True, False, False, False, True, True, True, False, False, False],
     ),
     (
         """
@@ -40,8 +72,9 @@ CODE_VALUES = [
         (define a 42.1)
         (define b 37)
         (- a b)
+        (list 5 b 7.3 (- b a))
         """,
-        [None, None, 5.100000000000001],
+        [None, None, 5.100000000000001, [5, 37, 7.3, -5.100000000000001]],
     ),
     (
         """
@@ -149,5 +182,6 @@ def test_eval(code: str, values: list):
     expressions = parse(code)
     assert len(expressions) == len(values)
 
-    for expr, value in zip(expressions, values):
-        assert env.eval(expr) == value
+    for expr, expected in zip(expressions, values):
+        got = env.eval(expr)
+        assert got == expected, f"Expected {expected}, got {got}"

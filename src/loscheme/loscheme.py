@@ -1,6 +1,7 @@
 import argparse
 import math
 from ast import literal_eval
+from dataclasses import dataclass
 from typing import Union
 
 
@@ -11,7 +12,12 @@ def tokenize(code: str):
     return code.replace("(", " ( ").replace(")", " ) ").split()
 
 
-Expression = Union[str, int, float, list]
+@dataclass
+class Symbol:
+    name: str
+
+
+Expression = Union[Symbol, int, float, list]
 
 
 simple_literals = {
@@ -27,7 +33,7 @@ def parse_symbol_or_literal(token):
         value = literal_eval(token)
         return value
     except Exception:
-        return token  # it's just a symbol
+        return Symbol(token)  # it's just a symbol
 
 
 def parse_tokens_single(tokens: list) -> Expression:
@@ -69,6 +75,7 @@ def parse(code: str) -> list:
 
 class Procedure:
     def __init__(self, params, body, env):
+        assert all(isinstance(param, Symbol) for param in params)
         self.params = params
         self.body = body
         self.env = env
@@ -76,7 +83,7 @@ class Procedure:
     def __call__(self, args):
         local_env = self.env.create_child()
         for param, arg in zip(self.params, args):
-            local_env.set(param, arg)
+            local_env.set(param.name, arg)
         value = local_env.eval(self.body[0])
         for expr in self.body[1:]:
             value = local_env.eval(expr)
@@ -114,6 +121,10 @@ def builtin_gt(args):
 
 
 def builtin_eq(args):
+    return id(args[0]) == id(args[1])
+
+
+def builtin_equal(args):
     return args[0] == args[1]
 
 
@@ -123,6 +134,22 @@ def builtin_abs(args):
 
 def builtin_square(args):
     return args[0] ** 2
+
+
+def builtin_list(args):
+    return list(args)
+
+
+def builtin_cons(args):
+    return [args[0], *args[1]]
+
+
+def builtin_car(args):
+    return args[0][0]
+
+
+def builtin_cdr(args):
+    return args[0][1:]
 
 
 class Environment:
@@ -152,66 +179,85 @@ class Environment:
         env.set("/", builtin_div)
         env.set("<", builtin_lt)
         env.set(">", builtin_gt)
-        env.set("=", builtin_eq)
+        env.set("=", builtin_equal)
         env.set("abs", builtin_abs)
+        env.set("list", builtin_list)
+        env.set("cons", builtin_cons)
+        env.set("car", builtin_car)
+        env.set("cdr", builtin_cdr)
+        env.set("eq?", builtin_eq)
+        env.set("equal?", builtin_equal)
         return env
+
+    @classmethod
+    def is_special_form(cls, symbol: Symbol):
+        return symbol.name in [
+            "quote",
+            "define",
+            "lambda",
+            "if",
+            "let",
+            "begin",
+        ]
 
     def eval(self, expr: Expression):
         """
         Evaluate an expression in the given environment.
         """
-        if isinstance(expr, str):
-            return self.get(expr)
+        if isinstance(expr, Symbol):
+            return self.get(expr.name)
 
-        if isinstance(expr, (int, float)):
+        if isinstance(expr, (int, float, str)):
             return expr
 
-        assert isinstance(expr, list)
+        assert isinstance(expr, list) and isinstance(expr[0], Symbol)
 
-        if expr[0] == "quote":
+        if not self.is_special_form(expr[0]):
+            procedure = self.eval(expr[0])
+            args = [self.eval(arg) for arg in expr[1:]]
+            return procedure(args)
+
+        if expr[0].name == "quote":
             _, value = expr
             return value
 
-        if expr[0] == "define":
+        if expr[0].name == "define":
             _, binding, *body = expr
-            if isinstance(binding, str):
+            if isinstance(binding, Symbol):
                 assert len(body) == 1
-                self.set(binding, self.eval(body[0]))
+                self.set(binding.name, self.eval(body[0]))
             else:
-                assert isinstance(binding, list)
+                assert isinstance(binding, list) and isinstance(binding[0], Symbol)
                 name, *params = binding
-                self.set(name, Procedure(params, body, self))
+                self.set(name.name, Procedure(params, body, self))
             return None
 
-        if expr[0] == "lambda":
+        if expr[0].name == "lambda":
             _, params, *body = expr
             return Procedure(params, body, self)
 
-        if expr[0] == "if":
+        if expr[0].name == "if":
             _, cond, branch_true, branch_false = expr
             if self.eval(cond):
                 return self.eval(branch_true)
             return self.eval(branch_false)
 
-        if expr[0] == "let":
+        if expr[0].name == "let":
             _, inits, *body = expr
             local_env = self.create_child()
             for symbol, subexpr in inits:
-                local_env.set(symbol, local_env.eval(subexpr))
+                assert isinstance(symbol, Symbol)
+                local_env.set(symbol.name, local_env.eval(subexpr))
             value = local_env.eval(body[0])
             for subexpr in body[1:]:
                 value = local_env.eval(subexpr)
             return value
 
-        if expr[0] == "begin":
+        if expr[0].name == "begin":
             value = self.eval(expr[1])
             for subexpr in expr[2:]:
                 value = self.eval(subexpr)
             return value
-
-        procedure = self.eval(expr[0])
-        args = [self.eval(arg) for arg in expr[1:]]
-        return procedure(args)
 
 
 def repl():
