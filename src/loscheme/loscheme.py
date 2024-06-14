@@ -157,14 +157,18 @@ class Environment:
         self.parent = parent
         self.variables = {}
 
-    def get(self, name):
+    def get(self, name: str):
+        if self.is_special_form(name):
+            raise ValueError(f"Cannot use special form '{}' as variable")
         if name in self.variables:
             return self.variables[name]
         if self.parent is not None:
             return self.parent.get(name)
         raise ValueError(f"Undefined variable: {name}")
 
-    def set(self, name, value):
+    def set(self, name: str, value):
+        if self.is_special_form(name):
+            raise ValueError(f"Cannot use special form '{}' as variable")
         self.variables[name] = value
 
     def create_child(self) -> "Environment":
@@ -190,8 +194,8 @@ class Environment:
         return env
 
     @classmethod
-    def is_special_form(cls, symbol: Symbol):
-        return symbol.name in [
+    def is_special_form(cls, name: str) -> bool:
+        return name in [
             "quote",
             "define",
             "lambda",
@@ -210,9 +214,10 @@ class Environment:
         if isinstance(expr, (int, float, str)):
             return expr
 
-        assert isinstance(expr, list) and isinstance(expr[0], Symbol)
+        assert isinstance(expr, list)
+        assert isinstance(expr[0], Symbol)
 
-        if not self.is_special_form(expr[0]):
+        if not self.is_special_form(expr[0].name):
             procedure = self.eval(expr[0])
             args = [self.eval(arg) for arg in expr[1:]]
             return procedure(args)
