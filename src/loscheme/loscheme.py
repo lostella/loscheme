@@ -145,10 +145,6 @@ def builtin_abs(args):
     return abs(args[0])
 
 
-def builtin_square(args):
-    return args[0] ** 2
-
-
 def builtin_list(args):
     return list(args)
 
@@ -191,6 +187,26 @@ def builtin_isinteger(args):
     if isinstance(args[0], float):
         return args[0].is_integer()
     return False
+
+
+def builtin_iszero(args):
+    return args[0] == 0
+
+
+def builtin_ispositive(args):
+    return args[0] > 0
+
+
+def builtin_isnegative(args):
+    return args[0] < 0
+
+
+def builtin_isodd(args):
+    return args[0] % 2 == 1
+
+
+def builtin_iseven(args):
+    return args[0] % 2 == 0
 
 
 class Environment:
@@ -240,6 +256,11 @@ class Environment:
         env.set("boolean?", builtin_isboolean)
         env.set("list?", builtin_islist)
         env.set("integer?", builtin_isinteger)
+        env.set("zero?", builtin_iszero)
+        env.set("positive?", builtin_ispositive)
+        env.set("negative?", builtin_isnegative)
+        env.set("odd?", builtin_isodd)
+        env.set("even?", builtin_iseven)
         return env
 
     @classmethod
