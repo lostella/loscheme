@@ -42,6 +42,7 @@ TEST_CASES = [
         ("(integer? 42)", True),
         ("(integer? 42.0)", True),
         ("(integer? 42.1)", False),
+        ("(integer? #t)", False),
         ("(number? 42)", True),
         ("(number? 42.0)", True),
         ("(number? (list 1 2 3))", False),
@@ -226,5 +227,6 @@ def test_eval(code_value_pairs: List[Tuple[str, Any]]):
     for code, expected in code_value_pairs:
         exprs = parse(code)
         assert len(exprs) == 1, f"Parsing '{code}' should result in a single expression"
-        got = env.eval(exprs[0])
+        expr = exprs[0]
+        got = env.eval(expr)
         assert got == expected, f"Evaluating '{expr}': expected {expected}, got {got}"

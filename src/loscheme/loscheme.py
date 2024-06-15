@@ -182,7 +182,7 @@ def builtin_islist(args):
 
 
 def builtin_isinteger(args):
-    if isinstance(args[0], int):
+    if type(args[0]) is int:
         return True
     if isinstance(args[0], float):
         return args[0].is_integer()
