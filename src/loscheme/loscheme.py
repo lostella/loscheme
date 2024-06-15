@@ -118,11 +118,19 @@ def builtin_div(args):
 
 
 def builtin_lt(args):
-    return args[0] < args[1]
+    return all(a < b for a, b in zip(args, args[1:]))
 
 
 def builtin_gt(args):
-    return args[0] > args[1]
+    return all(a > b for a, b in zip(args, args[1:]))
+
+
+def builtin_leq(args):
+    return all(a <= b for a, b in zip(args, args[1:]))
+
+
+def builtin_geq(args):
+    return all(a >= b for a, b in zip(args, args[1:]))
 
 
 def builtin_iseq(args):
@@ -216,6 +224,8 @@ class Environment:
         env.set("/", builtin_div)
         env.set("<", builtin_lt)
         env.set(">", builtin_gt)
+        env.set("<=", builtin_leq)
+        env.set(">=", builtin_geq)
         env.set("=", builtin_isequal)
         env.set("abs", builtin_abs)
         env.set("list", builtin_list)

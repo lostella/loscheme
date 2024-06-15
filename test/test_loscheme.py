@@ -85,6 +85,18 @@ CODE_VALUES = [
             ("(list? 13.9)", False),
         ]
     ),
+    unzip_test_case(
+        [
+            ("(< 1 2 3)", True),
+            ("(< 1 2 2)", False),
+            ("(<= 1 2 2)", True),
+            ("(<= 1 2 1)", False),
+            ("(> 2 1 0)", True),
+            ("(> 2 1 1)", False),
+            ("(>= 2 1 1)", True),
+            ("(>= 2 1 2)", False),
+        ]
+    ),
     (
         """
         (define a 3)
@@ -215,4 +227,4 @@ def test_eval(code: str, values: list):
 
     for expr, expected in zip(expressions, values):
         got = env.eval(expr)
-        assert got == expected, f"Expected {expected}, got {got}"
+        assert got == expected, f"Evaluating '{expr}': expected {expected}, got {got}"
