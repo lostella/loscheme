@@ -125,11 +125,11 @@ def builtin_gt(args):
     return args[0] > args[1]
 
 
-def builtin_eq(args):
+def builtin_iseq(args):
     return id(args[0]) == id(args[1])
 
 
-def builtin_equal(args):
+def builtin_isequal(args):
     return args[0] == args[1]
 
 
@@ -155,6 +155,34 @@ def builtin_car(args):
 
 def builtin_cdr(args):
     return args[0][1:]
+
+
+def builtin_isnull(args):
+    return args[0] == []
+
+
+def builtin_issymbol(args):
+    return isinstance(args[0], Symbol)
+
+
+def builtin_isnumber(args):
+    return isinstance(args[0], (int, float))
+
+
+def builtin_isboolean(args):
+    return isinstance(args[0], bool)
+
+
+def builtin_islist(args):
+    return isinstance(args[0], list)
+
+
+def builtin_isinteger(args):
+    if isinstance(args[0], int):
+        return True
+    if isinstance(args[0], float):
+        return args[0].is_integer()
+    return False
 
 
 class Environment:
@@ -188,14 +216,20 @@ class Environment:
         env.set("/", builtin_div)
         env.set("<", builtin_lt)
         env.set(">", builtin_gt)
-        env.set("=", builtin_equal)
+        env.set("=", builtin_isequal)
         env.set("abs", builtin_abs)
         env.set("list", builtin_list)
         env.set("cons", builtin_cons)
         env.set("car", builtin_car)
         env.set("cdr", builtin_cdr)
-        env.set("eq?", builtin_eq)
-        env.set("equal?", builtin_equal)
+        env.set("eq?", builtin_iseq)
+        env.set("equal?", builtin_isequal)
+        env.set("null?", builtin_isnull)
+        env.set("symbol?", builtin_issymbol)
+        env.set("number?", builtin_isnumber)
+        env.set("boolean?", builtin_isboolean)
+        env.set("list?", builtin_islist)
+        env.set("integer?", builtin_isinteger)
         return env
 
     @classmethod

@@ -3,6 +3,11 @@ import pytest
 from loscheme import Environment, parse, Symbol
 
 
+def unzip_test_case(pairs: list):
+    code_lines, values = zip(*pairs)
+    return "\n".join(code_lines), values
+
+
 CODE_VALUES = [
     (
         """
@@ -55,6 +60,30 @@ CODE_VALUES = [
         (equal? (list 1 2 3) (list 1 2 42))
         """,
         [True, True, False, False, False, True, True, True, False, False, False],
+    ),
+    unzip_test_case(
+        [
+            ("(integer? 42)", True),
+            ("(integer? 42.0)", True),
+            ("(integer? 42.1)", False),
+            ("(number? 42)", True),
+            ("(number? 42.0)", True),
+            ("(number? (list 1 2 3))", False),
+            ("(null? (list))", True),
+            ("(null? 7)", False),
+            ("(null? #f)", False),
+            ("(boolean? #t)", True),
+            ("(boolean? #f)", True),
+            ("(boolean? 13)", False),
+            ("(symbol? (quote hello))", True),
+            ("(symbol? +)", False),
+            ("(symbol? 13)", False),
+            ("(list? (list 1 2 3))", True),
+            ("(list? (quote (1 2 3)))", True),
+            ("(list? #f)", False),
+            ("(list? (quote hello))", False),
+            ("(list? 13.9)", False),
+        ]
     ),
     (
         """
