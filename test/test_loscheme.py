@@ -237,8 +237,7 @@ def test_eval(code_value_pairs: List[Tuple[str, Any]]):
     for code, expected in code_value_pairs:
         exprs = parse(code)
         assert len(exprs) == 1, f"Parsing '{code}' should result in a single expression"
-        expr = exprs[0]
-        got = external_repr(env.eval(expr))
+        got = external_repr(env.eval(exprs[0]))
         assert (got is None and expected is None) or (
             got == expected
-        ), f"Evaluating '{expr}': expected {expected}, got {got}"
+        ), f"Evaluating '{code}': expected {expected}, got {got}"
