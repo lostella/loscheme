@@ -172,6 +172,10 @@ def builtin_issymbol(args):
     return isinstance(args[0], Symbol)
 
 
+def builtin_isatom(args):
+    return not isinstance(args[0], list)
+
+
 def builtin_isnumber(args):
     return isinstance(args[0], (int, float))
 
@@ -254,6 +258,7 @@ class Environment:
         env.set("eq?", builtin_iseq)
         env.set("equal?", builtin_isequal)
         env.set("null?", builtin_isnull)
+        env.set("atom?", builtin_isatom)
         env.set("symbol?", builtin_issymbol)
         env.set("number?", builtin_isnumber)
         env.set("boolean?", builtin_isboolean)

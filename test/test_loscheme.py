@@ -20,6 +20,14 @@ TEST_CASES = [
         ("(quote ())", "()"),
     ],
     [
+        ("(atom? 42)", "#t"),
+        ("(atom? (quote hello))", "#t"),
+        ("(atom? (quote (1 2 3)))", "#f"),
+        ("(atom? #f)", "#t"),
+        ("(atom? (quote ()))", "#f"),
+        ("(atom? (list 1 2 3))", "#f"),
+    ],
+    [
         ("(define a (list 2 3))", None),
         ("(define b (cons 1 a))", None),
         ("(car b)", "1"),
