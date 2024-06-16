@@ -2,7 +2,7 @@ import argparse
 import math
 from ast import literal_eval
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 
 
 def tokenize(code: str):
@@ -15,6 +15,9 @@ def tokenize(code: str):
 @dataclass
 class Symbol:
     name: str
+
+    def __repr__(self):
+        return self.name
 
 
 Expression = Union[Symbol, int, float, list]
@@ -335,6 +338,20 @@ class Environment:
             return value
 
 
+def external_repr(value) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "#t" if value else "#f"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return f'"{value}"'
+    if isinstance(value, list):
+        return "(" + " ".join(external_repr(v) for v in value) + ")"
+    return str(value)
+
+
 def repl():
     env = Environment.create_standard().create_child()
 
@@ -351,8 +368,8 @@ def repl():
 
         for expr in expressions:
             try:
-                result = env.eval(expr)
-                print(result)
+                value = env.eval(expr)
+                print(external_repr(value))
             except Exception as err:
                 print(err)
                 break
