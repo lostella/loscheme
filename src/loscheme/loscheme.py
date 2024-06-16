@@ -83,7 +83,7 @@ class Procedure:
         self.body = body
         self.env = env
 
-    def __call__(self, args):
+    def __call__(self, *args):
         assert len(args) == len(self.params), (
             f"Procedure takes {len(self.params)} parameters ("
             f"{', '.join(param.name for param in self.params)}), "
@@ -98,97 +98,97 @@ class Procedure:
         return value
 
 
-def builtin_add(args):
+def builtin_add(*args):
     return sum(args)
 
 
-def builtin_mult(args):
+def builtin_mult(*args):
     return math.prod(args)
 
 
-def builtin_sub(args):
+def builtin_sub(*args):
     res = args[0]
     for arg in args[1:]:
         res -= arg
     return res
 
 
-def builtin_div(args):
+def builtin_div(*args):
     res = args[0]
     for arg in args[1:]:
         res /= arg
     return res
 
 
-def builtin_lt(args):
+def builtin_lt(*args):
     return all(a < b for a, b in zip(args, args[1:]))
 
 
-def builtin_gt(args):
+def builtin_gt(*args):
     return all(a > b for a, b in zip(args, args[1:]))
 
 
-def builtin_leq(args):
+def builtin_leq(*args):
     return all(a <= b for a, b in zip(args, args[1:]))
 
 
-def builtin_geq(args):
+def builtin_geq(*args):
     return all(a >= b for a, b in zip(args, args[1:]))
 
 
-def builtin_iseq(args):
+def builtin_iseq(*args):
     return id(args[0]) == id(args[1])
 
 
-def builtin_isequal(args):
+def builtin_isequal(*args):
     return args[0] == args[1]
 
 
-def builtin_abs(args):
+def builtin_abs(*args):
     return abs(args[0])
 
 
-def builtin_list(args):
+def builtin_list(*args):
     return list(args)
 
 
-def builtin_cons(args):
+def builtin_cons(*args):
     return [args[0], *args[1]]
 
 
-def builtin_car(args):
+def builtin_car(*args):
     return args[0][0]
 
 
-def builtin_cdr(args):
+def builtin_cdr(*args):
     return args[0][1:]
 
 
-def builtin_isnull(args):
+def builtin_isnull(*args):
     return args[0] == []
 
 
-def builtin_issymbol(args):
+def builtin_issymbol(*args):
     return isinstance(args[0], Symbol)
 
 
-def builtin_isatom(args):
+def builtin_isatom(*args):
     return not isinstance(args[0], list)
 
 
-def builtin_isnumber(args):
+def builtin_isnumber(*args):
     return isinstance(args[0], (int, float))
 
 
-def builtin_isboolean(args):
+def builtin_isboolean(*args):
     return isinstance(args[0], bool)
 
 
-def builtin_islist(args):
+def builtin_islist(*args):
     return isinstance(args[0], list)
 
 
-def builtin_isinteger(args):
+def builtin_isinteger(*args):
     if type(args[0]) is int:
         return True
     if isinstance(args[0], float):
@@ -196,39 +196,39 @@ def builtin_isinteger(args):
     return False
 
 
-def builtin_iszero(args):
+def builtin_iszero(*args):
     return args[0] == 0
 
 
-def builtin_ispositive(args):
+def builtin_ispositive(*args):
     return args[0] > 0
 
 
-def builtin_isnegative(args):
+def builtin_isnegative(*args):
     return args[0] < 0
 
 
-def builtin_isodd(args):
+def builtin_isodd(*args):
     return args[0] % 2 == 1
 
 
-def builtin_iseven(args):
+def builtin_iseven(*args):
     return args[0] % 2 == 0
 
 
-def builtin_length(args):
+def builtin_length(*args):
     return len(args[0])
 
 
-def builtin_map(args):
+def builtin_map(*args):
     return list(map(args[0], args[1]))
 
 
-def builtin_filter(args):
+def builtin_filter(*args):
     return list(filter(args[0], args[1]))
 
 
-def builtin_apply(args):
+def builtin_apply(*args):
     return args[0](*args[1])
 
 
@@ -318,7 +318,7 @@ class Environment:
         if not self.is_special_form(expr[0].name):
             procedure = self.eval(expr[0])
             args = [self.eval(arg) for arg in expr[1:]]
-            return procedure(args)
+            return procedure(*args)
 
         if expr[0].name == "quote":
             _, value = expr
