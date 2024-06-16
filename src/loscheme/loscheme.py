@@ -330,7 +330,7 @@ class Environment:
         if expr[0].name == "quote":
             _, value = expr
             return value
-        
+
         if expr[0].name == "eval":
             _, subexpr = expr
             return self.eval(self.eval(subexpr))
