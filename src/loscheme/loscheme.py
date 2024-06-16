@@ -301,8 +301,9 @@ class Environment:
     def is_special_form(cls, name: str) -> bool:
         return name in [
             "quote",
-            "define",
+            "eval",
             "lambda",
+            "define",
             "if",
             "let",
             "begin",
@@ -329,6 +330,14 @@ class Environment:
         if expr[0].name == "quote":
             _, value = expr
             return value
+        
+        if expr[0].name == "eval":
+            _, subexpr = expr
+            return self.eval(self.eval(subexpr))
+
+        if expr[0].name == "lambda":
+            _, params, *body = expr
+            return Procedure(params, body, self)
 
         if expr[0].name == "define":
             _, binding, *body = expr
@@ -340,10 +349,6 @@ class Environment:
                 name, *params = binding
                 self.set(name.name, Procedure(params, body, self))
             return None
-
-        if expr[0].name == "lambda":
-            _, params, *body = expr
-            return Procedure(params, body, self)
 
         if expr[0].name == "if":
             _, cond, branch_true, branch_false = expr

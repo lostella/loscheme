@@ -20,6 +20,11 @@ TEST_CASES = [
         ("(quote ())", "()"),
     ],
     [
+        ("(define (f x) (* 3 x))", None),
+        ("(quote (f 4))", "(f 4)"),
+        ("(eval (quote (f 4)))", "12"),
+    ],
+    [
         ("(atom? 42)", "#t"),
         ("(atom? (quote hello))", "#t"),
         ("(atom? (quote (1 2 3)))", "#f"),
