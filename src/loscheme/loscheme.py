@@ -2,6 +2,7 @@ import argparse
 import math
 from ast import literal_eval
 from dataclasses import dataclass
+from functools import reduce
 from typing import Union
 
 
@@ -232,6 +233,10 @@ def builtin_apply(*args):
     return args[0](*args[1])
 
 
+def builtin_reduce(*args):
+    return reduce(args[0], args[2], args[1])
+
+
 class Environment:
     def __init__(self, parent=None):
         self.parent = parent
@@ -289,6 +294,7 @@ class Environment:
         env.set("map", builtin_map)
         env.set("filter", builtin_filter)
         env.set("apply", builtin_apply)
+        env.set("reduce", builtin_reduce)
         return env
 
     @classmethod
