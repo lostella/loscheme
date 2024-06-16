@@ -229,6 +229,12 @@ TEST_CASES = [
         ),
         ("(sqrt 2)", "1.4142156862745097"),
     ],
+    [
+        ("(define a (list 1 2 3 4))", None),
+        ("(map (lambda (x) (* 2 x)) a)", "(2 4 6 8)"),
+        ("(filter odd? a)", "(1 3)"),
+        ("(apply + (filter even? a))", "6"),
+    ],
 ]
 
 
