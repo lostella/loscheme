@@ -26,6 +26,8 @@ TEST_CASES = [
         ("(atom? #f)", "#t"),
         ("(atom? (quote ()))", "#f"),
         ("(atom? (list 1 2 3))", "#f"),
+        ("(atom? (+ 1 2 3))", "#t"),
+        ("(atom? (quote (+ 1 2 3)))", "#f"),
     ],
     [
         ("(define a (list 2 3))", None),
