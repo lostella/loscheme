@@ -216,6 +216,10 @@ def builtin_iseven(args):
     return args[0] % 2 == 0
 
 
+def builtin_length(args):
+    return len(args[0])
+
+
 class Environment:
     def __init__(self, parent=None):
         self.parent = parent
@@ -269,6 +273,7 @@ class Environment:
         env.set("negative?", builtin_isnegative)
         env.set("odd?", builtin_isodd)
         env.set("even?", builtin_iseven)
+        env.set("length", builtin_length)
         return env
 
     @classmethod
