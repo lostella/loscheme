@@ -34,6 +34,8 @@ TEST_CASES = [
         ("(define b (cons 1 a))", None),
         ("(car b)", "1"),
         ("(cdr b)", "(2 3)"),
+        ("(length b)", "3"),
+        ("(length (cdr b))", "2"),
     ],
     [
         ("(eq? 1 1)", "#t"),
