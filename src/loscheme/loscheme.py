@@ -237,6 +237,14 @@ def builtin_reduce(*args):
     return reduce(args[0], args[2], args[1])
 
 
+def builtin_min(*args):
+    return min(args)
+
+
+def builtin_max(*args):
+    return max(args)
+
+
 class Environment:
     def __init__(self, parent=None):
         self.parent = parent
@@ -295,6 +303,8 @@ class Environment:
         env.set("filter", builtin_filter)
         env.set("apply", builtin_apply)
         env.set("reduce", builtin_reduce)
+        env.set("min", builtin_min)
+        env.set("max", builtin_max)
         return env
 
     @classmethod
