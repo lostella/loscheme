@@ -343,7 +343,7 @@ class Environment:
             return value
 
 
-def external_repr(value) -> str
+def external_repr(value) -> str:
     if isinstance(value, bool):
         return "#t" if value else "#f"
     if isinstance(value, (int, float)):
