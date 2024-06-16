@@ -220,6 +220,18 @@ def builtin_length(args):
     return len(args[0])
 
 
+def builtin_map(args):
+    return list(map(args[0], args[1]))
+
+
+def builtin_filter(args):
+    return list(filter(args[0], args[1]))
+
+
+def builtin_apply(args):
+    return args[0](*args[1])
+
+
 class Environment:
     def __init__(self, parent=None):
         self.parent = parent
@@ -274,6 +286,9 @@ class Environment:
         env.set("odd?", builtin_isodd)
         env.set("even?", builtin_iseven)
         env.set("length", builtin_length)
+        env.set("map", builtin_map)
+        env.set("filter", builtin_filter)
+        env.set("apply", builtin_apply)
         return env
 
     @classmethod
