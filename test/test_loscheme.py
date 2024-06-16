@@ -234,6 +234,8 @@ TEST_CASES = [
         ("(map (lambda (x) (* 2 x)) a)", "(2 4 6 8)"),
         ("(filter odd? a)", "(1 3)"),
         ("(apply + (filter even? a))", "6"),
+        ("(define (f x y) (+ (* 2 x) y))", None),
+        ("(reduce f -1 a)", "10"),
     ],
 ]
 
