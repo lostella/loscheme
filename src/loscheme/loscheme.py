@@ -369,7 +369,8 @@ def repl():
         for expr in expressions:
             try:
                 value = env.eval(expr)
-                print(external_repr(value))
+                if value is not None:
+                    print(external_repr(value))
             except Exception as err:
                 print(err)
                 break
@@ -385,8 +386,7 @@ def run(path: str):
 
     for expr in expressions:
         try:
-            result = env.eval(expr)
-            print(result)
+            _ = env.eval(expr)
         except Exception as err:
             print(err)
             break
