@@ -2,7 +2,7 @@ import argparse
 import math
 from ast import literal_eval
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Union
 
 
 def tokenize(code: str):
@@ -343,9 +343,7 @@ class Environment:
             return value
 
 
-def external_repr(value) -> Optional[str]:
-    if value is None:
-        return None
+def external_repr(value) -> str
     if isinstance(value, bool):
         return "#t" if value else "#f"
     if isinstance(value, (int, float)):
