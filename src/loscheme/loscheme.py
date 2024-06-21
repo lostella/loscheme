@@ -250,11 +250,11 @@ def builtin_not(*args):
 
 
 def builtin_or(*args):
-    return any(*args)
+    return any(args)
 
 
 def builtin_and(*args):
-    return all(*args)
+    return all(args)
 
 
 class Environment:
