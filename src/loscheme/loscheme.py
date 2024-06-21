@@ -245,6 +245,18 @@ def builtin_max(*args):
     return max(args)
 
 
+def builtin_not(*args):
+    return not(args[0])
+
+
+def builtin_or(*args):
+    return any(*args)
+
+
+def builtin_and(*args):
+    return all(*args)
+
+
 class Environment:
     def __init__(self, parent=None):
         self.parent = parent
@@ -305,6 +317,9 @@ class Environment:
         env.set("reduce", builtin_reduce)
         env.set("min", builtin_min)
         env.set("max", builtin_max)
+        env.set("not", builtin_not)
+        env.set("or", builtin_or)
+        env.set("and", builtin_and)
         return env
 
     @classmethod
