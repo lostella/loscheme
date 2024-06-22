@@ -164,7 +164,12 @@ def builtin_car(*args):
 
 
 def builtin_cdr(*args):
-    return args[0][1:]
+    if isinstance(args[0], list):
+        return args[0][1:]
+    if isinstance(args[0], tuple):
+        assert len(args[0]) == 2
+        return args[0][1]
+    raise ValueError("Invalid type for cdr")
 
 
 def builtin_isnull(*args):
