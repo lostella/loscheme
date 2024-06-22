@@ -154,7 +154,9 @@ def builtin_list(*args):
 
 
 def builtin_cons(*args):
-    return [args[0], *args[1]]
+    if isinstance(args[1], list):
+        return [args[0]] + args[1]
+    return (args[1], args[2])
 
 
 def builtin_car(*args):
@@ -187,6 +189,13 @@ def builtin_isboolean(*args):
 
 def builtin_islist(*args):
     return isinstance(args[0], list)
+
+
+def builtin_ispair(*args):
+    return (
+        isinstance(args[0], tuple)
+        and len(args[0]) == 2
+    )
 
 
 def builtin_isinteger(*args):
@@ -304,6 +313,7 @@ class Environment:
         env.set("number?", builtin_isnumber)
         env.set("boolean?", builtin_isboolean)
         env.set("list?", builtin_islist)
+        env.set("pair?", builtin_ispair)
         env.set("integer?", builtin_isinteger)
         env.set("zero?", builtin_iszero)
         env.set("positive?", builtin_ispositive)
