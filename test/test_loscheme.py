@@ -40,6 +40,7 @@ TEST_CASES = [
         ("(car b)", "1"),
         ("(cdr b)", "(2 3)"),
         ("(cdr (cons 1 2))", "2"),
+        ("(cdr (list 1 2))", "(2)"),
         ("(length b)", "3"),
         ("(length (cdr b))", "2"),
     ],
