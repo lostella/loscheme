@@ -156,7 +156,7 @@ def builtin_list(*args):
 def builtin_cons(*args):
     if isinstance(args[1], list):
         return [args[0]] + args[1]
-    return (args[1], args[2])
+    return (args[0], args[1])
 
 
 def builtin_car(*args):
