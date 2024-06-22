@@ -81,6 +81,7 @@ TEST_CASES = [
         ("(list? (quote hello))", "#f"),
         ("(list? 13.9)", "#f"),
         ("(list? (cons 1 2))", "#f"),
+        ("(list? (cons 1 (list 2)))", "#t"),
         ("(pair? 42)", "#f"),
         ("(pair? (cons 1 2))", "#t"),
         ("(pair? (list 1 2))", "#t"),
