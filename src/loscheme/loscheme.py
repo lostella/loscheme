@@ -10,7 +10,7 @@ def tokenize(code: str):
     """
     Break the given Scheme code into a sequence of tokens to be parsed.
     """
-    return code.replace("(", " ( ").replace(")", " ) ").split()
+    return code.replace("(", " ( ").replace(")", " ) ").replace("'", " ' ").split()
 
 
 @dataclass
@@ -55,6 +55,8 @@ def parse_tokens_single(tokens: list) -> Expression:
         return expression
     elif token == ")":
         raise SyntaxError("Unexpected closing parenthesis")
+    elif token == "'":
+        return [Symbol("quote"), parse_tokens_single(tokens)]
     else:
         return parse_symbol_or_literal(token)
 
@@ -197,12 +199,8 @@ def builtin_islist(*args):
 
 
 def builtin_ispair(*args):
-    return (
-        isinstance(args[0], tuple)
-        and len(args[0]) == 2
-    ) or (
-        isinstance(args[0], list)
-        and len(args[0]) > 0
+    return (isinstance(args[0], tuple) and len(args[0]) == 2) or (
+        isinstance(args[0], list) and len(args[0]) > 0
     )
 
 
@@ -267,7 +265,7 @@ def builtin_max(*args):
 
 
 def builtin_not(*args):
-    return not(args[0])
+    return not (args[0])
 
 
 def builtin_or(*args):
@@ -367,8 +365,8 @@ class Environment:
         if isinstance(expr, (int, float, str)):
             return expr
 
-        assert isinstance(expr, list)
-        assert isinstance(expr[0], Symbol)
+        if not (isinstance(expr, list) and isinstance(expr[0], Symbol)):
+            raise ValueError(f"Cannot evaluate expression: {expr}")
 
         if not self.is_special_form(expr[0].name):
             procedure = self.eval(expr[0])
