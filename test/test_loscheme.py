@@ -19,6 +19,7 @@ TEST_CASES = [
         ("(quote #f)", "#f"),
         ("(quote (f a b 42))", "(f a b 42)"),
         ("(quote ())", "()"),
+        ('(quote "hello world!")', '"hello world!"'),
     ],
     [
         ("'3", "3"),
@@ -27,6 +28,7 @@ TEST_CASES = [
         ("'#f", "#f"),
         ("'(f a b 42)", "(f a b 42)"),
         ("'()", "()"),
+        ("'\"hello world!\"", '"hello world!"'),
     ],
     [
         ("(define (f x) (* 3 x))", None),
@@ -42,6 +44,8 @@ TEST_CASES = [
         ("(atom? (list 1 2 3))", "#f"),
         ("(atom? (+ 1 2 3))", "#t"),
         ("(atom? '(+ 1 2 3))", "#f"),
+        ('(atom? "hello world!")', "#t"),
+        ('(atom? \'"hello world!")', "#f"),
     ],
     [
         ("(define a (list 2 3))", None),
