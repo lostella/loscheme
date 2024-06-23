@@ -1,5 +1,6 @@
 import argparse
 import math
+import re
 from ast import literal_eval
 from dataclasses import dataclass
 from functools import reduce
@@ -10,7 +11,9 @@ def tokenize(code: str):
     """
     Break the given Scheme code into a sequence of tokens to be parsed.
     """
-    return code.replace("(", " ( ").replace(")", " ) ").replace("'", " ' ").split()
+    token_pattern = r'''"(?:[^"\\]|\\.)*"|[()]|'|[^\s()'"]+'''
+    tokens = re.findall(token_pattern, code)
+    return tokens
 
 
 @dataclass
