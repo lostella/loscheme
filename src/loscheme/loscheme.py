@@ -24,7 +24,7 @@ class Symbol:
         return self.name
 
 
-Expression = Union[Symbol, int, float, list]
+Expression = Union[Symbol, int, bool, float, str, list]
 
 
 simple_literals = {
@@ -33,7 +33,7 @@ simple_literals = {
 }
 
 
-def parse_symbol_or_literal(token):
+def parse_symbol_or_literal(token) -> Expression:
     if token in simple_literals:
         return simple_literals[token]
     try:
