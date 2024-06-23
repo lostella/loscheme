@@ -10,6 +10,7 @@ TEST_CASES = [
         ("23.10", "23.1"),
         ("#t", "#t"),
         ("#f", "#f"),
+        ('"hello world!"', '"hello world!"'),
     ],
     [
         ("(quote 3)", "3"),
