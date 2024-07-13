@@ -259,6 +259,13 @@ def builtin_reduce(*args):
     return reduce(args[0], args[2], args[1])
 
 
+def builtin_append(*args):
+    res = []
+    for el in args:
+        res += el
+    return res
+
+
 def builtin_min(*args):
     return min(args)
 
@@ -339,6 +346,7 @@ class Environment:
         env.set("filter", builtin_filter)
         env.set("apply", builtin_apply)
         env.set("reduce", builtin_reduce)
+        env.set("append", builtin_append)
         env.set("min", builtin_min)
         env.set("max", builtin_max)
         env.set("not", builtin_not)
