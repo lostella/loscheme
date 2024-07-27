@@ -2,6 +2,10 @@ name: Python CI
 
 on: [push, pull_request]
 
+defaults:
+  run:
+    working-directory: ./python
+
 jobs:
   type-check:
     strategy:
@@ -20,9 +24,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install "./python[dev]"
+        run: pip install ".[dev]"
       - name: Type checks with mypy
-        run: mypy python/src python/test
+        run: mypy src test
 
   test:
     strategy:
@@ -41,6 +45,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install "./python[dev]"
+        run: pip install ".[dev]"
       - name: Test with pytest
-        run: pytest python
+        run: pytest
