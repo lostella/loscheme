@@ -1,4 +1,4 @@
-name: CI
+name: Python CI
 
 on: [push, pull_request]
 
@@ -20,9 +20,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install ".[dev]"
+        run: pip install "./python[dev]"
       - name: Type checks with mypy
-        run: mypy src test
+        run: mypy python/src python/test
 
   test:
     strategy:
@@ -41,6 +41,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install ".[dev]"
+        run: pip install "./python[dev]"
       - name: Test with pytest
-        run: pytest
+        run: pytest python
