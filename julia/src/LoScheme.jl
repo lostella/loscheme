@@ -194,6 +194,35 @@ function (proc::Procedure)(args...)
 end
 
 
+function repl() # TODO fix
+    env = Environment(standard_env())
+
+    while true
+        print("λscm> ")
+        code = readline()
+        expressions = parse_code(code)
+        val = nothing
+        for expr in expressions
+            val = evaluate(env, expr)
+        end
+        if val !== nothing
+            println(external_repr(val))
+        end
+    end
+end
+
+
+function run(path)
+    env = Environment(standard_env())
+    code = readlines(path)
+    expressions = parse_code(code)
+
+    for expr in expressions
+        evaluate(env, expr)
+    end
+end
+
+
 function standard_env()
     env = Environment()
     set(env, "+", +)

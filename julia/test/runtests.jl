@@ -306,7 +306,7 @@ const test_cases = [
 ]
 
 @testset "Evaluation" for code_value_pairs in test_cases
-    env = standard_env()
+    env = Environment(standard_env())
 
     for (code, expected) in code_value_pairs
         exprs = parse_code(code)
