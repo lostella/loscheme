@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::iter::Peekable;
+use std::iter::{zip, Peekable};
 use std::str::Chars;
 
 #[derive(Debug, PartialEq)]
@@ -243,6 +243,33 @@ impl<'a> Environment<'a> {
                 None => None,
             },
         }
+    }
+
+    pub fn evaluate(&self, _expr: &Expression) -> Option<Value> {
+        Some(Value::Integer(0))
+    }
+}
+
+pub struct Procedure<'a> {
+    params: Vec<String>,
+    body: Vec<Expression>,
+    env: &'a Environment<'a>,
+}
+
+impl Procedure<'_> {
+    pub fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
+        if args.len() != self.params.len() {
+            return Err("Incorrect number of arguments");
+        }
+        let mut local_env = Environment::new_with_parent(self.env);
+        for (param, arg) in zip(&self.params, args) {
+            local_env.set(param.to_string(), arg)
+        }
+        let mut res: Option<Value> = None;
+        for expr in &self.body {
+            res = local_env.evaluate(expr)
+        }
+        Ok(res)
     }
 }
 
