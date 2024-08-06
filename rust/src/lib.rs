@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -201,6 +202,50 @@ pub fn parse_code(code: &str) -> Result<Vec<Expression>, String> {
     parser.parse()
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Value {
+    Integer(i64),
+    Float(f64),
+    Str(String),
+    Bool(bool),
+    // TODO add procedures
+}
+
+struct Environment<'a> {
+    data: HashMap<String, Value>,
+    parent: Option<&'a Environment<'a>>,
+}
+
+impl<'a> Environment<'a> {
+    pub fn new() -> Self {
+        Self {
+            data: HashMap::new(),
+            parent: None,
+        }
+    }
+
+    pub fn new_with_parent(parent: &'a Environment) -> Self {
+        Self {
+            data: HashMap::new(),
+            parent: Some(parent),
+        }
+    }
+
+    pub fn set(&mut self, key: String, value: Value) {
+        self.data.insert(key, value);
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        match self.data.get(key) {
+            Some(value) => Some(value),
+            None => match &self.parent {
+                Some(environment) => environment.get(key),
+                None => None,
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,5 +299,28 @@ mod tests {
         ])];
         let expressions: Vec<Expression> = parse_code(code).unwrap();
         assert_eq!(expressions, expected);
+    }
+
+    #[test]
+    fn test_environment() {
+        let mut base_env = Environment::new();
+
+        base_env.set("a".to_string(), Value::Integer(42));
+
+        let mut child_env = Environment::new_with_parent(&base_env);
+
+        child_env.set("a".to_string(), Value::Str("hello".to_string()));
+        child_env.set("b".to_string(), Value::Str("world".to_string()));
+
+        assert_eq!(base_env.get("a"), Some(Value::Integer(42)).as_ref());
+        assert_eq!(base_env.get("b"), None);
+        assert_eq!(
+            child_env.get("a"),
+            Some(Value::Str("hello".to_string())).as_ref()
+        );
+        assert_eq!(
+            child_env.get("b"),
+            Some(Value::Str("world".to_string())).as_ref()
+        );
     }
 }
