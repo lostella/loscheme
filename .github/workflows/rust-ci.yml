@@ -2,10 +2,6 @@ name: Rust CI
 
 on: [push, pull_request]
 
-defaults:
-  run:
-    working-directory: ./rust
-
 jobs:
   check:
     name: Check
@@ -20,6 +16,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
+          args: --manifest-path ./rust
 
   test:
     name: Test Suite
@@ -34,6 +31,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
+          args: --manifest-path ./rust
 
   fmt:
     name: Rustfmt
@@ -49,7 +47,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --all -- --check
+          args: --all -- --check --manifest-path ./rust
 
   clippy:
     name: Clippy
@@ -65,4 +63,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -- -D warnings
+          args: -- -D warnings --manifest-path ./rust
