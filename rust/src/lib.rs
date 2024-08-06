@@ -211,7 +211,7 @@ pub enum Value {
     // TODO add procedures
 }
 
-struct Environment<'a> {
+pub struct Environment<'a> {
     data: HashMap<String, Value>,
     parent: Option<&'a Environment<'a>>,
 }
