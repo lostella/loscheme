@@ -203,16 +203,17 @@ pub fn parse_code(code: &str) -> Result<Vec<Expression>, String> {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Value {
+pub enum Value<'a> {
     Integer(i64),
     Float(f64),
     Str(String),
     Bool(bool),
-    // TODO add procedures
+    Procedure(Procedure<'a>),
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Environment<'a> {
-    data: HashMap<String, Value>,
+    data: HashMap<String, Value<'a>>,
     parent: Option<&'a Environment<'a>>,
 }
 
@@ -231,7 +232,7 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn set(&mut self, key: String, value: Value) {
+    pub fn set(&mut self, key: String, value: Value<'a>) {
         self.data.insert(key, value);
     }
 
@@ -246,28 +247,44 @@ impl<'a> Environment<'a> {
     }
 
     pub fn evaluate(&self, _expr: &Expression) -> Option<Value> {
+        // NOTE: placeholder implementation
+        // TODO: implement properly
         Some(Value::Integer(0))
     }
 }
 
+impl<'a> Default for Environment<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Procedure<'a> {
     params: Vec<String>,
     body: Vec<Expression>,
-    env: &'a Environment<'a>,
+    local_env: Environment<'a>,
 }
 
-impl Procedure<'_> {
-    pub fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
+impl<'a> Procedure<'a> {
+    pub fn new(params: Vec<String>, body: Vec<Expression>, env: &'a Environment<'a>) -> Self {
+        Self {
+            params,
+            body,
+            local_env: Environment::new_with_parent(env),
+        }
+    }
+    pub fn call(&mut self, args: Vec<Value<'a>>) -> Result<Option<Value>, &str> {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
         }
-        let mut local_env = Environment::new_with_parent(self.env);
+        self.local_env.data.drain();
         for (param, arg) in zip(&self.params, args) {
-            local_env.set(param.to_string(), arg)
+            self.local_env.set(param.to_string(), arg)
         }
         let mut res: Option<Value> = None;
         for expr in &self.body {
-            res = local_env.evaluate(expr)
+            res = self.local_env.evaluate(expr)
         }
         Ok(res)
     }
