@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::iter::{zip, Peekable};
+use std::rc::Rc;
 use std::str::Chars;
 
 #[derive(Debug, PartialEq)]
@@ -89,7 +90,7 @@ impl Iterator for Tokenizer<'_> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Keyword {
     Lambda,
     Quote,
@@ -107,7 +108,7 @@ impl Keyword {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     Integer(i64),
     Float(f64),
@@ -115,7 +116,18 @@ pub enum Literal {
     Bool(bool),
 }
 
-#[derive(Debug, PartialEq)]
+impl Literal {
+    fn to_value(&self) -> Value {
+        match self {
+            Literal::Integer(x) => Value::Integer(*x),
+            Literal::Float(x) => Value::Float(*x),
+            Literal::Str(x) => Value::Str(x.clone()),
+            Literal::Bool(x) => Value::Bool(*x),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Keyword(Keyword),
     Identifier(String),
@@ -202,22 +214,22 @@ pub fn parse_code(code: &str) -> Result<Vec<Expression>, String> {
     parser.parse()
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Value<'a> {
+#[derive(Debug, PartialEq, Clone)]
+pub enum Value {
     Integer(i64),
     Float(f64),
     Str(String),
     Bool(bool),
-    Procedure(Procedure<'a>),
+    Procedure(Procedure),
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Environment<'a> {
-    data: HashMap<String, Value<'a>>,
-    parent: Option<&'a Environment<'a>>,
+#[derive(Debug, PartialEq, Clone)]
+pub struct Environment {
+    data: HashMap<String, Value>,
+    parent: Option<Rc<Environment>>,
 }
 
-impl<'a> Environment<'a> {
+impl Environment {
     pub fn new() -> Self {
         Self {
             data: HashMap::new(),
@@ -225,15 +237,15 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn new_with_parent(parent: &'a Environment) -> Self {
+    pub fn new_with_parent(parent: Rc<Environment>) -> Self {
         Self {
             data: HashMap::new(),
             parent: Some(parent),
         }
     }
 
-    pub fn set(&mut self, key: String, value: Value<'a>) {
-        self.data.insert(key, value);
+    pub fn set(&mut self, key: String, value: Value) -> Option<Value> {
+        self.data.insert(key, value)
     }
 
     pub fn get(&self, key: &str) -> Option<&Value> {
@@ -246,45 +258,78 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn evaluate(&self, _expr: &Expression) -> Option<Value> {
+    pub fn evaluate(&self, expr: &Expression) -> Result<Option<Value>, &str> {
         // NOTE: placeholder implementation
         // TODO: implement properly
-        Some(Value::Integer(0))
+
+        match expr {
+            Expression::Identifier(s) => match self.get(s) {
+                Some(value) => Ok(Some(value.clone())),
+                None => Err("Undefined identifier"),
+            },
+            Expression::Literal(l) => Ok(Some(l.to_value())),
+            Expression::List(v) => self.evaluate_nonatomic(v),
+            _ => Ok(None),
+        }
+    }
+
+    fn evaluate_nonatomic(&self, exprs: &Vec<Expression>) -> Result<Option<Value>, &str> {
+        match exprs.len() {
+            0 => Err("Cannot evaluate empty, non-atomic expressions"),
+            _ => match exprs[0] {
+                Expression::Literal(_) => {
+                    Err("Cannot evaluate non-atomic expressions starting with a literal")
+                }
+                Expression::Keyword(_) => {
+                    // NOTE placeholder
+                    // TODO dispatch behaviour based on keyword
+                    Ok(None)
+                }
+                _ => {
+                    // NOTE placeholder
+                    // TODO evaluate exprs[0]
+                    // TODO check that the returned value is a procedure
+                    // TODO evaluate exprs[1], exprs[2], ... to get arguments values
+                    // TODO call procedure on arguments
+                    Ok(None)
+                }
+            },
+        }
     }
 }
 
-impl<'a> Default for Environment<'a> {
+impl Default for Environment {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Procedure<'a> {
+#[derive(Debug, PartialEq, Clone)]
+pub struct Procedure {
     params: Vec<String>,
     body: Vec<Expression>,
-    local_env: Environment<'a>,
+    local_env: Environment,
 }
 
-impl<'a> Procedure<'a> {
-    pub fn new(params: Vec<String>, body: Vec<Expression>, env: &'a Environment<'a>) -> Self {
+impl Procedure {
+    pub fn new(params: Vec<String>, body: Vec<Expression>, env: Rc<Environment>) -> Self {
         Self {
             params,
             body,
             local_env: Environment::new_with_parent(env),
         }
     }
-    pub fn call(&mut self, args: Vec<Value<'a>>) -> Result<Option<Value>, &str> {
+    pub fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
         }
         self.local_env.data.drain();
         for (param, arg) in zip(&self.params, args) {
-            self.local_env.set(param.to_string(), arg)
+            self.local_env.set(param.to_string(), arg);
         }
         let mut res: Option<Value> = None;
         for expr in &self.body {
-            res = self.local_env.evaluate(expr)
+            res = self.local_env.evaluate(expr)?
         }
         Ok(res)
     }
@@ -348,10 +393,10 @@ mod tests {
     #[test]
     fn test_environment() {
         let mut base_env = Environment::new();
-
         base_env.set("a".to_string(), Value::Integer(42));
+        let base_env = Rc::new(base_env);
 
-        let mut child_env = Environment::new_with_parent(&base_env);
+        let mut child_env = Environment::new_with_parent(base_env.clone());
 
         child_env.set("a".to_string(), Value::Str("hello".to_string()));
         child_env.set("b".to_string(), Value::Str("world".to_string()));
@@ -366,5 +411,17 @@ mod tests {
             child_env.get("b"),
             Some(Value::Str("world".to_string())).as_ref()
         );
+    }
+
+    #[test]
+    fn test_evaluate() {
+        let mut env = Environment::new();
+        env.set("a".to_string(), Value::Integer(42));
+
+        let expr = &parse_code("42.42").unwrap()[0];
+        assert_eq!(env.evaluate(expr), Ok(Some(Value::Float(42.42))));
+
+        let expr = &parse_code("a").unwrap()[0];
+        assert_eq!(env.evaluate(expr), Ok(Some(Value::Integer(42))));
     }
 }
