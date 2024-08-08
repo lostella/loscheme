@@ -277,9 +277,6 @@ impl Environment {
         match exprs.len() {
             0 => Err("Cannot evaluate empty, non-atomic expressions"),
             _ => match exprs[0] {
-                Expression::Literal(_) => {
-                    Err("Cannot evaluate non-atomic expressions starting with a literal")
-                }
                 Expression::Keyword(_) => {
                     // NOTE placeholder
                     // TODO dispatch behaviour based on keyword
@@ -288,7 +285,7 @@ impl Environment {
                 _ => {
                     // NOTE placeholder
                     // TODO evaluate exprs[0]
-                    // TODO check that the returned value is a procedure
+                    // TODO if not a procedure, then error
                     // TODO evaluate exprs[1], exprs[2], ... to get arguments values
                     // TODO call procedure on arguments
                     Ok(None)
