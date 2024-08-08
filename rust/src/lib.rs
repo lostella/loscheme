@@ -273,7 +273,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_nonatomic(&self, exprs: &Vec<Expression>) -> Result<Option<Value>, &str> {
+    fn evaluate_nonatomic(&self, exprs: &[Expression]) -> Result<Option<Value>, &str> {
         match exprs.len() {
             0 => Err("Cannot evaluate empty, non-atomic expressions"),
             _ => match exprs[0] {
