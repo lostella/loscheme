@@ -259,9 +259,6 @@ impl Environment {
     }
 
     pub fn evaluate(&self, expr: &Expression) -> Result<Option<Value>, &str> {
-        // NOTE: placeholder implementation
-        // TODO: implement properly
-
         match expr {
             Expression::Identifier(s) => match self.get(s) {
                 Some(value) => Ok(Some(value.clone())),
@@ -316,6 +313,7 @@ impl Procedure {
             local_env: Environment::new_with_parent(env),
         }
     }
+
     pub fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
