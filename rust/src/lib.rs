@@ -258,7 +258,7 @@ impl Environment {
         }
     }
 
-    pub fn evaluate(&self, expr: &Expression) -> Result<Option<Value>, &str> {
+    pub fn evaluate(&mut self, expr: &Expression) -> Result<Option<Value>, &str> {
         match expr {
             Expression::Identifier(s) => match self.get(s) {
                 Some(value) => Ok(Some(value.clone())),
@@ -270,7 +270,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_nonatomic(&self, exprs: &[Expression]) -> Result<Option<Value>, &str> {
+    fn evaluate_nonatomic(&mut self, exprs: &[Expression]) -> Result<Option<Value>, &str> {
         match exprs.len() {
             0 => Err("Cannot evaluate empty, non-atomic expressions"),
             _ => match exprs[0] {
@@ -322,11 +322,13 @@ impl Procedure {
         for (param, arg) in zip(&self.params, args) {
             self.local_env.set(param.to_string(), arg);
         }
-        let mut res: Option<Value> = None;
-        for expr in &self.body {
-            res = self.local_env.evaluate(expr)?
+        for expr in &self.body[..self.body.len() - 1] {
+            let _ = self.local_env.evaluate(expr);
         }
-        Ok(res)
+        match self.body.last() {
+            Some(expr) => self.local_env.evaluate(expr),
+            None => Ok(None),
+        }
     }
 }
 
