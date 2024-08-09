@@ -273,12 +273,8 @@ impl Environment {
     fn evaluate_nonatomic(&mut self, exprs: &[Expression]) -> Result<Option<Value>, &str> {
         match exprs.len() {
             0 => Err("Cannot evaluate empty, non-atomic expressions"),
-            _ => match exprs[0] {
-                Expression::Keyword(_) => {
-                    // NOTE placeholder
-                    // TODO dispatch behaviour based on keyword
-                    Ok(None)
-                }
+            _ => match &exprs[0] {
+                Expression::Keyword(k) => self.evaluate_special(k, &exprs[1..]),
                 _ => {
                     // NOTE placeholder
                     // TODO evaluate exprs[0]
@@ -288,6 +284,30 @@ impl Environment {
                     Ok(None)
                 }
             },
+        }
+    }
+
+    fn evaluate_special(
+        &mut self,
+        keyword: &Keyword,
+        _args: &[Expression],
+    ) -> Result<Option<Value>, &str> {
+        match keyword {
+            Keyword::Lambda => {
+                // NOTE placeholder
+                // TODO implement
+                Ok(None)
+            }
+            Keyword::Quote => {
+                // NOTE placeholder
+                // TODO implement
+                Ok(None)
+            }
+            Keyword::Define => {
+                // NOTE placeholder
+                // TODO implement
+                Ok(None)
+            }
         }
     }
 }
