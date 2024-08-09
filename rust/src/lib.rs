@@ -300,11 +300,9 @@ impl Environment {
                 // TODO implement
                 Ok(None)
             }
-            Keyword::Quote => {
-                match args.len() {
-                    1 => Ok(Some(Value::Expression(args[0].clone()))),
-                    _ => Err("Must quote exactly one expression"),
-                }
+            Keyword::Quote => match args.len() {
+                1 => Ok(Some(Value::Expression(args[0].clone()))),
+                _ => Err("Must quote exactly one expression"),
             }
             Keyword::Define => {
                 // NOTE placeholder
