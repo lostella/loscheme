@@ -292,7 +292,7 @@ impl Environment {
     fn evaluate_special(
         &mut self,
         keyword: &Keyword,
-        _args: &[Expression],
+        args: &[Expression],
     ) -> Result<Option<Value>, &str> {
         match keyword {
             Keyword::Lambda => {
@@ -301,9 +301,10 @@ impl Environment {
                 Ok(None)
             }
             Keyword::Quote => {
-                // NOTE placeholder
-                // TODO implement
-                Ok(None)
+                match args.len() {
+                    1 => Ok(args[0].clone()),
+                    _ => Err("Must quote exactly one expression"),
+                }
             }
             Keyword::Define => {
                 // NOTE placeholder
