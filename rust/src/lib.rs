@@ -221,6 +221,8 @@ pub enum Value {
     Str(String),
     Bool(bool),
     Procedure(Procedure),
+    List(Vec<Value>),
+    Expression,
 }
 
 #[derive(Debug, PartialEq, Clone)]
