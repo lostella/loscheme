@@ -222,7 +222,7 @@ pub enum Value {
     Bool(bool),
     Procedure(Procedure),
     List(Vec<Value>),
-    Expression,
+    Expression(Expression),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -302,7 +302,7 @@ impl Environment {
             }
             Keyword::Quote => {
                 match args.len() {
-                    1 => Ok(Some(args[0].clone())),
+                    1 => Ok(Some(Value::Expression(args[0].clone()))),
                     _ => Err("Must quote exactly one expression"),
                 }
             }
