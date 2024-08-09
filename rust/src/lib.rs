@@ -302,7 +302,7 @@ impl Environment {
             }
             Keyword::Quote => {
                 match args.len() {
-                    1 => Ok(args[0].clone()),
+                    1 => Ok(Some(args[0].clone())),
                     _ => Err("Must quote exactly one expression"),
                 }
             }
