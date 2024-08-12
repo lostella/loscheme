@@ -246,6 +246,18 @@ impl Environment {
         }
     }
 
+    pub fn new_standard() -> Self {
+        let mut standard = Self::new();
+        // NOTE placeholder
+        // TODO add all built-in procedures in standard env
+        standard.data.insert("+".to_string(), Value::Integer(42));
+        standard
+    }
+
+    pub fn new_from_standard() -> Self {
+        Self::new_with_parent(Rc::new(Self::new_standard()))
+    }
+
     pub fn set(&mut self, key: String, value: Value) -> Option<Value> {
         self.data.insert(key, value)
     }
@@ -315,18 +327,22 @@ impl Environment {
 
 impl Default for Environment {
     fn default() -> Self {
-        Self::new()
+        Self::new_from_standard()
     }
 }
 
+trait Callable {
+    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str>;
+}
+
 #[derive(Debug, PartialEq, Clone)]
-pub struct Procedure {
+pub struct UserDefinedProcedure {
     params: Vec<String>,
     body: Vec<Expression>,
     local_env: Environment,
 }
 
-impl Procedure {
+impl UserDefinedProcedure {
     pub fn new(params: Vec<String>, body: Vec<Expression>, env: Rc<Environment>) -> Self {
         Self {
             params,
@@ -334,8 +350,10 @@ impl Procedure {
             local_env: Environment::new_with_parent(env),
         }
     }
+}
 
-    pub fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
+impl Callable for UserDefinedProcedure {
+    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
         }
@@ -349,6 +367,32 @@ impl Procedure {
         match self.body.last() {
             Some(expr) => self.local_env.evaluate(expr),
             None => Ok(None),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct BuiltInProcedure {
+    func: fn(Vec<Value>) -> Result<Option<Value>, &'static str>,
+}
+
+impl Callable for BuiltInProcedure {
+    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
+        (self.func)(args)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Procedure {
+    UserDefined(UserDefinedProcedure),
+    BuiltIn(BuiltInProcedure),
+}
+
+impl Callable for Procedure {
+    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
+        match self {
+            Procedure::UserDefined(proc) => proc.call(args),
+            Procedure::BuiltIn(proc) => proc.call(args),
         }
     }
 }
