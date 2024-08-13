@@ -225,6 +225,42 @@ pub enum Value {
     Expression(Expression),
 }
 
+impl Value {
+    fn add_to(&self, other: &Value) -> Result<Value, &'static str> {
+        match (self, other) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
+            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 + b)),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
+            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a + *b as f64)),
+            _ => Err("Cannot add types"),
+        }
+    }
+
+    fn mul_by(&self, other: &Value) -> Result<Value, &'static str> {
+        match (self, other) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a * b)),
+            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 * b)),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
+            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a * *b as f64)),
+            _ => Err("Cannot multiply types"),
+        }
+    }
+}
+
+fn add_numbers(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    let res = values
+        .into_iter()
+        .try_fold(Value::Integer(0), |acc, x| acc.add_to(&x))?;
+    Ok(Some(res))
+}
+
+fn mul_numbers(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    let res = values
+        .into_iter()
+        .try_fold(Value::Integer(1), |acc, x| acc.mul_by(&x))?;
+    Ok(Some(res))
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Environment {
     data: HashMap<String, Value>,
@@ -248,9 +284,15 @@ impl Environment {
 
     pub fn new_standard() -> Self {
         let mut standard = Self::new();
-        // NOTE placeholder
         // TODO add all built-in procedures in standard env
-        standard.data.insert("+".to_string(), Value::Integer(42));
+        standard.data.insert(
+            "+".to_string(),
+            Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: add_numbers })),
+        );
+        standard.data.insert(
+            "*".to_string(),
+            Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: mul_numbers })),
+        );
         standard
     }
 
@@ -272,7 +314,7 @@ impl Environment {
         }
     }
 
-    pub fn evaluate(&mut self, expr: &Expression) -> Result<Option<Value>, &str> {
+    pub fn evaluate(&mut self, expr: &Expression) -> Result<Option<Value>, &'static str> {
         match expr {
             Expression::Identifier(s) => match self.get(s) {
                 Some(value) => Ok(Some(value.clone())),
@@ -284,19 +326,31 @@ impl Environment {
         }
     }
 
-    fn evaluate_nonatomic(&mut self, exprs: &[Expression]) -> Result<Option<Value>, &str> {
+    fn evaluate_non_none_args(&mut self, exprs: &[Expression]) -> Result<Vec<Value>, &'static str> {
+        let mut res = vec![];
+        for expr in exprs {
+            match self.evaluate(expr)? {
+                Some(value) => {
+                    res.push(value);
+                }
+                None => return Err("Some argument has no value"),
+            }
+        }
+        Ok(res)
+    }
+
+    fn evaluate_nonatomic(&mut self, exprs: &[Expression]) -> Result<Option<Value>, &'static str> {
         match exprs.len() {
             0 => Err("Cannot evaluate empty, non-atomic expressions"),
             _ => match &exprs[0] {
                 Expression::Keyword(k) => self.evaluate_special(k, &exprs[1..]),
-                _ => {
-                    // NOTE placeholder
-                    // TODO evaluate exprs[0]
-                    // TODO if not a procedure, then error
-                    // TODO evaluate exprs[1], exprs[2], ... to get arguments values
-                    // TODO call procedure on arguments
-                    Ok(None)
-                }
+                _ => match self.evaluate(&exprs[0]) {
+                    Ok(Some(Value::Procedure(mut p))) => {
+                        let args = self.evaluate_non_none_args(&exprs[1..])?;
+                        p.call(args)
+                    }
+                    _ => Err("Not a procedure call"),
+                },
             },
         }
     }
@@ -305,7 +359,7 @@ impl Environment {
         &mut self,
         keyword: &Keyword,
         args: &[Expression],
-    ) -> Result<Option<Value>, &str> {
+    ) -> Result<Option<Value>, &'static str> {
         match keyword {
             Keyword::Lambda => {
                 // NOTE placeholder
@@ -332,7 +386,7 @@ impl Default for Environment {
 }
 
 trait Callable {
-    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str>;
+    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &'static str>;
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -353,7 +407,7 @@ impl UserDefinedProcedure {
 }
 
 impl Callable for UserDefinedProcedure {
-    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
+    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &'static str> {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
         }
@@ -377,7 +431,7 @@ pub struct BuiltInProcedure {
 }
 
 impl Callable for BuiltInProcedure {
-    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
+    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &'static str> {
         (self.func)(args)
     }
 }
@@ -389,7 +443,7 @@ pub enum Procedure {
 }
 
 impl Callable for Procedure {
-    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &str> {
+    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &'static str> {
         match self {
             Procedure::UserDefined(proc) => proc.call(args),
             Procedure::BuiltIn(proc) => proc.call(args),
@@ -476,14 +530,39 @@ mod tests {
     }
 
     #[test]
+    fn test_add_numbers() {
+        let values = vec![Value::Integer(10), Value::Float(42.0)];
+
+        assert_eq!(add_numbers(values), Ok(Some(Value::Float(52.0))));
+
+        let values = vec![Value::Float(42.0), Value::Integer(13)];
+
+        assert_eq!(add_numbers(values), Ok(Some(Value::Float(55.0))));
+
+        let values = vec![
+            Value::Float(42.0),
+            Value::Integer(13),
+            Value::Str("hey, hey".to_string()),
+        ];
+
+        assert_eq!(add_numbers(values), Err("Cannot add types"));
+    }
+
+    #[test]
     fn test_evaluate() {
-        let mut env = Environment::new();
+        let mut env = Environment::new_from_standard();
         env.set("a".to_string(), Value::Integer(42));
 
-        let expr = &parse_code("42.42").unwrap()[0];
-        assert_eq!(env.evaluate(expr), Ok(Some(Value::Float(42.42))));
+        let exprs = parse_code("42.42").unwrap();
+        assert_eq!(env.evaluate(&exprs[0]), Ok(Some(Value::Float(42.42))));
 
-        let expr = &parse_code("a").unwrap()[0];
-        assert_eq!(env.evaluate(expr), Ok(Some(Value::Integer(42))));
+        let exprs = parse_code("a").unwrap();
+        assert_eq!(env.evaluate(&exprs[0]), Ok(Some(Value::Integer(42))));
+
+        let exprs = parse_code("(+ 3 2)").unwrap();
+        assert_eq!(env.evaluate(&exprs[0]), Ok(Some(Value::Integer(5))));
+
+        let exprs = parse_code("(* 3 2)").unwrap();
+        assert_eq!(env.evaluate(&exprs[0]), Ok(Some(Value::Integer(6))));
     }
 }
