@@ -95,6 +95,7 @@ pub enum Keyword {
     Lambda,
     Quote,
     Define,
+    // TODO add more special forms here
 }
 
 impl Keyword {
@@ -314,7 +315,7 @@ impl Environment {
         }
     }
 
-    pub fn evaluate(&mut self, expr: &Expression) -> Result<Option<Value>, &'static str> {
+    pub fn evaluate_expr(&mut self, expr: &Expression) -> Result<Option<Value>, &'static str> {
         match expr {
             Expression::Identifier(s) => match self.get(s) {
                 Some(value) => Ok(Some(value.clone())),
@@ -327,9 +328,9 @@ impl Environment {
     }
 
     fn evaluate_non_none_args(&mut self, exprs: &[Expression]) -> Result<Vec<Value>, &'static str> {
-        let mut res = vec![];
+        let mut res = Vec::with_capacity(exprs.len());
         for expr in exprs {
-            match self.evaluate(expr)? {
+            match self.evaluate_expr(expr)? {
                 Some(value) => {
                     res.push(value);
                 }
@@ -343,8 +344,8 @@ impl Environment {
         match exprs.len() {
             0 => Err("Cannot evaluate empty, non-atomic expressions"),
             _ => match &exprs[0] {
-                Expression::Keyword(k) => self.evaluate_special(k, &exprs[1..]),
-                _ => match self.evaluate(&exprs[0]) {
+                Expression::Keyword(k) => self.evaluate_special_form(k, &exprs[1..]),
+                _ => match self.evaluate_expr(&exprs[0]) {
                     Ok(Some(Value::Procedure(mut p))) => {
                         let args = self.evaluate_non_none_args(&exprs[1..])?;
                         p.call(args)
@@ -355,7 +356,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_special(
+    fn evaluate_special_form(
         &mut self,
         keyword: &Keyword,
         args: &[Expression],
@@ -364,6 +365,8 @@ impl Environment {
             Keyword::Lambda => {
                 // NOTE placeholder
                 // TODO implement
+                // - args[0] must be a Vec containing Expression::Identifier only
+                // - args[1..] all go into the procedure body
                 Ok(None)
             }
             Keyword::Quote => match args.len() {
@@ -371,9 +374,18 @@ impl Environment {
                 _ => Err("Must quote exactly one expression"),
             },
             Keyword::Define => {
-                // NOTE placeholder
-                // TODO implement
-                Ok(None)
+                if args.len() != 2 {
+                    return Err("Define needs exactly two arguments");
+                }
+                match &args[0] {
+                    Expression::Identifier(key) => {
+                        if let Some(value) = self.evaluate_expr(&args[1])? {
+                            self.set(key.to_string(), value);
+                        }
+                        Ok(None)
+                    }
+                    _ => Err("Define needs identifier as first argument"),
+                }
             }
         }
     }
@@ -416,10 +428,10 @@ impl Callable for UserDefinedProcedure {
             self.local_env.set(param.to_string(), arg);
         }
         for expr in &self.body[..self.body.len() - 1] {
-            let _ = self.local_env.evaluate(expr);
+            let _ = self.local_env.evaluate_expr(expr);
         }
         match self.body.last() {
-            Some(expr) => self.local_env.evaluate(expr),
+            Some(expr) => self.local_env.evaluate_expr(expr),
             None => Ok(None),
         }
     }
@@ -549,20 +561,26 @@ mod tests {
     }
 
     #[test]
-    fn test_evaluate() {
+    fn test_evaluate_expr() {
         let mut env = Environment::new_from_standard();
         env.set("a".to_string(), Value::Integer(42));
 
         let exprs = parse_code("42.42").unwrap();
-        assert_eq!(env.evaluate(&exprs[0]), Ok(Some(Value::Float(42.42))));
+        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Float(42.42))));
 
         let exprs = parse_code("a").unwrap();
-        assert_eq!(env.evaluate(&exprs[0]), Ok(Some(Value::Integer(42))));
+        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Integer(42))));
 
         let exprs = parse_code("(+ 3 2)").unwrap();
-        assert_eq!(env.evaluate(&exprs[0]), Ok(Some(Value::Integer(5))));
+        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Integer(5))));
 
         let exprs = parse_code("(* 3 2)").unwrap();
-        assert_eq!(env.evaluate(&exprs[0]), Ok(Some(Value::Integer(6))));
+        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Integer(6))));
+
+        let exprs = parse_code("(define a 13)").unwrap();
+        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(None));
+
+        let exprs = parse_code("(+ 8 a)").unwrap();
+        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Integer(21))));
     }
 }
