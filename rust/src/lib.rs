@@ -147,7 +147,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Expression>, String> {
+    pub fn parse(&mut self) -> Result<Vec<Expression>, &'static str> {
         let mut expressions = Vec::new();
         while self.tokens.peek().is_some() {
             expressions.push(self.parse_expression()?);
@@ -155,17 +155,17 @@ impl<'a> Parser<'a> {
         Ok(expressions)
     }
 
-    fn parse_expression(&mut self) -> Result<Expression, String> {
+    fn parse_expression(&mut self) -> Result<Expression, &'static str> {
         match self.tokens.next() {
             Some(Token::LParen) => self.parse_list(),
             Some(Token::Quote) => self.parse_quote(),
             Some(Token::Atom(s)) => self.parse_atom(s),
-            Some(Token::RParen) => Err("Unexpected closing parenthesis".into()),
-            None => Err("Unexpected end of input".into()),
+            Some(Token::RParen) => Err("Unexpected closing parenthesis"),
+            None => Err("Unexpected end of input"),
         }
     }
 
-    fn parse_list(&mut self) -> Result<Expression, String> {
+    fn parse_list(&mut self) -> Result<Expression, &'static str> {
         let mut expressions = Vec::new();
         while let Some(token) = self.tokens.peek() {
             match token {
@@ -178,17 +178,17 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        Err("Unterminated list".into())
+        Err("Unterminated list")
     }
 
-    fn parse_quote(&mut self) -> Result<Expression, String> {
+    fn parse_quote(&mut self) -> Result<Expression, &'static str> {
         Ok(Expression::List(vec![
             Expression::Keyword(Keyword::Quote),
             self.parse_expression()?,
         ]))
     }
 
-    fn parse_atom(&self, s: String) -> Result<Expression, String> {
+    fn parse_atom(&self, s: String) -> Result<Expression, &'static str> {
         if let Ok(int) = s.parse::<i64>() {
             Ok(Expression::Literal(Literal::Integer(int)))
         } else if let Ok(float) = s.parse::<f64>() {
@@ -209,7 +209,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse_code(code: &str) -> Result<Vec<Expression>, String> {
+pub fn parse_code(code: &str) -> Result<Vec<Expression>, &'static str> {
     let tokenizer = Tokenizer::new(code);
     let mut parser = Parser::new(tokenizer);
     parser.parse()
