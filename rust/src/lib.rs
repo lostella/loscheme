@@ -563,24 +563,22 @@ mod tests {
     #[test]
     fn test_evaluate_expr() {
         let mut env = Environment::new_from_standard();
-        env.set("a".to_string(), Value::Integer(42));
 
-        let exprs = parse_code("42.42").unwrap();
-        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Float(42.42))));
+        let cases = vec![
+            ("(define a 42)", Ok(None)),
+            ("42.42", Ok(Some(Value::Float(42.42)))),
+            ("a", Ok(Some(Value::Integer(42)))),
+            ("(+ 3 2)", Ok(Some(Value::Integer(5)))),
+            ("(* 3 2)", Ok(Some(Value::Integer(6)))),
+            ("(+ 3 2.0)", Ok(Some(Value::Float(5.0)))),
+            ("(* 3.0 2)", Ok(Some(Value::Float(6.0)))),
+            ("(define a 13)", Ok(None)),
+            ("(+ 8 a)", Ok(Some(Value::Integer(21)))),
+        ];
 
-        let exprs = parse_code("a").unwrap();
-        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Integer(42))));
-
-        let exprs = parse_code("(+ 3 2)").unwrap();
-        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Integer(5))));
-
-        let exprs = parse_code("(* 3 2)").unwrap();
-        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Integer(6))));
-
-        let exprs = parse_code("(define a 13)").unwrap();
-        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(None));
-
-        let exprs = parse_code("(+ 8 a)").unwrap();
-        assert_eq!(env.evaluate_expr(&exprs[0]), Ok(Some(Value::Integer(21))));
+        for (code, res) in cases {
+            let expr = &parse_code(code).unwrap()[0];
+            assert_eq!(env.evaluate_expr(expr), res);
+        }
     }
 }
