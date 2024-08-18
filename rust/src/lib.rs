@@ -269,22 +269,15 @@ pub struct Environment {
 }
 
 impl Environment {
-    pub fn new() -> Self {
+    pub fn new(parent: Option<Rc<Environment>>) -> Self {
         Self {
             data: HashMap::new(),
-            parent: None,
-        }
-    }
-
-    pub fn new_with_parent(parent: Rc<Environment>) -> Self {
-        Self {
-            data: HashMap::new(),
-            parent: Some(parent),
+            parent: parent,
         }
     }
 
     pub fn new_standard() -> Self {
-        let mut standard = Self::new();
+        let mut standard = Self::new(None);
         // TODO add all built-in procedures in standard env
         standard.data.insert(
             "+".to_string(),
@@ -298,7 +291,7 @@ impl Environment {
     }
 
     pub fn new_from_standard() -> Self {
-        Self::new_with_parent(Rc::new(Self::new_standard()))
+        Self::new(Some(Rc::new(Self::new_standard())))
     }
 
     pub fn set(&mut self, key: String, value: Value) -> Option<Value> {
@@ -391,12 +384,6 @@ impl Environment {
     }
 }
 
-impl Default for Environment {
-    fn default() -> Self {
-        Self::new_from_standard()
-    }
-}
-
 trait Callable {
     fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &'static str>;
 }
@@ -413,7 +400,7 @@ impl UserDefinedProcedure {
         Self {
             params,
             body,
-            local_env: Environment::new_with_parent(env),
+            local_env: Environment::new(Some(env)),
         }
     }
 }
@@ -520,11 +507,11 @@ mod tests {
 
     #[test]
     fn test_environment() {
-        let mut base_env = Environment::new();
+        let mut base_env = Environment::new(None);
         base_env.set("a".to_string(), Value::Integer(42));
         let base_env = Rc::new(base_env);
 
-        let mut child_env = Environment::new_with_parent(base_env.clone());
+        let mut child_env = Environment::new(Some(base_env.clone()));
 
         child_env.set("a".to_string(), Value::Str("hello".to_string()));
         child_env.set("b".to_string(), Value::Str("world".to_string()));
