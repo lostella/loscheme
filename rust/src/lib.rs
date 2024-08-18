@@ -272,7 +272,7 @@ impl Environment {
     pub fn new(parent: Option<Rc<Environment>>) -> Self {
         Self {
             data: HashMap::new(),
-            parent: parent,
+            parent,
         }
     }
 
