@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::{zip, Peekable};
 use std::rc::Rc;
@@ -263,67 +264,107 @@ fn mul_numbers(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Environment {
+pub struct EnvironmentNode {
     data: HashMap<String, Value>,
-    parent: Option<Rc<Environment>>,
+    parent: Option<EnvironmentLink>,
 }
 
-impl Environment {
-    pub fn new(parent: Option<Rc<Environment>>) -> Self {
-        Self {
-            data: HashMap::new(),
-            parent,
-        }
+type EnvironmentLink = Rc<RefCell<EnvironmentNode>>;
+
+impl EnvironmentNode {
+    pub fn set(node: &mut EnvironmentNode, key: String, value: Value) -> Option<Value> {
+        node.data.insert(key, value)
     }
 
-    pub fn new_standard() -> Self {
-        let mut standard = Self::new(None);
-        // TODO add all built-in procedures in standard env
-        standard.data.insert(
-            "+".to_string(),
-            Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: add_numbers })),
-        );
-        standard.data.insert(
-            "*".to_string(),
-            Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: mul_numbers })),
-        );
-        standard
-    }
-
-    pub fn new_from_standard() -> Self {
-        Self::new(Some(Rc::new(Self::new_standard())))
-    }
-
-    pub fn set(&mut self, key: String, value: Value) -> Option<Value> {
-        self.data.insert(key, value)
-    }
-
-    pub fn get(&self, key: &str) -> Option<&Value> {
-        match self.data.get(key) {
-            Some(value) => Some(value),
-            None => match &self.parent {
-                Some(environment) => environment.get(key),
+    pub fn get(node: &EnvironmentNode, key: &str) -> Option<Value> {
+        match node.data.get(key) {
+            Some(value) => Some(value.clone()),
+            None => match &node.parent {
+                Some(link) => Self::get(&link.borrow(), key),
                 None => None,
             },
         }
     }
+}
 
-    pub fn evaluate_expr(&mut self, expr: &Expression) -> Result<Option<Value>, &'static str> {
+#[derive(Debug, PartialEq, Clone)]
+pub struct Environment {
+    head: EnvironmentLink,
+}
+
+impl Environment {
+    pub fn empty() -> Environment {
+        let node = EnvironmentNode {
+            data: HashMap::new(),
+            parent: None,
+        };
+        Environment {
+            head: Rc::new(RefCell::new(node)),
+        }
+    }
+
+    pub fn child(parent: &Environment) -> Environment {
+        let node = EnvironmentNode {
+            data: HashMap::new(),
+            parent: Some(parent.head.clone()),
+        };
+        Environment {
+            head: Rc::new(RefCell::new(node)),
+        }
+    }
+
+    pub fn standard() -> Environment {
+        let node = EnvironmentNode {
+            data: HashMap::new(),
+            parent: None,
+        };
+        let mut env = Environment {
+            head: Rc::new(RefCell::new(node)),
+        };
+        // TODO add all built-in procedures in standard env
+        Self::set(
+            &mut env,
+            "+".to_string(),
+            Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: add_numbers })),
+        );
+        Self::set(
+            &mut env,
+            "*".to_string(),
+            Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: mul_numbers })),
+        );
+        env
+    }
+
+    pub fn set(env: &mut Environment, key: String, value: Value) -> Option<Value> {
+        EnvironmentNode::set(&mut env.head.borrow_mut(), key, value)
+    }
+
+    pub fn get(env: &Environment, key: &str) -> Option<Value> {
+        EnvironmentNode::get(&env.head.borrow(), key)
+    }
+
+    pub fn evaluate_expr(
+        env: &mut Environment,
+        expr: &Expression,
+    ) -> Result<Option<Value>, &'static str> {
         match expr {
-            Expression::Identifier(s) => match self.get(s) {
+            Expression::Identifier(s) => match Self::get(env, s) {
                 Some(value) => Ok(Some(value.clone())),
                 None => Err("Undefined identifier"),
             },
             Expression::Literal(l) => Ok(Some(l.to_value())),
-            Expression::List(v) => self.evaluate_nonatomic(v),
+            Expression::List(v) => Self::evaluate_nonatomic(env, v),
             _ => Ok(None),
         }
     }
 
-    fn evaluate_non_none_args(&mut self, exprs: &[Expression]) -> Result<Vec<Value>, &'static str> {
+    fn evaluate_non_none_args(
+        env: &mut Environment,
+        exprs: &[Expression],
+    ) -> Result<Vec<Value>, &'static str> {
         let mut res = Vec::with_capacity(exprs.len());
         for expr in exprs {
-            match self.evaluate_expr(expr)? {
+            match Self::evaluate_expr(env, expr)? {
                 Some(value) => {
                     res.push(value);
                 }
@@ -333,14 +374,17 @@ impl Environment {
         Ok(res)
     }
 
-    fn evaluate_nonatomic(&mut self, exprs: &[Expression]) -> Result<Option<Value>, &'static str> {
+    fn evaluate_nonatomic(
+        env: &mut Environment,
+        exprs: &[Expression],
+    ) -> Result<Option<Value>, &'static str> {
         match exprs.len() {
             0 => Err("Cannot evaluate empty, non-atomic expressions"),
             _ => match &exprs[0] {
-                Expression::Keyword(k) => self.evaluate_special_form(k, &exprs[1..]),
-                _ => match self.evaluate_expr(&exprs[0]) {
+                Expression::Keyword(k) => Self::evaluate_special_form(env, k, &exprs[1..]),
+                _ => match Self::evaluate_expr(env, &exprs[0]) {
                     Ok(Some(Value::Procedure(mut p))) => {
-                        let args = self.evaluate_non_none_args(&exprs[1..])?;
+                        let args = Self::evaluate_non_none_args(env, &exprs[1..])?;
                         p.call(args)
                     }
                     _ => Err("Not a procedure call"),
@@ -350,18 +394,25 @@ impl Environment {
     }
 
     fn evaluate_special_form(
-        &mut self,
+        env: &mut Environment,
         keyword: &Keyword,
         args: &[Expression],
     ) -> Result<Option<Value>, &'static str> {
         match keyword {
-            Keyword::Lambda => {
-                // NOTE placeholder
-                // TODO implement
-                // - args[0] must be a Vec containing Expression::Identifier only
-                // - args[1..] all go into the procedure body
-                Ok(None)
-            }
+            Keyword::Lambda => match &args[0] {
+                Expression::List(v) => {
+                    let mut ids = Vec::with_capacity(v.len());
+                    for expr in v {
+                        match expr {
+                            Expression::Identifier(s) => ids.push(s.clone()),
+                            _ => return Err("Not an identifier"),
+                        }
+                    }
+                    let proc = UserDefinedProcedure::new(ids, args[1..].to_vec(), env.clone());
+                    Ok(Some(Value::Procedure(Procedure::UserDefined(proc))))
+                }
+                _ => Err("First argument to lambda must be a list of identifiers"),
+            },
             Keyword::Quote => match args.len() {
                 1 => Ok(Some(Value::Expression(args[0].clone()))),
                 _ => Err("Must quote exactly one expression"),
@@ -372,8 +423,8 @@ impl Environment {
                 }
                 match &args[0] {
                     Expression::Identifier(key) => {
-                        if let Some(value) = self.evaluate_expr(&args[1])? {
-                            self.set(key.to_string(), value);
+                        if let Some(value) = Self::evaluate_expr(env, &args[1])? {
+                            Self::set(env, key.to_string(), value);
                         }
                         Ok(None)
                     }
@@ -392,16 +443,12 @@ trait Callable {
 pub struct UserDefinedProcedure {
     params: Vec<String>,
     body: Vec<Expression>,
-    local_env: Environment,
+    env: Environment,
 }
 
 impl UserDefinedProcedure {
-    pub fn new(params: Vec<String>, body: Vec<Expression>, env: Rc<Environment>) -> Self {
-        Self {
-            params,
-            body,
-            local_env: Environment::new(Some(env)),
-        }
+    pub fn new(params: Vec<String>, body: Vec<Expression>, env: Environment) -> Self {
+        Self { params, body, env }
     }
 }
 
@@ -410,15 +457,15 @@ impl Callable for UserDefinedProcedure {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
         }
-        self.local_env.data.drain();
+        let mut local_env = Environment::child(&self.env);
         for (param, arg) in zip(&self.params, args) {
-            self.local_env.set(param.to_string(), arg);
+            Environment::set(&mut local_env, param.to_string(), arg);
         }
         for expr in &self.body[..self.body.len() - 1] {
-            let _ = self.local_env.evaluate_expr(expr);
+            let _ = Environment::evaluate_expr(&mut local_env, expr);
         }
         match self.body.last() {
-            Some(expr) => self.local_env.evaluate_expr(expr),
+            Some(expr) => Environment::evaluate_expr(&mut local_env, expr),
             None => Ok(None),
         }
     }
@@ -507,24 +554,23 @@ mod tests {
 
     #[test]
     fn test_environment() {
-        let mut base_env = Environment::new(None);
-        base_env.set("a".to_string(), Value::Integer(42));
-        let base_env = Rc::new(base_env);
+        let mut base = Environment::empty();
+        Environment::set(&mut base, "a".to_string(), Value::Integer(42));
 
-        let mut child_env = Environment::new(Some(base_env.clone()));
+        let mut child = Environment::child(&base);
 
-        child_env.set("a".to_string(), Value::Str("hello".to_string()));
-        child_env.set("b".to_string(), Value::Str("world".to_string()));
+        Environment::set(&mut child, "a".to_string(), Value::Str("hello".to_string()));
+        Environment::set(&mut child, "b".to_string(), Value::Str("world".to_string()));
 
-        assert_eq!(base_env.get("a"), Some(Value::Integer(42)).as_ref());
-        assert_eq!(base_env.get("b"), None);
+        assert_eq!(Environment::get(&base, "a"), Some(Value::Integer(42)));
+        assert_eq!(Environment::get(&base, "b"), None);
         assert_eq!(
-            child_env.get("a"),
-            Some(Value::Str("hello".to_string())).as_ref()
+            Environment::get(&child, "a"),
+            Some(Value::Str("hello".to_string()))
         );
         assert_eq!(
-            child_env.get("b"),
-            Some(Value::Str("world".to_string())).as_ref()
+            Environment::get(&child, "b"),
+            Some(Value::Str("world".to_string()))
         );
     }
 
@@ -549,7 +595,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_expr() {
-        let mut env = Environment::new_from_standard();
+        let mut env = Environment::child(&Environment::standard());
 
         let cases = vec![
             ("(define a 42)", Ok(None)),
@@ -561,11 +607,14 @@ mod tests {
             ("(* 3.0 2)", Ok(Some(Value::Float(6.0)))),
             ("(define a 13)", Ok(None)),
             ("(+ 8 a)", Ok(Some(Value::Integer(21)))),
+            ("(define f (lambda (a b) (+ (* 3 a) b)))", Ok(None)),
+            ("(f 7 a)", Ok(Some(Value::Integer(34)))),
+            ("(f 7.0 a)", Ok(Some(Value::Float(34.0)))),
         ];
 
         for (code, res) in cases {
             let expr = &parse_code(code).unwrap()[0];
-            assert_eq!(env.evaluate_expr(expr), res);
+            assert_eq!(Environment::evaluate_expr(&mut env, expr), res);
         }
     }
 }
