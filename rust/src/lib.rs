@@ -303,10 +303,10 @@ impl Environment {
         }
     }
 
-    pub fn child(parent: &Environment) -> Environment {
+    pub fn child(&self) -> Environment {
         let node = EnvironmentNode {
             data: HashMap::new(),
-            parent: Some(parent.head.clone()),
+            parent: Some(self.head.clone()),
         };
         Environment {
             head: Rc::new(RefCell::new(node)),
@@ -448,15 +448,15 @@ impl Callable for UserDefinedProcedure {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
         }
-        let mut local_env = Environment::child(&self.env);
+        let mut local_env = self.env.child();
         for (param, arg) in zip(&self.params, args) {
-            Environment::set(&mut local_env, param.to_string(), arg);
+            local_env.set(param.to_string(), arg);
         }
         for expr in &self.body[..self.body.len() - 1] {
-            let _ = Environment::evaluate_expr(&mut local_env, expr);
+            let _ = local_env.evaluate_expr(expr);
         }
         match self.body.last() {
-            Some(expr) => Environment::evaluate_expr(&mut local_env, expr),
+            Some(expr) => local_env.evaluate_expr(expr),
             None => Ok(None),
         }
     }
@@ -546,23 +546,17 @@ mod tests {
     #[test]
     fn test_environment() {
         let mut base = Environment::empty();
-        Environment::set(&mut base, "a".to_string(), Value::Integer(42));
+        base.set("a".to_string(), Value::Integer(42));
 
-        let mut child = Environment::child(&base);
+        let mut child = base.child();
 
-        Environment::set(&mut child, "a".to_string(), Value::Str("hello".to_string()));
-        Environment::set(&mut child, "b".to_string(), Value::Str("world".to_string()));
+        child.set("a".to_string(), Value::Str("hello".to_string()));
+        child.set("b".to_string(), Value::Str("world".to_string()));
 
-        assert_eq!(Environment::get(&base, "a"), Some(Value::Integer(42)));
-        assert_eq!(Environment::get(&base, "b"), None);
-        assert_eq!(
-            Environment::get(&child, "a"),
-            Some(Value::Str("hello".to_string()))
-        );
-        assert_eq!(
-            Environment::get(&child, "b"),
-            Some(Value::Str("world".to_string()))
-        );
+        assert_eq!(base.get("a"), Some(Value::Integer(42)));
+        assert_eq!(base.get("b"), None);
+        assert_eq!(child.get("a"), Some(Value::Str("hello".to_string())));
+        assert_eq!(child.get("b"), Some(Value::Str("world".to_string())));
     }
 
     #[test]
@@ -586,7 +580,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_expr() {
-        let mut env = Environment::child(&Environment::standard());
+        let mut env = Environment::standard().child();
 
         let cases = vec![
             ("(define a 42)", Ok(None)),
@@ -605,7 +599,7 @@ mod tests {
 
         for (code, res) in cases {
             let expr = &parse_code(code).unwrap()[0];
-            assert_eq!(Environment::evaluate_expr(&mut env, expr), res);
+            assert_eq!(env.evaluate_expr(expr), res);
         }
     }
 }
