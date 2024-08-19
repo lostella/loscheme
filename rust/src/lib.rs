@@ -272,15 +272,15 @@ pub struct EnvironmentNode {
 type EnvironmentLink = Rc<RefCell<EnvironmentNode>>;
 
 impl EnvironmentNode {
-    pub fn set(node: &mut EnvironmentNode, key: String, value: Value) -> Option<Value> {
-        node.data.insert(key, value)
+    pub fn set(&mut self, key: String, value: Value) -> Option<Value> {
+        self.data.insert(key, value)
     }
 
-    pub fn get(node: &EnvironmentNode, key: &str) -> Option<Value> {
-        match node.data.get(key) {
+    pub fn get(&self, key: &str) -> Option<Value> {
+        match self.data.get(key) {
             Some(value) => Some(value.clone()),
-            None => match &node.parent {
-                Some(link) => Self::get(&link.borrow(), key),
+            None => match &self.parent {
+                Some(link) => link.borrow().get(key),
                 None => None,
             },
         }
@@ -335,36 +335,30 @@ impl Environment {
         env
     }
 
-    pub fn set(env: &mut Environment, key: String, value: Value) -> Option<Value> {
-        EnvironmentNode::set(&mut env.head.borrow_mut(), key, value)
+    pub fn set(&mut self, key: String, value: Value) -> Option<Value> {
+        self.head.borrow_mut().set(key, value)
     }
 
-    pub fn get(env: &Environment, key: &str) -> Option<Value> {
-        EnvironmentNode::get(&env.head.borrow(), key)
+    pub fn get(&self, key: &str) -> Option<Value> {
+        self.head.borrow().get(key)
     }
 
-    pub fn evaluate_expr(
-        env: &mut Environment,
-        expr: &Expression,
-    ) -> Result<Option<Value>, &'static str> {
+    pub fn evaluate_expr(&mut self, expr: &Expression) -> Result<Option<Value>, &'static str> {
         match expr {
-            Expression::Identifier(s) => match Self::get(env, s) {
+            Expression::Identifier(s) => match self.get(s) {
                 Some(value) => Ok(Some(value.clone())),
                 None => Err("Undefined identifier"),
             },
             Expression::Literal(l) => Ok(Some(l.to_value())),
-            Expression::List(v) => Self::evaluate_nonatomic(env, v),
+            Expression::List(v) => self.evaluate_nonatomic(v),
             _ => Ok(None),
         }
     }
 
-    fn evaluate_non_none_args(
-        env: &mut Environment,
-        exprs: &[Expression],
-    ) -> Result<Vec<Value>, &'static str> {
+    fn evaluate_non_none_args(&mut self, exprs: &[Expression]) -> Result<Vec<Value>, &'static str> {
         let mut res = Vec::with_capacity(exprs.len());
         for expr in exprs {
-            match Self::evaluate_expr(env, expr)? {
+            match self.evaluate_expr(expr)? {
                 Some(value) => {
                     res.push(value);
                 }
@@ -374,17 +368,14 @@ impl Environment {
         Ok(res)
     }
 
-    fn evaluate_nonatomic(
-        env: &mut Environment,
-        exprs: &[Expression],
-    ) -> Result<Option<Value>, &'static str> {
+    fn evaluate_nonatomic(&mut self, exprs: &[Expression]) -> Result<Option<Value>, &'static str> {
         match exprs.len() {
             0 => Err("Cannot evaluate empty, non-atomic expressions"),
             _ => match &exprs[0] {
-                Expression::Keyword(k) => Self::evaluate_special_form(env, k, &exprs[1..]),
-                _ => match Self::evaluate_expr(env, &exprs[0]) {
+                Expression::Keyword(k) => self.evaluate_special_form(k, &exprs[1..]),
+                _ => match self.evaluate_expr(&exprs[0]) {
                     Ok(Some(Value::Procedure(mut p))) => {
-                        let args = Self::evaluate_non_none_args(env, &exprs[1..])?;
+                        let args = self.evaluate_non_none_args(&exprs[1..])?;
                         p.call(args)
                     }
                     _ => Err("Not a procedure call"),
@@ -394,7 +385,7 @@ impl Environment {
     }
 
     fn evaluate_special_form(
-        env: &mut Environment,
+        &mut self,
         keyword: &Keyword,
         args: &[Expression],
     ) -> Result<Option<Value>, &'static str> {
@@ -408,7 +399,7 @@ impl Environment {
                             _ => return Err("Not an identifier"),
                         }
                     }
-                    let proc = UserDefinedProcedure::new(ids, args[1..].to_vec(), env.clone());
+                    let proc = UserDefinedProcedure::new(ids, args[1..].to_vec(), self.clone());
                     Ok(Some(Value::Procedure(Procedure::UserDefined(proc))))
                 }
                 _ => Err("First argument to lambda must be a list of identifiers"),
@@ -423,8 +414,8 @@ impl Environment {
                 }
                 match &args[0] {
                     Expression::Identifier(key) => {
-                        if let Some(value) = Self::evaluate_expr(env, &args[1])? {
-                            Self::set(env, key.to_string(), value);
+                        if let Some(value) = self.evaluate_expr(&args[1])? {
+                            self.set(key.to_string(), value);
                         }
                         Ok(None)
                     }
