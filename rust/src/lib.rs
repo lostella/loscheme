@@ -96,6 +96,7 @@ pub enum Keyword {
     Lambda,
     Quote,
     Define,
+    If,
     // TODO add more special forms here
 }
 
@@ -105,6 +106,7 @@ impl Keyword {
             "lambda" => Some(Keyword::Lambda),
             "quote" => Some(Keyword::Quote),
             "define" => Some(Keyword::Define),
+            "if" => Some(Keyword::If),
             _ => None,
         }
     }
@@ -562,6 +564,16 @@ impl Environment {
                     _ => Err("Define needs identifier as first argument"),
                 }
             }
+            Keyword::If => {
+                if args.len() != 3 {
+                    return Err("If needs exactly three arguments");
+                }
+                match self.evaluate_expr(&args[0])? {
+                    Some(Value::Bool(true)) => self.evaluate_expr(&args[1]),
+                    Some(Value::Bool(false)) => self.evaluate_expr(&args[2]),
+                    _ => Err("First argument to if did not evaluate to a boolean"),
+                }
+            }
         }
     }
 }
@@ -758,6 +770,8 @@ mod tests {
                     Value::Integer(3),
                 ])),
             ),
+            ("(if (> 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(4))),
+            ("(if (< 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(-4))),
             ("(define a 13)", None),
             ("(+ 8 a)", Some(Value::Integer(21))),
             ("(define f (lambda (a b) (+ (* 3 a) b)))", None),
