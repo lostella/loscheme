@@ -1,10 +1,13 @@
+use loscheme::{parse_code, Environment};
 use std::io::{self, BufRead, Write};
 
 fn main() {
-    println!("Enter text (Ctrl+D to skip, Ctrl+C to quit):");
+    println!("(Ctrl+D to skip, Ctrl+C to quit)");
+    println!("");
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
+    let mut env = Environment::standard().child();
 
     loop {
         print!("> ");
@@ -14,16 +17,16 @@ fn main() {
 
         match stdin.lock().read_line(&mut input) {
             Ok(0) => {
-                // Ctrl+D sends EOF (read_line returns 0 bytes read)
                 println!("\nSkipped!");
-                continue; // Skip this iteration and prompt for input again
+                continue;
             }
             Ok(_) => {
                 input = input.trim().to_string();
-                // Modify the input here (e.g., convert to uppercase)
-                let output = input.to_uppercase();
 
-                println!("Modified: {}", output);
+                let expr = &parse_code(&input).unwrap()[0];
+                let res = env.evaluate_expr(expr);
+
+                println!("=> {:?}", res);
             }
             Err(err) => {
                 println!("Error: {}", err);
