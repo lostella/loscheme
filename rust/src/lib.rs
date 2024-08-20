@@ -389,6 +389,10 @@ fn builtin_geq(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
     builtin_cmp(values, Value::geq)
 }
 
+fn builtin_list(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    Ok(Some(Value::List(values)))
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
     data: HashMap<String, Value>,
@@ -460,6 +464,7 @@ impl Environment {
             (">", builtin_gt as BuiltInFnType),
             ("<=", builtin_leq as BuiltInFnType),
             (">=", builtin_geq as BuiltInFnType),
+            ("list", builtin_list as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(
@@ -745,6 +750,14 @@ mod tests {
             ("(> 1 3 2)", Some(Value::Bool(false))),
             ("(>= 1 1 1)", Some(Value::Bool(true))),
             ("(>= 1 1 2)", Some(Value::Bool(false))),
+            (
+                "(list 1 2 3)",
+                Some(Value::List(vec![
+                    Value::Integer(1),
+                    Value::Integer(2),
+                    Value::Integer(3),
+                ])),
+            ),
             ("(define a 13)", None),
             ("(+ 8 a)", Some(Value::Integer(21))),
             ("(define f (lambda (a b) (+ (* 3 a) b)))", None),
