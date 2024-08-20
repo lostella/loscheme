@@ -23,7 +23,7 @@ fn main() {
             Ok(_) => {
                 input = input.trim().to_string();
                 let expr = &parse_code(&input).unwrap()[0];
-                let res = env.evaluate_expr(expr);
+                let res = env.evaluate(expr);
                 println!("=> {:?}", res);
             }
             Err(err) => {

@@ -489,7 +489,7 @@ impl Environment {
         self.head.borrow().get(key)
     }
 
-    pub fn evaluate_expr(&mut self, expr: &Expression) -> Result<Option<Value>, &'static str> {
+    pub fn evaluate(&mut self, expr: &Expression) -> Result<Option<Value>, &'static str> {
         match expr {
             Expression::Identifier(s) => match self.get(s) {
                 Some(value) => Ok(Some(value.clone())),
@@ -504,7 +504,7 @@ impl Environment {
     fn evaluate_non_none_args(&mut self, exprs: &[Expression]) -> Result<Vec<Value>, &'static str> {
         let mut res = Vec::with_capacity(exprs.len());
         for expr in exprs {
-            match self.evaluate_expr(expr)? {
+            match self.evaluate(expr)? {
                 Some(value) => {
                     res.push(value);
                 }
@@ -519,7 +519,7 @@ impl Environment {
             0 => Err("Cannot evaluate empty, non-atomic expressions"),
             _ => match &exprs[0] {
                 Expression::Keyword(k) => self.evaluate_special_form(k, &exprs[1..]),
-                _ => match self.evaluate_expr(&exprs[0]) {
+                _ => match self.evaluate(&exprs[0]) {
                     Ok(Some(Value::Procedure(mut p))) => {
                         let args = self.evaluate_non_none_args(&exprs[1..])?;
                         p.call(args)
@@ -560,7 +560,7 @@ impl Environment {
                 }
                 match &args[0] {
                     Expression::Identifier(key) => {
-                        if let Some(value) = self.evaluate_expr(&args[1])? {
+                        if let Some(value) = self.evaluate(&args[1])? {
                             self.set(key.to_string(), value);
                         }
                         Ok(None)
@@ -572,9 +572,9 @@ impl Environment {
                 if args.len() != 3 {
                     return Err("If needs exactly three arguments");
                 }
-                match self.evaluate_expr(&args[0])? {
-                    Some(Value::Bool(true)) => self.evaluate_expr(&args[1]),
-                    Some(Value::Bool(false)) => self.evaluate_expr(&args[2]),
+                match self.evaluate(&args[0])? {
+                    Some(Value::Bool(true)) => self.evaluate(&args[1]),
+                    Some(Value::Bool(false)) => self.evaluate(&args[2]),
                     _ => Err("First argument to if did not evaluate to a boolean"),
                 }
             }
@@ -592,7 +592,7 @@ impl Environment {
                                 }
                                 match &p[0] {
                                     Expression::Identifier(s) => {
-                                        if let Some(vv) = child.evaluate_expr(&p[1])? {
+                                        if let Some(vv) = child.evaluate(&p[1])? {
                                             child.set(s.to_string(), vv);
                                         }
                                     }
@@ -603,10 +603,10 @@ impl Environment {
                         }
                     }
                     for expr in &args[1..args.len() - 1] {
-                        let _ = child.evaluate_expr(expr);
+                        let _ = child.evaluate(expr);
                     }
                     match args.last() {
-                        Some(expr) => return child.evaluate_expr(expr),
+                        Some(expr) => return child.evaluate(expr),
                         None => return Ok(None),
                     }
                 }
@@ -614,10 +614,10 @@ impl Environment {
             }
             Keyword::Begin => {
                 for expr in &args[..args.len() - 1] {
-                    let _ = self.evaluate_expr(expr);
+                    let _ = self.evaluate(expr);
                 }
                 match args.last() {
-                    Some(expr) => self.evaluate_expr(expr),
+                    Some(expr) => self.evaluate(expr),
                     None => Ok(None),
                 }
             }
@@ -652,10 +652,10 @@ impl Callable for UserDefinedProcedure {
             local_env.set(param.to_string(), arg);
         }
         for expr in &self.body[..self.body.len() - 1] {
-            let _ = local_env.evaluate_expr(expr);
+            let _ = local_env.evaluate(expr);
         }
         match self.body.last() {
-            Some(expr) => local_env.evaluate_expr(expr),
+            Some(expr) => local_env.evaluate(expr),
             None => Ok(None),
         }
     }
@@ -778,7 +778,7 @@ mod tests {
     }
 
     #[test]
-    fn test_evaluate_expr() {
+    fn test_evaluate() {
         let mut env = Environment::standard().child();
 
         let cases = vec![
@@ -833,7 +833,7 @@ mod tests {
 
         for (code, val) in cases {
             let expr = &parse_code(code).unwrap()[0];
-            assert_eq!(env.evaluate_expr(expr), Ok(val));
+            assert_eq!(env.evaluate(expr), Ok(val));
         }
     }
 }
