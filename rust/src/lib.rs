@@ -267,6 +267,46 @@ impl Value {
             _ => Err("Cannot divide types"),
         }
     }
+
+    fn lt(&self, other: &Value) -> Result<Value, &'static str> {
+        match (self, other) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a < b)),
+            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) < *b)),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a < b)),
+            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a < (*b as f64))),
+            _ => Err("Cannot compare types"),
+        }
+    }
+
+    fn gt(&self, other: &Value) -> Result<Value, &'static str> {
+        match (self, other) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a > b)),
+            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) > *b)),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a > b)),
+            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a > (*b as f64))),
+            _ => Err("Cannot compare types"),
+        }
+    }
+
+    fn leq(&self, other: &Value) -> Result<Value, &'static str> {
+        match (self, other) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a <= b)),
+            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) <= *b)),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a <= b)),
+            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a <= (*b as f64))),
+            _ => Err("Cannot compare types"),
+        }
+    }
+
+    fn geq(&self, other: &Value) -> Result<Value, &'static str> {
+        match (self, other) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a >= b)),
+            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) >= *b)),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a >= b)),
+            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a >= (*b as f64))),
+            _ => Err("Cannot compare types"),
+        }
+    }
 }
 
 fn builtin_add(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
@@ -318,6 +358,35 @@ fn builtin_div(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
             Ok(Some(res))
         }
     }
+}
+
+type CmpFnType = fn(&Value, &Value) -> Result<Value, &'static str>;
+
+fn builtin_cmp(values: Vec<Value>, method: CmpFnType) -> Result<Option<Value>, &'static str> {
+    for (a, b) in values.iter().zip(values.iter().skip(1)) {
+        match method(a, b) {
+            Ok(Value::Bool(false)) => return Ok(Some(Value::Bool(false))),
+            Err(s) => return Err(s),
+            _ => (),
+        }
+    }
+    Ok(Some(Value::Bool(true)))
+}
+
+fn builtin_lt(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    builtin_cmp(values, Value::lt)
+}
+
+fn builtin_gt(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    builtin_cmp(values, Value::gt)
+}
+
+fn builtin_leq(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    builtin_cmp(values, Value::leq)
+}
+
+fn builtin_geq(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    builtin_cmp(values, Value::geq)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -387,6 +456,10 @@ impl Environment {
             ("*", builtin_mul as BuiltInFnType),
             ("/", builtin_div as BuiltInFnType),
             ("abs", builtin_abs as BuiltInFnType),
+            ("<", builtin_lt as BuiltInFnType),
+            (">", builtin_gt as BuiltInFnType),
+            ("<=", builtin_leq as BuiltInFnType),
+            (">=", builtin_geq as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(
@@ -645,29 +718,43 @@ mod tests {
         let mut env = Environment::standard().child();
 
         let cases = vec![
-            ("(define a 42)", Ok(None)),
-            ("42.42", Ok(Some(Value::Float(42.42)))),
-            ("a", Ok(Some(Value::Integer(42)))),
-            ("(+ 3 2)", Ok(Some(Value::Integer(5)))),
-            ("(* 3 2)", Ok(Some(Value::Integer(6)))),
-            ("(+ 3 2.0)", Ok(Some(Value::Float(5.0)))),
-            ("(* 3.0 2)", Ok(Some(Value::Float(6.0)))),
-            ("(- 10 2 3)", Ok(Some(Value::Integer(5)))),
-            ("(/ 24 3 2)", Ok(Some(Value::Float(4.0)))),
-            ("(abs -5)", Ok(Some(Value::Integer(5)))),
-            ("(abs 5)", Ok(Some(Value::Integer(5)))),
-            ("(abs -5.0)", Ok(Some(Value::Float(5.0)))),
-            ("(abs 5.0)", Ok(Some(Value::Float(5.0)))),
-            ("(define a 13)", Ok(None)),
-            ("(+ 8 a)", Ok(Some(Value::Integer(21)))),
-            ("(define f (lambda (a b) (+ (* 3 a) b)))", Ok(None)),
-            ("(f 7 a)", Ok(Some(Value::Integer(34)))),
-            ("(f 7.0 a)", Ok(Some(Value::Float(34.0)))),
+            ("(define a 42)", None),
+            ("42.42", Some(Value::Float(42.42))),
+            ("#t", Some(Value::Bool(true))),
+            ("#f", Some(Value::Bool(false))),
+            (
+                "\"hello, world!\"",
+                Some(Value::Str("hello, world!".to_string())),
+            ),
+            ("a", Some(Value::Integer(42))),
+            ("(+ 3 2)", Some(Value::Integer(5))),
+            ("(* 3 2)", Some(Value::Integer(6))),
+            ("(+ 3 2.0)", Some(Value::Float(5.0))),
+            ("(* 3.0 2)", Some(Value::Float(6.0))),
+            ("(- 10 2 3)", Some(Value::Integer(5))),
+            ("(/ 24 3 2)", Some(Value::Float(4.0))),
+            ("(abs -5)", Some(Value::Integer(5))),
+            ("(abs 5)", Some(Value::Integer(5))),
+            ("(abs -5.0)", Some(Value::Float(5.0))),
+            ("(abs 5.0)", Some(Value::Float(5.0))),
+            ("(< 1 2 3)", Some(Value::Bool(true))),
+            ("(< 1 3 2)", Some(Value::Bool(false))),
+            ("(<= 1 1 1)", Some(Value::Bool(true))),
+            ("(<= 1 0 1)", Some(Value::Bool(false))),
+            ("(> 3 2 1)", Some(Value::Bool(true))),
+            ("(> 1 3 2)", Some(Value::Bool(false))),
+            ("(>= 1 1 1)", Some(Value::Bool(true))),
+            ("(>= 1 1 2)", Some(Value::Bool(false))),
+            ("(define a 13)", None),
+            ("(+ 8 a)", Some(Value::Integer(21))),
+            ("(define f (lambda (a b) (+ (* 3 a) b)))", None),
+            ("(f 7 a)", Some(Value::Integer(34))),
+            ("(f 7.0 a)", Some(Value::Float(34.0))),
         ];
 
-        for (code, res) in cases {
+        for (code, val) in cases {
             let expr = &parse_code(code).unwrap()[0];
-            assert_eq!(env.evaluate_expr(expr), res);
+            assert_eq!(env.evaluate_expr(expr), Ok(val));
         }
     }
 }
