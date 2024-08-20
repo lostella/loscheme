@@ -97,6 +97,8 @@ pub enum Keyword {
     Quote,
     Define,
     If,
+    Let,
+    Begin,
     // TODO add more special forms here
 }
 
@@ -107,6 +109,8 @@ impl Keyword {
             "quote" => Some(Keyword::Quote),
             "define" => Some(Keyword::Define),
             "if" => Some(Keyword::If),
+            "let" => Some(Keyword::Let),
+            "begin" => Some(Keyword::Begin),
             _ => None,
         }
     }
@@ -574,6 +578,18 @@ impl Environment {
                     _ => Err("First argument to if did not evaluate to a boolean"),
                 }
             }
+            Keyword::Let => {
+                todo!()
+            }
+            Keyword::Begin => {
+                for expr in &args[..args.len() - 1] {
+                    let _ = self.evaluate_expr(expr);
+                }
+                match args.last() {
+                    Some(expr) => self.evaluate_expr(expr),
+                    None => Ok(None),
+                }
+            }
         }
     }
 }
@@ -770,13 +786,14 @@ mod tests {
                     Value::Integer(3),
                 ])),
             ),
-            ("(if (> 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(4))),
-            ("(if (< 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(-4))),
             ("(define a 13)", None),
             ("(+ 8 a)", Some(Value::Integer(21))),
             ("(define f (lambda (a b) (+ (* 3 a) b)))", None),
             ("(f 7 a)", Some(Value::Integer(34))),
             ("(f 7.0 a)", Some(Value::Float(34.0))),
+            ("(if (> 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(4))),
+            ("(if (< 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(-4))),
+            ("(begin (+ 4 7) (- 5 2) (* 7 3))", Some(Value::Integer(21))),
         ];
 
         for (code, val) in cases {
