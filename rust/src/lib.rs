@@ -579,7 +579,38 @@ impl Environment {
                 }
             }
             Keyword::Let => {
-                todo!()
+                if args.is_empty() {
+                    return Err("Let needs at least one argument");
+                }
+                if let Expression::List(v) = &args[0] {
+                    let mut child = self.child();
+                    for expr in v {
+                        match expr {
+                            Expression::List(p) => {
+                                if p.len() != 2 {
+                                    return Err("Not a 2-list");
+                                }
+                                match &p[0] {
+                                    Expression::Identifier(s) => {
+                                        if let Some(vv) = child.evaluate_expr(&p[1])? {
+                                            child.set(s.to_string(), vv);
+                                        }
+                                    }
+                                    _ => return Err("Not an identifier"),
+                                }
+                            }
+                            _ => return Err("Not a list"),
+                        }
+                    }
+                    for expr in &args[1..args.len() - 1] {
+                        let _ = child.evaluate_expr(expr);
+                    }
+                    match args.last() {
+                        Some(expr) => return child.evaluate_expr(expr),
+                        None => return Ok(None),
+                    }
+                }
+                Err("First argument to let must be a list")
             }
             Keyword::Begin => {
                 for expr in &args[..args.len() - 1] {
@@ -794,6 +825,10 @@ mod tests {
             ("(if (> 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(4))),
             ("(if (< 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(-4))),
             ("(begin (+ 4 7) (- 5 2) (* 7 3))", Some(Value::Integer(21))),
+            (
+                "(let ((a 14) (b 7)) (+ a b) (- a b))",
+                Some(Value::Integer(7)),
+            ),
         ];
 
         for (code, val) in cases {
