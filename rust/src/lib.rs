@@ -777,10 +777,16 @@ mod tests {
         assert_eq!(builtin_add(values), Err("Cannot add types"));
     }
 
+    fn validate(cases: Vec<(&str, Option<Value>)>) {
+        let mut env = Environment::standard().child();
+        for (code, val) in cases {
+            let expr = &parse_code(code).unwrap()[0];
+            assert_eq!(env.evaluate(expr), Ok(val));
+        }
+    }
+
     #[test]
     fn test_evaluate() {
-        let mut env = Environment::standard().child();
-
         let cases = vec![
             ("(define a 42)", None),
             ("42.42", Some(Value::Float(42.42))),
@@ -830,10 +836,34 @@ mod tests {
                 Some(Value::Integer(7)),
             ),
         ];
-
-        for (code, val) in cases {
-            let expr = &parse_code(code).unwrap()[0];
-            assert_eq!(env.evaluate(expr), Ok(val));
-        }
+        validate(cases);
     }
+
+    #[test]
+    fn test_factorial() {
+        let cases = vec![
+            (
+                "(define fact
+                (lambda (n) (
+                    if (< n 2)
+                    1
+                    (* n (fact (- n 1))))))",
+                None,
+            ),
+            ("(fact 11)", Some(Value::Integer(39916800))),
+        ];
+        validate(cases);
+    }
+
+    // #[test]
+    // fn test_fib() {
+    //     let cases = vec![
+    //         ("(define (fib n) (
+    //             if (< n 2)
+    //             n
+    //             (+ (fib (- n 1)) (fib (- n 2)))))", None),
+    //         ("(fib 20)", Some(Value::Integer(6765))),
+    //     ];
+    //     validate(cases);
+    // }
 }
