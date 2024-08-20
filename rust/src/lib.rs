@@ -228,7 +228,7 @@ pub enum Value {
 }
 
 impl Value {
-    fn add_to(&self, other: &Value) -> Result<Value, &'static str> {
+    fn add(&self, other: &Value) -> Result<Value, &'static str> {
         match (self, other) {
             (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
             (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 + b)),
@@ -238,7 +238,7 @@ impl Value {
         }
     }
 
-    fn mul_by(&self, other: &Value) -> Result<Value, &'static str> {
+    fn mul(&self, other: &Value) -> Result<Value, &'static str> {
         match (self, other) {
             (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a * b)),
             (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 * b)),
@@ -247,20 +247,77 @@ impl Value {
             _ => Err("Cannot multiply types"),
         }
     }
+
+    fn sub(&self, other: &Value) -> Result<Value, &'static str> {
+        match (self, other) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a - b)),
+            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 - b)),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
+            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a - *b as f64)),
+            _ => Err("Cannot subtract types"),
+        }
+    }
+
+    fn div(&self, other: &Value) -> Result<Value, &'static str> {
+        match (self, other) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Float(*a as f64 / *b as f64)),
+            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 / b)),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
+            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a / *b as f64)),
+            _ => Err("Cannot divide types"),
+        }
+    }
 }
 
-fn add_numbers(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+fn builtin_add(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(0), |acc, x| acc.add_to(&x))?;
+        .try_fold(Value::Integer(0), |acc, x| acc.add(&x))?;
     Ok(Some(res))
 }
 
-fn mul_numbers(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+fn builtin_mul(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(1), |acc, x| acc.mul_by(&x))?;
+        .try_fold(Value::Integer(1), |acc, x| acc.mul(&x))?;
     Ok(Some(res))
+}
+
+fn builtin_sub(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    let mut values_iter = values.into_iter();
+    match values_iter.next() {
+        None => Ok(Some(Value::Integer(0))),
+        Some(v) => {
+            let res = values_iter.try_fold(v, |acc, x| acc.sub(&x))?;
+            Ok(Some(res))
+        }
+    }
+}
+
+fn builtin_abs(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    if values.len() > 1 {
+        return Err("abs needs exactly one argument");
+    }
+    let res_value = match values.first() {
+        Some(value) => match value {
+            Value::Integer(n) => Value::Integer(if *n >= 0 { *n } else { -*n }),
+            Value::Float(n) => Value::Float(if *n >= 0.0 { *n } else { -*n }),
+            _ => return Err("abs needs a number argument"),
+        },
+        _ => return Err("abs needs exactly one argument"),
+    };
+    Ok(Some(res_value))
+}
+
+fn builtin_div(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    let mut values_iter = values.into_iter();
+    match values_iter.next() {
+        None => Ok(Some(Value::Integer(1))),
+        Some(v) => {
+            let res = values_iter.try_fold(v, |acc, x| acc.div(&x))?;
+            Ok(Some(res))
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -292,6 +349,8 @@ pub struct Environment {
     head: EnvironmentLink,
 }
 
+type BuiltInFnType = fn(Vec<Value>) -> Result<Option<Value>, &'static str>;
+
 impl Environment {
     pub fn empty() -> Environment {
         let node = EnvironmentNode {
@@ -322,16 +381,19 @@ impl Environment {
             head: Rc::new(RefCell::new(node)),
         };
         // TODO add all built-in procedures in standard env
-        Self::set(
-            &mut env,
-            "+".to_string(),
-            Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: add_numbers })),
-        );
-        Self::set(
-            &mut env,
-            "*".to_string(),
-            Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: mul_numbers })),
-        );
+        let to_set = vec![
+            ("+", builtin_add as BuiltInFnType),
+            ("-", builtin_sub as BuiltInFnType),
+            ("*", builtin_mul as BuiltInFnType),
+            ("/", builtin_div as BuiltInFnType),
+            ("abs", builtin_abs as BuiltInFnType),
+        ];
+        for (s, f) in to_set {
+            env.set(
+                s.to_string(),
+                Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: f })),
+            );
+        }
         env
     }
 
@@ -560,14 +622,14 @@ mod tests {
     }
 
     #[test]
-    fn test_add_numbers() {
+    fn test_builtin_add() {
         let values = vec![Value::Integer(10), Value::Float(42.0)];
 
-        assert_eq!(add_numbers(values), Ok(Some(Value::Float(52.0))));
+        assert_eq!(builtin_add(values), Ok(Some(Value::Float(52.0))));
 
         let values = vec![Value::Float(42.0), Value::Integer(13)];
 
-        assert_eq!(add_numbers(values), Ok(Some(Value::Float(55.0))));
+        assert_eq!(builtin_add(values), Ok(Some(Value::Float(55.0))));
 
         let values = vec![
             Value::Float(42.0),
@@ -575,7 +637,7 @@ mod tests {
             Value::Str("hey, hey".to_string()),
         ];
 
-        assert_eq!(add_numbers(values), Err("Cannot add types"));
+        assert_eq!(builtin_add(values), Err("Cannot add types"));
     }
 
     #[test]
@@ -590,6 +652,12 @@ mod tests {
             ("(* 3 2)", Ok(Some(Value::Integer(6)))),
             ("(+ 3 2.0)", Ok(Some(Value::Float(5.0)))),
             ("(* 3.0 2)", Ok(Some(Value::Float(6.0)))),
+            ("(- 10 2 3)", Ok(Some(Value::Integer(5)))),
+            ("(/ 24 3 2)", Ok(Some(Value::Float(4.0)))),
+            ("(abs -5)", Ok(Some(Value::Integer(5)))),
+            ("(abs 5)", Ok(Some(Value::Integer(5)))),
+            ("(abs -5.0)", Ok(Some(Value::Float(5.0)))),
+            ("(abs 5.0)", Ok(Some(Value::Float(5.0)))),
             ("(define a 13)", Ok(None)),
             ("(+ 8 a)", Ok(Some(Value::Integer(21)))),
             ("(define f (lambda (a b) (+ (* 3 a) b)))", Ok(None)),
