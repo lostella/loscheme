@@ -515,112 +515,118 @@ impl Environment {
     }
 
     fn evaluate_nonatomic(&mut self, exprs: &[Expression]) -> Result<Option<Value>, &'static str> {
-        match exprs.len() {
-            0 => Err("Cannot evaluate empty, non-atomic expressions"),
-            _ => match &exprs[0] {
-                Expression::Keyword(k) => self.evaluate_special_form(k, &exprs[1..]),
-                _ => match self.evaluate(&exprs[0]) {
-                    Ok(Some(Value::Procedure(mut p))) => {
-                        let args = self.evaluate_non_none_args(&exprs[1..])?;
-                        p.call(args)
-                    }
-                    _ => Err("Not a procedure call"),
-                },
+        if exprs.is_empty() {
+            return Err("Cannot evaluate empty, non-atomic expressions");
+        }
+        match &exprs[0] {
+            Expression::Keyword(Keyword::Lambda) => self.evaluate_lambda(&exprs[1..]),
+            Expression::Keyword(Keyword::Quote) => self.evaluate_quote(&exprs[1..]),
+            Expression::Keyword(Keyword::Define) => self.evaluate_define(&exprs[1..]),
+            Expression::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
+            Expression::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
+            Expression::Keyword(Keyword::Begin) => self.evaluate_begin(&exprs[1..]),
+            _ => match self.evaluate(&exprs[0]) {
+                Ok(Some(Value::Procedure(mut p))) => {
+                    let args = self.evaluate_non_none_args(&exprs[1..])?;
+                    p.call(args)
+                }
+                _ => Err("Not a procedure call"),
             },
         }
     }
 
-    fn evaluate_special_form(
-        &mut self,
-        keyword: &Keyword,
-        args: &[Expression],
-    ) -> Result<Option<Value>, &'static str> {
-        match keyword {
-            Keyword::Lambda => match &args[0] {
-                Expression::List(v) => {
-                    let mut ids = Vec::with_capacity(v.len());
-                    for expr in v {
-                        match expr {
-                            Expression::Identifier(s) => ids.push(s.clone()),
+    fn evaluate_lambda(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+        match &args[0] {
+            Expression::List(v) => {
+                let mut ids = Vec::with_capacity(v.len());
+                for expr in v {
+                    match expr {
+                        Expression::Identifier(s) => ids.push(s.clone()),
+                        _ => return Err("Not an identifier"),
+                    }
+                }
+                let proc = UserDefinedProcedure::new(ids, args[1..].to_vec(), self.clone());
+                Ok(Some(Value::Procedure(Procedure::UserDefined(proc))))
+            }
+            _ => Err("First argument to lambda must be a list of identifiers"),
+        }
+    }
+
+    fn evaluate_quote(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+        match args.len() {
+            1 => Ok(Some(Value::Expression(args[0].clone()))),
+            _ => Err("Must quote exactly one expression"),
+        }
+    }
+
+    fn evaluate_define(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+        if args.len() != 2 {
+            return Err("Define needs exactly two arguments");
+        }
+        match &args[0] {
+            Expression::Identifier(key) => {
+                if let Some(value) = self.evaluate(&args[1])? {
+                    self.set(key.to_string(), value);
+                }
+                Ok(None)
+            }
+            _ => Err("Define needs identifier as first argument"),
+        }
+    }
+
+    fn evaluate_if(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+        if args.len() != 3 {
+            return Err("If needs exactly three arguments");
+        }
+        match self.evaluate(&args[0])? {
+            Some(Value::Bool(true)) => self.evaluate(&args[1]),
+            Some(Value::Bool(false)) => self.evaluate(&args[2]),
+            _ => Err("First argument to if did not evaluate to a boolean"),
+        }
+    }
+
+    fn evaluate_let(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+        if args.is_empty() {
+            return Err("Let needs at least one argument");
+        }
+        if let Expression::List(v) = &args[0] {
+            let mut child = self.child();
+            for expr in v {
+                match expr {
+                    Expression::List(p) => {
+                        if p.len() != 2 {
+                            return Err("Not a 2-list");
+                        }
+                        match &p[0] {
+                            Expression::Identifier(s) => {
+                                if let Some(vv) = child.evaluate(&p[1])? {
+                                    child.set(s.to_string(), vv);
+                                }
+                            }
                             _ => return Err("Not an identifier"),
                         }
                     }
-                    let proc = UserDefinedProcedure::new(ids, args[1..].to_vec(), self.clone());
-                    Ok(Some(Value::Procedure(Procedure::UserDefined(proc))))
-                }
-                _ => Err("First argument to lambda must be a list of identifiers"),
-            },
-            Keyword::Quote => match args.len() {
-                1 => Ok(Some(Value::Expression(args[0].clone()))),
-                _ => Err("Must quote exactly one expression"),
-            },
-            Keyword::Define => {
-                if args.len() != 2 {
-                    return Err("Define needs exactly two arguments");
-                }
-                match &args[0] {
-                    Expression::Identifier(key) => {
-                        if let Some(value) = self.evaluate(&args[1])? {
-                            self.set(key.to_string(), value);
-                        }
-                        Ok(None)
-                    }
-                    _ => Err("Define needs identifier as first argument"),
+                    _ => return Err("Not a list"),
                 }
             }
-            Keyword::If => {
-                if args.len() != 3 {
-                    return Err("If needs exactly three arguments");
-                }
-                match self.evaluate(&args[0])? {
-                    Some(Value::Bool(true)) => self.evaluate(&args[1]),
-                    Some(Value::Bool(false)) => self.evaluate(&args[2]),
-                    _ => Err("First argument to if did not evaluate to a boolean"),
-                }
+            for expr in &args[1..args.len() - 1] {
+                let _ = child.evaluate(expr);
             }
-            Keyword::Let => {
-                if args.is_empty() {
-                    return Err("Let needs at least one argument");
-                }
-                if let Expression::List(v) = &args[0] {
-                    let mut child = self.child();
-                    for expr in v {
-                        match expr {
-                            Expression::List(p) => {
-                                if p.len() != 2 {
-                                    return Err("Not a 2-list");
-                                }
-                                match &p[0] {
-                                    Expression::Identifier(s) => {
-                                        if let Some(vv) = child.evaluate(&p[1])? {
-                                            child.set(s.to_string(), vv);
-                                        }
-                                    }
-                                    _ => return Err("Not an identifier"),
-                                }
-                            }
-                            _ => return Err("Not a list"),
-                        }
-                    }
-                    for expr in &args[1..args.len() - 1] {
-                        let _ = child.evaluate(expr);
-                    }
-                    match args.last() {
-                        Some(expr) => return child.evaluate(expr),
-                        None => return Ok(None),
-                    }
-                }
-                Err("First argument to let must be a list")
+            match args.last() {
+                Some(expr) => return child.evaluate(expr),
+                None => return Ok(None),
             }
-            Keyword::Begin => {
-                for expr in &args[..args.len() - 1] {
-                    let _ = self.evaluate(expr);
-                }
-                match args.last() {
-                    Some(expr) => self.evaluate(expr),
-                    None => Ok(None),
-                }
-            }
+        }
+        Err("First argument to let must be a list")
+    }
+
+    fn evaluate_begin(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+        for expr in &args[..args.len() - 1] {
+            let _ = self.evaluate(expr);
+        }
+        match args.last() {
+            Some(expr) => self.evaluate(expr),
+            None => Ok(None),
         }
     }
 }
