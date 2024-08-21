@@ -17,7 +17,6 @@ fn main() {
 
         match stdin.lock().read_line(&mut input) {
             Ok(0) => {
-                println!("\nSkipped!");
                 continue;
             }
             Ok(_) => {
