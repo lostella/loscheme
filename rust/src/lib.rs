@@ -117,30 +117,15 @@ impl Keyword {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Literal {
+pub enum Expr {
     Integer(i64),
     Float(f64),
     Str(String),
     Bool(bool),
-}
-
-impl Literal {
-    fn to_value(&self) -> Value {
-        match self {
-            Literal::Integer(x) => Value::Integer(*x),
-            Literal::Float(x) => Value::Float(*x),
-            Literal::Str(x) => Value::Str(x.clone()),
-            Literal::Bool(x) => Value::Bool(*x),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Expression {
+    Procedure(Procedure),
+    List(Vec<Expr>),
     Keyword(Keyword),
-    Identifier(String),
-    Literal(Literal),
-    List(Vec<Expression>),
+    Symbol(String),
 }
 
 pub struct Parser<'a> {
@@ -154,7 +139,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Expression>, &'static str> {
+    pub fn parse(&mut self) -> Result<Vec<Expr>, &'static str> {
         let mut expressions = Vec::new();
         while self.tokens.peek().is_some() {
             expressions.push(self.parse_expression()?);
@@ -162,7 +147,7 @@ impl<'a> Parser<'a> {
         Ok(expressions)
     }
 
-    fn parse_expression(&mut self) -> Result<Expression, &'static str> {
+    fn parse_expression(&mut self) -> Result<Expr, &'static str> {
         match self.tokens.next() {
             Some(Token::LParen) => self.parse_list(),
             Some(Token::Quote) => self.parse_quote(),
@@ -172,13 +157,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_list(&mut self) -> Result<Expression, &'static str> {
+    fn parse_list(&mut self) -> Result<Expr, &'static str> {
         let mut expressions = Vec::new();
         while let Some(token) = self.tokens.peek() {
             match token {
                 Token::RParen => {
                     self.tokens.next();
-                    return Ok(Expression::List(expressions));
+                    return Ok(Expr::List(expressions));
                 }
                 _ => {
                     expressions.push(self.parse_expression()?);
@@ -188,151 +173,138 @@ impl<'a> Parser<'a> {
         Err("Unterminated list")
     }
 
-    fn parse_quote(&mut self) -> Result<Expression, &'static str> {
-        Ok(Expression::List(vec![
-            Expression::Keyword(Keyword::Quote),
+    fn parse_quote(&mut self) -> Result<Expr, &'static str> {
+        Ok(Expr::List(vec![
+            Expr::Keyword(Keyword::Quote),
             self.parse_expression()?,
         ]))
     }
 
-    fn parse_atom(&self, s: String) -> Result<Expression, &'static str> {
+    fn parse_atom(&self, s: String) -> Result<Expr, &'static str> {
         if let Ok(int) = s.parse::<i64>() {
-            Ok(Expression::Literal(Literal::Integer(int)))
+            Ok(Expr::Integer(int))
         } else if let Ok(float) = s.parse::<f64>() {
-            Ok(Expression::Literal(Literal::Float(float)))
+            Ok(Expr::Float(float))
         } else if s == "#t" {
-            Ok(Expression::Literal(Literal::Bool(true)))
+            Ok(Expr::Bool(true))
         } else if s == "#f" {
-            Ok(Expression::Literal(Literal::Bool(false)))
+            Ok(Expr::Bool(false))
         } else if s.starts_with('"') && s.ends_with('"') {
-            Ok(Expression::Literal(Literal::Str(
-                s[1..s.len() - 1].to_string(),
-            )))
+            Ok(Expr::Str(s[1..s.len() - 1].to_string()))
         } else if let Some(keyword) = Keyword::from_str(&s) {
-            Ok(Expression::Keyword(keyword))
+            Ok(Expr::Keyword(keyword))
         } else {
-            Ok(Expression::Identifier(s))
+            Ok(Expr::Symbol(s))
         }
     }
 }
 
-pub fn parse_code(code: &str) -> Result<Vec<Expression>, &'static str> {
+pub fn parse_code(code: &str) -> Result<Vec<Expr>, &'static str> {
     let tokenizer = Tokenizer::new(code);
     let mut parser = Parser::new(tokenizer);
     parser.parse()
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Value {
-    Integer(i64),
-    Float(f64),
-    Str(String),
-    Bool(bool),
-    Procedure(Procedure),
-    List(Vec<Value>),
-    Expression(Expression),
-}
-
-impl Value {
-    fn add(&self, other: &Value) -> Result<Value, &'static str> {
+impl Expr {
+    fn add(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 + b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a + *b as f64)),
+            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a + b)),
+            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 + b)),
+            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a + b)),
+            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a + *b as f64)),
             _ => Err("Cannot add types"),
         }
     }
 
-    fn mul(&self, other: &Value) -> Result<Value, &'static str> {
+    fn mul(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a * b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 * b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a * *b as f64)),
+            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a * b)),
+            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 * b)),
+            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a * b)),
+            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a * *b as f64)),
             _ => Err("Cannot multiply types"),
         }
     }
 
-    fn sub(&self, other: &Value) -> Result<Value, &'static str> {
+    fn sub(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a - b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 - b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a - *b as f64)),
+            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a - b)),
+            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 - b)),
+            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a - b)),
+            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a - *b as f64)),
             _ => Err("Cannot subtract types"),
         }
     }
 
-    fn div(&self, other: &Value) -> Result<Value, &'static str> {
+    fn div(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Float(*a as f64 / *b as f64)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 / b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a / *b as f64)),
+            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Float(*a as f64 / *b as f64)),
+            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 / b)),
+            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a / b)),
+            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a / *b as f64)),
             _ => Err("Cannot divide types"),
         }
     }
 
-    fn lt(&self, other: &Value) -> Result<Value, &'static str> {
+    fn lt(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a < b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) < *b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a < b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a < (*b as f64))),
+            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a < b)),
+            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) < *b)),
+            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a < b)),
+            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a < (*b as f64))),
             _ => Err("Cannot compare types"),
         }
     }
 
-    fn gt(&self, other: &Value) -> Result<Value, &'static str> {
+    fn gt(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a > b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) > *b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a > b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a > (*b as f64))),
+            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a > b)),
+            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) > *b)),
+            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a > b)),
+            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a > (*b as f64))),
             _ => Err("Cannot compare types"),
         }
     }
 
-    fn leq(&self, other: &Value) -> Result<Value, &'static str> {
+    fn leq(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a <= b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) <= *b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a <= b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a <= (*b as f64))),
+            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a <= b)),
+            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) <= *b)),
+            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a <= b)),
+            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a <= (*b as f64))),
             _ => Err("Cannot compare types"),
         }
     }
 
-    fn geq(&self, other: &Value) -> Result<Value, &'static str> {
+    fn geq(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a >= b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) >= *b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a >= b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a >= (*b as f64))),
+            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a >= b)),
+            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) >= *b)),
+            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a >= b)),
+            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a >= (*b as f64))),
             _ => Err("Cannot compare types"),
         }
     }
 }
 
-fn builtin_add(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+fn builtin_add(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(0), |acc, x| acc.add(&x))?;
+        .try_fold(Expr::Integer(0), |acc, x| acc.add(&x))?;
     Ok(Some(res))
 }
 
-fn builtin_mul(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+fn builtin_mul(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(1), |acc, x| acc.mul(&x))?;
+        .try_fold(Expr::Integer(1), |acc, x| acc.mul(&x))?;
     Ok(Some(res))
 }
 
-fn builtin_sub(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+fn builtin_sub(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     let mut values_iter = values.into_iter();
     match values_iter.next() {
-        None => Ok(Some(Value::Integer(0))),
+        None => Ok(Some(Expr::Integer(0))),
         Some(v) => {
             let res = values_iter.try_fold(v, |acc, x| acc.sub(&x))?;
             Ok(Some(res))
@@ -340,14 +312,14 @@ fn builtin_sub(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
     }
 }
 
-fn builtin_abs(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+fn builtin_abs(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() > 1 {
         return Err("abs needs exactly one argument");
     }
     let res_value = match values.first() {
         Some(value) => match value {
-            Value::Integer(n) => Value::Integer(if *n >= 0 { *n } else { -*n }),
-            Value::Float(n) => Value::Float(if *n >= 0.0 { *n } else { -*n }),
+            Expr::Integer(n) => Expr::Integer(if *n >= 0 { *n } else { -*n }),
+            Expr::Float(n) => Expr::Float(if *n >= 0.0 { *n } else { -*n }),
             _ => return Err("abs needs a number argument"),
         },
         _ => return Err("abs needs exactly one argument"),
@@ -355,10 +327,10 @@ fn builtin_abs(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
     Ok(Some(res_value))
 }
 
-fn builtin_div(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
+fn builtin_div(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     let mut values_iter = values.into_iter();
     match values_iter.next() {
-        None => Ok(Some(Value::Integer(1))),
+        None => Ok(Some(Expr::Integer(1))),
         Some(v) => {
             let res = values_iter.try_fold(v, |acc, x| acc.div(&x))?;
             Ok(Some(res))
@@ -366,53 +338,53 @@ fn builtin_div(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
     }
 }
 
-type CmpFnType = fn(&Value, &Value) -> Result<Value, &'static str>;
+type CmpFnType = fn(&Expr, &Expr) -> Result<Expr, &'static str>;
 
-fn builtin_cmp(values: Vec<Value>, method: CmpFnType) -> Result<Option<Value>, &'static str> {
+fn builtin_cmp(values: Vec<Expr>, method: CmpFnType) -> Result<Option<Expr>, &'static str> {
     for (a, b) in values.iter().zip(values.iter().skip(1)) {
         match method(a, b) {
-            Ok(Value::Bool(false)) => return Ok(Some(Value::Bool(false))),
+            Ok(Expr::Bool(false)) => return Ok(Some(Expr::Bool(false))),
             Err(s) => return Err(s),
             _ => (),
         }
     }
-    Ok(Some(Value::Bool(true)))
+    Ok(Some(Expr::Bool(true)))
 }
 
-fn builtin_lt(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
-    builtin_cmp(values, Value::lt)
+fn builtin_lt(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    builtin_cmp(values, Expr::lt)
 }
 
-fn builtin_gt(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
-    builtin_cmp(values, Value::gt)
+fn builtin_gt(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    builtin_cmp(values, Expr::gt)
 }
 
-fn builtin_leq(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
-    builtin_cmp(values, Value::leq)
+fn builtin_leq(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    builtin_cmp(values, Expr::leq)
 }
 
-fn builtin_geq(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
-    builtin_cmp(values, Value::geq)
+fn builtin_geq(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    builtin_cmp(values, Expr::geq)
 }
 
-fn builtin_list(values: Vec<Value>) -> Result<Option<Value>, &'static str> {
-    Ok(Some(Value::List(values)))
+fn builtin_list(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    Ok(Some(Expr::List(values)))
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
-    data: HashMap<String, Value>,
+    data: HashMap<String, Expr>,
     parent: Option<EnvironmentLink>,
 }
 
 type EnvironmentLink = Rc<RefCell<EnvironmentNode>>;
 
 impl EnvironmentNode {
-    pub fn set(&mut self, key: String, value: Value) -> Option<Value> {
+    pub fn set(&mut self, key: String, value: Expr) -> Option<Expr> {
         self.data.insert(key, value)
     }
 
-    pub fn get(&self, key: &str) -> Option<Value> {
+    pub fn get(&self, key: &str) -> Option<Expr> {
         match self.data.get(key) {
             Some(value) => Some(value.clone()),
             None => match &self.parent {
@@ -428,7 +400,7 @@ pub struct Environment {
     head: EnvironmentLink,
 }
 
-type BuiltInFnType = fn(Vec<Value>) -> Result<Option<Value>, &'static str>;
+type BuiltInFnType = fn(Vec<Expr>) -> Result<Option<Expr>, &'static str>;
 
 impl Environment {
     pub fn empty() -> Environment {
@@ -475,33 +447,36 @@ impl Environment {
         for (s, f) in to_set {
             env.set(
                 s.to_string(),
-                Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: f })),
+                Expr::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: f })),
             );
         }
         env
     }
 
-    pub fn set(&mut self, key: String, value: Value) -> Option<Value> {
+    pub fn set(&mut self, key: String, value: Expr) -> Option<Expr> {
         self.head.borrow_mut().set(key, value)
     }
 
-    pub fn get(&self, key: &str) -> Option<Value> {
+    pub fn get(&self, key: &str) -> Option<Expr> {
         self.head.borrow().get(key)
     }
 
-    pub fn evaluate(&mut self, expr: &Expression) -> Result<Option<Value>, &'static str> {
+    pub fn evaluate(&mut self, expr: &Expr) -> Result<Option<Expr>, &'static str> {
         match expr {
-            Expression::Identifier(s) => match self.get(s) {
+            Expr::Integer(_) => Ok(Some(expr.clone())),
+            Expr::Float(_) => Ok(Some(expr.clone())),
+            Expr::Str(_) => Ok(Some(expr.clone())),
+            Expr::Bool(_) => Ok(Some(expr.clone())),
+            Expr::List(v) => self.evaluate_nonatomic(v),
+            Expr::Symbol(s) => match self.get(s) {
                 Some(value) => Ok(Some(value.clone())),
-                None => Err("Undefined identifier"),
+                None => Err("Undefined symbol"),
             },
-            Expression::Literal(l) => Ok(Some(l.to_value())),
-            Expression::List(v) => self.evaluate_nonatomic(v),
-            _ => Ok(None),
+            _ => Err("Cannot evaluate expression"),
         }
     }
 
-    fn evaluate_non_none_args(&mut self, exprs: &[Expression]) -> Result<Vec<Value>, &'static str> {
+    fn evaluate_non_none_args(&mut self, exprs: &[Expr]) -> Result<Vec<Expr>, &'static str> {
         let mut res = Vec::with_capacity(exprs.len());
         for expr in exprs {
             match self.evaluate(expr)? {
@@ -514,19 +489,19 @@ impl Environment {
         Ok(res)
     }
 
-    fn evaluate_nonatomic(&mut self, exprs: &[Expression]) -> Result<Option<Value>, &'static str> {
+    fn evaluate_nonatomic(&mut self, exprs: &[Expr]) -> Result<Option<Expr>, &'static str> {
         if exprs.is_empty() {
             return Err("Cannot evaluate empty, non-atomic expressions");
         }
         match &exprs[0] {
-            Expression::Keyword(Keyword::Lambda) => self.evaluate_lambda(&exprs[1..]),
-            Expression::Keyword(Keyword::Quote) => self.evaluate_quote(&exprs[1..]),
-            Expression::Keyword(Keyword::Define) => self.evaluate_define(&exprs[1..]),
-            Expression::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
-            Expression::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
-            Expression::Keyword(Keyword::Begin) => self.evaluate_begin(&exprs[1..]),
+            Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(&exprs[1..]),
+            Expr::Keyword(Keyword::Quote) => self.evaluate_quote(&exprs[1..]),
+            Expr::Keyword(Keyword::Define) => self.evaluate_define(&exprs[1..]),
+            Expr::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
+            Expr::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
+            Expr::Keyword(Keyword::Begin) => self.evaluate_begin(&exprs[1..]),
             _ => match self.evaluate(&exprs[0]) {
-                Ok(Some(Value::Procedure(mut p))) => {
+                Ok(Some(Expr::Procedure(mut p))) => {
                     let args = self.evaluate_non_none_args(&exprs[1..])?;
                     p.call(args)
                 }
@@ -535,36 +510,36 @@ impl Environment {
         }
     }
 
-    fn evaluate_lambda(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+    fn evaluate_lambda(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
         match &args[0] {
-            Expression::List(v) => {
+            Expr::List(v) => {
                 let mut ids = Vec::with_capacity(v.len());
                 for expr in v {
                     match expr {
-                        Expression::Identifier(s) => ids.push(s.clone()),
-                        _ => return Err("Not an identifier"),
+                        Expr::Symbol(s) => ids.push(s.clone()),
+                        _ => return Err("Not a symbol"),
                     }
                 }
                 let proc = UserDefinedProcedure::new(ids, args[1..].to_vec(), self.clone());
-                Ok(Some(Value::Procedure(Procedure::UserDefined(proc))))
+                Ok(Some(Expr::Procedure(Procedure::UserDefined(proc))))
             }
-            _ => Err("First argument to lambda must be a list of identifiers"),
+            _ => Err("First argument to lambda must be a list of symbols"),
         }
     }
 
-    fn evaluate_quote(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
-        match args.len() {
-            1 => Ok(Some(Value::Expression(args[0].clone()))),
-            _ => Err("Must quote exactly one expression"),
+    fn evaluate_quote(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+        if args.len() != 1 {
+            return Err("Quote needs exactly one arguments");
         }
+        Ok(Some(args[0].clone()))
     }
 
-    fn evaluate_define(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+    fn evaluate_define(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
         if args.len() != 2 {
             return Err("Define needs exactly two arguments");
         }
         match &args[0] {
-            Expression::Identifier(key) => {
+            Expr::Symbol(key) => {
                 if let Some(value) = self.evaluate(&args[1])? {
                     self.set(key.to_string(), value);
                 }
@@ -574,36 +549,36 @@ impl Environment {
         }
     }
 
-    fn evaluate_if(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+    fn evaluate_if(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
         if args.len() != 3 {
             return Err("If needs exactly three arguments");
         }
         match self.evaluate(&args[0])? {
-            Some(Value::Bool(true)) => self.evaluate(&args[1]),
-            Some(Value::Bool(false)) => self.evaluate(&args[2]),
+            Some(Expr::Bool(true)) => self.evaluate(&args[1]),
+            Some(Expr::Bool(false)) => self.evaluate(&args[2]),
             _ => Err("First argument to if did not evaluate to a boolean"),
         }
     }
 
-    fn evaluate_let(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+    fn evaluate_let(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
         if args.is_empty() {
             return Err("Let needs at least one argument");
         }
-        if let Expression::List(v) = &args[0] {
+        if let Expr::List(v) = &args[0] {
             let mut child = self.child();
             for expr in v {
                 match expr {
-                    Expression::List(p) => {
+                    Expr::List(p) => {
                         if p.len() != 2 {
                             return Err("Not a 2-list");
                         }
                         match &p[0] {
-                            Expression::Identifier(s) => {
+                            Expr::Symbol(s) => {
                                 if let Some(vv) = child.evaluate(&p[1])? {
                                     child.set(s.to_string(), vv);
                                 }
                             }
-                            _ => return Err("Not an identifier"),
+                            _ => return Err("Not a symbol"),
                         }
                     }
                     _ => return Err("Not a list"),
@@ -620,7 +595,7 @@ impl Environment {
         Err("First argument to let must be a list")
     }
 
-    fn evaluate_begin(&mut self, args: &[Expression]) -> Result<Option<Value>, &'static str> {
+    fn evaluate_begin(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
         for expr in &args[..args.len() - 1] {
             let _ = self.evaluate(expr);
         }
@@ -632,24 +607,24 @@ impl Environment {
 }
 
 trait Callable {
-    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &'static str>;
+    fn call(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str>;
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct UserDefinedProcedure {
     params: Vec<String>,
-    body: Vec<Expression>,
+    body: Vec<Expr>,
     env: Environment,
 }
 
 impl UserDefinedProcedure {
-    pub fn new(params: Vec<String>, body: Vec<Expression>, env: Environment) -> Self {
+    pub fn new(params: Vec<String>, body: Vec<Expr>, env: Environment) -> Self {
         Self { params, body, env }
     }
 }
 
 impl Callable for UserDefinedProcedure {
-    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    fn call(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
         }
@@ -669,11 +644,11 @@ impl Callable for UserDefinedProcedure {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BuiltInProcedure {
-    func: fn(Vec<Value>) -> Result<Option<Value>, &'static str>,
+    func: fn(Vec<Expr>) -> Result<Option<Expr>, &'static str>,
 }
 
 impl Callable for BuiltInProcedure {
-    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    fn call(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         (self.func)(args)
     }
 }
@@ -685,7 +660,7 @@ pub enum Procedure {
 }
 
 impl Callable for Procedure {
-    fn call(&mut self, args: Vec<Value>) -> Result<Option<Value>, &'static str> {
+    fn call(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         match self {
             Procedure::UserDefined(proc) => proc.call(args),
             Procedure::BuiltIn(proc) => proc.call(args),
@@ -732,58 +707,58 @@ mod tests {
     #[test]
     fn test_parser() {
         let code = "(define (square x) (* x x))";
-        let expected = vec![Expression::List(vec![
-            Expression::Keyword(Keyword::Define),
-            Expression::List(vec![
-                Expression::Identifier("square".to_string()),
-                Expression::Identifier("x".to_string()),
+        let expected = vec![Expr::List(vec![
+            Expr::Keyword(Keyword::Define),
+            Expr::List(vec![
+                Expr::Symbol("square".to_string()),
+                Expr::Symbol("x".to_string()),
             ]),
-            Expression::List(vec![
-                Expression::Identifier("*".to_string()),
-                Expression::Identifier("x".to_string()),
-                Expression::Identifier("x".to_string()),
+            Expr::List(vec![
+                Expr::Symbol("*".to_string()),
+                Expr::Symbol("x".to_string()),
+                Expr::Symbol("x".to_string()),
             ]),
         ])];
-        let expressions: Vec<Expression> = parse_code(code).unwrap();
+        let expressions: Vec<Expr> = parse_code(code).unwrap();
         assert_eq!(expressions, expected);
     }
 
     #[test]
     fn test_environment() {
         let mut base = Environment::empty();
-        base.set("a".to_string(), Value::Integer(42));
+        base.set("a".to_string(), Expr::Integer(42));
 
         let mut child = base.child();
 
-        child.set("a".to_string(), Value::Str("hello".to_string()));
-        child.set("b".to_string(), Value::Str("world".to_string()));
+        child.set("a".to_string(), Expr::Str("hello".to_string()));
+        child.set("b".to_string(), Expr::Str("world".to_string()));
 
-        assert_eq!(base.get("a"), Some(Value::Integer(42)));
+        assert_eq!(base.get("a"), Some(Expr::Integer(42)));
         assert_eq!(base.get("b"), None);
-        assert_eq!(child.get("a"), Some(Value::Str("hello".to_string())));
-        assert_eq!(child.get("b"), Some(Value::Str("world".to_string())));
+        assert_eq!(child.get("a"), Some(Expr::Str("hello".to_string())));
+        assert_eq!(child.get("b"), Some(Expr::Str("world".to_string())));
     }
 
     #[test]
     fn test_builtin_add() {
-        let values = vec![Value::Integer(10), Value::Float(42.0)];
+        let values = vec![Expr::Integer(10), Expr::Float(42.0)];
 
-        assert_eq!(builtin_add(values), Ok(Some(Value::Float(52.0))));
+        assert_eq!(builtin_add(values), Ok(Some(Expr::Float(52.0))));
 
-        let values = vec![Value::Float(42.0), Value::Integer(13)];
+        let values = vec![Expr::Float(42.0), Expr::Integer(13)];
 
-        assert_eq!(builtin_add(values), Ok(Some(Value::Float(55.0))));
+        assert_eq!(builtin_add(values), Ok(Some(Expr::Float(55.0))));
 
         let values = vec![
-            Value::Float(42.0),
-            Value::Integer(13),
-            Value::Str("hey, hey".to_string()),
+            Expr::Float(42.0),
+            Expr::Integer(13),
+            Expr::Str("hey, hey".to_string()),
         ];
 
         assert_eq!(builtin_add(values), Err("Cannot add types"));
     }
 
-    fn validate(cases: Vec<(&str, Option<Value>)>) {
+    fn validate(cases: Vec<(&str, Option<Expr>)>) {
         let mut env = Environment::standard().child();
         for (code, val) in cases {
             let expr = &parse_code(code).unwrap()[0];
@@ -795,51 +770,51 @@ mod tests {
     fn test_evaluate() {
         let cases = vec![
             ("(define a 42)", None),
-            ("42.42", Some(Value::Float(42.42))),
-            ("#t", Some(Value::Bool(true))),
-            ("#f", Some(Value::Bool(false))),
+            ("42.42", Some(Expr::Float(42.42))),
+            ("#t", Some(Expr::Bool(true))),
+            ("#f", Some(Expr::Bool(false))),
             (
                 "\"hello, world!\"",
-                Some(Value::Str("hello, world!".to_string())),
+                Some(Expr::Str("hello, world!".to_string())),
             ),
-            ("a", Some(Value::Integer(42))),
-            ("(+ 3 2)", Some(Value::Integer(5))),
-            ("(* 3 2)", Some(Value::Integer(6))),
-            ("(+ 3 2.0)", Some(Value::Float(5.0))),
-            ("(* 3.0 2)", Some(Value::Float(6.0))),
-            ("(- 10 2 3)", Some(Value::Integer(5))),
-            ("(/ 24 3 2)", Some(Value::Float(4.0))),
-            ("(abs -5)", Some(Value::Integer(5))),
-            ("(abs 5)", Some(Value::Integer(5))),
-            ("(abs -5.0)", Some(Value::Float(5.0))),
-            ("(abs 5.0)", Some(Value::Float(5.0))),
-            ("(< 1 2 3)", Some(Value::Bool(true))),
-            ("(< 1 3 2)", Some(Value::Bool(false))),
-            ("(<= 1 1 1)", Some(Value::Bool(true))),
-            ("(<= 1 0 1)", Some(Value::Bool(false))),
-            ("(> 3 2 1)", Some(Value::Bool(true))),
-            ("(> 1 3 2)", Some(Value::Bool(false))),
-            ("(>= 1 1 1)", Some(Value::Bool(true))),
-            ("(>= 1 1 2)", Some(Value::Bool(false))),
+            ("a", Some(Expr::Integer(42))),
+            ("(+ 3 2)", Some(Expr::Integer(5))),
+            ("(* 3 2)", Some(Expr::Integer(6))),
+            ("(+ 3 2.0)", Some(Expr::Float(5.0))),
+            ("(* 3.0 2)", Some(Expr::Float(6.0))),
+            ("(- 10 2 3)", Some(Expr::Integer(5))),
+            ("(/ 24 3 2)", Some(Expr::Float(4.0))),
+            ("(abs -5)", Some(Expr::Integer(5))),
+            ("(abs 5)", Some(Expr::Integer(5))),
+            ("(abs -5.0)", Some(Expr::Float(5.0))),
+            ("(abs 5.0)", Some(Expr::Float(5.0))),
+            ("(< 1 2 3)", Some(Expr::Bool(true))),
+            ("(< 1 3 2)", Some(Expr::Bool(false))),
+            ("(<= 1 1 1)", Some(Expr::Bool(true))),
+            ("(<= 1 0 1)", Some(Expr::Bool(false))),
+            ("(> 3 2 1)", Some(Expr::Bool(true))),
+            ("(> 1 3 2)", Some(Expr::Bool(false))),
+            ("(>= 1 1 1)", Some(Expr::Bool(true))),
+            ("(>= 1 1 2)", Some(Expr::Bool(false))),
             (
                 "(list 1 2 3)",
-                Some(Value::List(vec![
-                    Value::Integer(1),
-                    Value::Integer(2),
-                    Value::Integer(3),
+                Some(Expr::List(vec![
+                    Expr::Integer(1),
+                    Expr::Integer(2),
+                    Expr::Integer(3),
                 ])),
             ),
             ("(define a 13)", None),
-            ("(+ 8 a)", Some(Value::Integer(21))),
+            ("(+ 8 a)", Some(Expr::Integer(21))),
             ("(define f (lambda (a b) (+ (* 3 a) b)))", None),
-            ("(f 7 a)", Some(Value::Integer(34))),
-            ("(f 7.0 a)", Some(Value::Float(34.0))),
-            ("(if (> 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(4))),
-            ("(if (< 3 7) (- 3 7) (- 7 3))", Some(Value::Integer(-4))),
-            ("(begin (+ 4 7) (- 5 2) (* 7 3))", Some(Value::Integer(21))),
+            ("(f 7 a)", Some(Expr::Integer(34))),
+            ("(f 7.0 a)", Some(Expr::Float(34.0))),
+            ("(if (> 3 7) (- 3 7) (- 7 3))", Some(Expr::Integer(4))),
+            ("(if (< 3 7) (- 3 7) (- 7 3))", Some(Expr::Integer(-4))),
+            ("(begin (+ 4 7) (- 5 2) (* 7 3))", Some(Expr::Integer(21))),
             (
                 "(let ((a 14) (b 7)) (+ a b) (- a b))",
-                Some(Value::Integer(7)),
+                Some(Expr::Integer(7)),
             ),
         ];
         validate(cases);
@@ -856,7 +831,7 @@ mod tests {
                     (* n (fact (- n 1))))))",
                 None,
             ),
-            ("(fact 11)", Some(Value::Integer(39916800))),
+            ("(fact 11)", Some(Expr::Integer(39916800))),
         ];
         validate(cases);
     }
@@ -868,7 +843,7 @@ mod tests {
     //             if (< n 2)
     //             n
     //             (+ (fib (- n 1)) (fib (- n 2)))))", None),
-    //         ("(fib 20)", Some(Value::Integer(6765))),
+    //         ("(fib 20)", Some(Expr::Integer(6765))),
     //     ];
     //     validate(cases);
     // }
