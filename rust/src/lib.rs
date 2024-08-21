@@ -545,7 +545,23 @@ impl Environment {
                 }
                 Ok(None)
             }
-            _ => Err("Define needs identifier as first argument"),
+            Expr::List(v) => {
+                let mut ids = Vec::with_capacity(v.len() - 1);
+                for expr in v {
+                    match expr {
+                        Expr::Symbol(s) => ids.push(s.clone()),
+                        _ => return Err("Not a symbol"),
+                    }
+                }
+                let proc =
+                    UserDefinedProcedure::new(ids[1..].to_vec(), args[1..].to_vec(), self.clone());
+                self.set(
+                    ids[0].to_string(),
+                    Expr::Procedure(Procedure::UserDefined(proc)),
+                );
+                Ok(None)
+            }
+            _ => Err("Define needs a symbol or a list as first argument"),
         }
     }
 
@@ -836,15 +852,18 @@ mod tests {
         validate(cases);
     }
 
-    // #[test]
-    // fn test_fib() {
-    //     let cases = vec![
-    //         ("(define (fib n) (
-    //             if (< n 2)
-    //             n
-    //             (+ (fib (- n 1)) (fib (- n 2)))))", None),
-    //         ("(fib 20)", Some(Expr::Integer(6765))),
-    //     ];
-    //     validate(cases);
-    // }
+    #[test]
+    fn test_fib() {
+        let cases = vec![
+            (
+                "(define (fib n) (
+                if (< n 2)
+                n
+                (+ (fib (- n 1)) (fib (- n 2)))))",
+                None,
+            ),
+            ("(fib 20)", Some(Expr::Integer(6765))),
+        ];
+        validate(cases);
+    }
 }
