@@ -841,10 +841,10 @@ mod tests {
         let cases = vec![
             (
                 "(define fact
-                (lambda (n) (
-                    if (< n 2)
-                    1
-                    (* n (fact (- n 1))))))",
+                    (lambda (n) (
+                        if (< n 2)
+                        1
+                        (* n (fact (- n 1))))))",
                 None,
             ),
             ("(fact 11)", Some(Expr::Integer(39916800))),
@@ -857,12 +857,67 @@ mod tests {
         let cases = vec![
             (
                 "(define (fib n) (
-                if (< n 2)
-                n
-                (+ (fib (- n 1)) (fib (- n 2)))))",
+                    if (< n 2)
+                    n
+                    (+ (fib (- n 1)) (fib (- n 2)))))",
                 None,
             ),
             ("(fib 20)", Some(Expr::Integer(6765))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_sqrt_newton_1() {
+        let cases = vec![
+            (
+                "(define (sqrt x)
+                    (define (square x) (* x x))
+                    (define (average x y) (/ (+ x y) 2))
+                    (define (good-enough? guess)
+                        (< (abs (- (square guess) x)) 0.001))
+                    (define (improve guess)
+                        (average guess (/ x guess)))
+                    (define (sqrt-iter guess)
+                        (if (good-enough? guess)
+                            guess
+                            (sqrt-iter (improve guess))))
+                    (sqrt-iter 1.0))",
+                None,
+            ),
+            ("(sqrt 2)", Some(Expr::Float(1.4142156862745097))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_sqrt_newton_2() {
+        let cases = vec![
+            ("(define (square x) (* x x))", None),
+            ("(define (average x y) (/ (+ x y) 2))", None),
+            (
+                "(define (good-enough? guess x)
+                    (< (abs (- (square guess) x)) 0.001))",
+                None,
+            ),
+            (
+                "(define (improve guess x)
+                    (average guess (/ x guess)))",
+                None,
+            ),
+            (
+                "(define (sqrt-iter guess x)
+                    (if (good-enough? guess x)
+                        guess
+                        (sqrt-iter (improve guess x) x)))",
+                None,
+            ),
+            (
+                "(define (sqrt x)
+                    (sqrt-iter 1.0 x))",
+                None,
+            ),
+            ("(sqrt 2)", Some(Expr::Float(1.4142156862745097))),
         ];
         validate(cases);
     }
