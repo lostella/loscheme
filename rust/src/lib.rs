@@ -535,11 +535,14 @@ impl Environment {
     }
 
     fn evaluate_define(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
-        if args.len() != 2 {
-            return Err("Define needs exactly two arguments");
+        if args.len() < 2 {
+            return Err("Define needs at least two arguments");
         }
         match &args[0] {
             Expr::Symbol(key) => {
+                if args.len() != 2 {
+                    return Err("Define with a symbol needs two arguments");
+                }
                 if let Some(value) = self.evaluate(&args[1])? {
                     self.set(key.to_string(), value);
                 }
@@ -832,6 +835,24 @@ mod tests {
                 "(let ((a 14) (b 7)) (+ a b) (- a b))",
                 Some(Expr::Integer(7)),
             ),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_multistep_function_1() {
+        let cases = vec![
+            ("(define f (lambda (x) (define a 3) (* a x)))", None),
+            ("(f 4)", Some(Expr::Integer(12))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_multistep_function_2() {
+        let cases = vec![
+            ("(define (f x) (define a 3) (* a x))", None),
+            ("(f 4)", Some(Expr::Integer(12))),
         ];
         validate(cases);
     }
