@@ -95,6 +95,7 @@ impl Iterator for Tokenizer<'_> {
 pub enum Keyword {
     Lambda,
     Quote,
+    Eval,
     Define,
     If,
     Let,
@@ -107,6 +108,7 @@ impl Keyword {
         match s {
             "lambda" => Some(Keyword::Lambda),
             "quote" => Some(Keyword::Quote),
+            "eval" => Some(Keyword::Eval),
             "define" => Some(Keyword::Define),
             "if" => Some(Keyword::If),
             "let" => Some(Keyword::Let),
@@ -496,6 +498,7 @@ impl Environment {
         match &exprs[0] {
             Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(&exprs[1..]),
             Expr::Keyword(Keyword::Quote) => self.evaluate_quote(&exprs[1..]),
+            Expr::Keyword(Keyword::Eval) => self.evaluate_eval(&exprs[1..]),
             Expr::Keyword(Keyword::Define) => self.evaluate_define(&exprs[1..]),
             Expr::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
             Expr::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
@@ -532,6 +535,17 @@ impl Environment {
             return Err("Quote needs exactly one arguments");
         }
         Ok(Some(args[0].clone()))
+    }
+
+    fn evaluate_eval(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+        if args.len() > 1 {
+            return Err("Eval needs exactly one argument");
+        }
+        let value = self.evaluate(&args[0])?;
+        match value {
+            Some(expr) => self.evaluate(&expr),
+            None => Err("No expression to evaluate"),
+        }
     }
 
     fn evaluate_define(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
@@ -835,6 +849,17 @@ mod tests {
                 "(let ((a 14) (b 7)) (+ a b) (- a b))",
                 Some(Expr::Integer(7)),
             ),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_quote_eval() {
+        let cases = vec![
+            ("(eval '42.0)", Some(Expr::Float(42.0))),
+            ("(eval '(* 3 4))", Some(Expr::Integer(12))),
+            ("(define (f x) (eval '(* 3 x)))", None),
+            ("(f 5)", Some(Expr::Integer(15))),
         ];
         validate(cases);
     }
