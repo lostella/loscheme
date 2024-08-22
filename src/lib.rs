@@ -99,6 +99,8 @@ pub enum Keyword {
     If,
     Let,
     Begin,
+    And,
+    Or,
     // TODO add more special forms here
 }
 
@@ -111,6 +113,8 @@ impl Keyword {
             "if" => Some(Keyword::If),
             "let" => Some(Keyword::Let),
             "begin" => Some(Keyword::Begin),
+            "and" => Some(Keyword::And),
+            "or" => Some(Keyword::Or),
             _ => None,
         }
     }
@@ -321,7 +325,7 @@ fn builtin_sub(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'sta
 }
 
 fn builtin_abs(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
-    if values.len() > 1 {
+    if values.len() != 1 {
         return Err("Abs needs exactly one argument");
     }
     let res_value = match values.first() {
@@ -373,6 +377,16 @@ fn builtin_leq(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'sta
 
 fn builtin_geq(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     builtin_cmp(values, Expr::geq)
+}
+
+fn builtin_not(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Not needs exactly one argument");
+    }
+    match values[0] {
+        Expr::Bool(b) => Ok(Some(Expr::Bool(!b))),
+        _ => Err("Cannot negate type"),
+    }
 }
 
 fn builtin_list(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
@@ -471,6 +485,7 @@ impl Environment {
             (">", builtin_gt as BuiltInFnType),
             ("<=", builtin_leq as BuiltInFnType),
             (">=", builtin_geq as BuiltInFnType),
+            ("not", builtin_not as BuiltInFnType),
             ("list", builtin_list as BuiltInFnType),
             ("apply", builtin_apply as BuiltInFnType),
             ("length", builtin_length as BuiltInFnType),
@@ -531,6 +546,8 @@ impl Environment {
             Expr::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
             Expr::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
             Expr::Keyword(Keyword::Begin) => self.evaluate_begin(&exprs[1..]),
+            Expr::Keyword(Keyword::And) => self.evaluate_and(&exprs[1..]),
+            Expr::Keyword(Keyword::Or) => self.evaluate_or(&exprs[1..]),
             _ => match self.evaluate(&exprs[0]) {
                 Ok(Some(Expr::Procedure(p))) => {
                     let args = self.evaluate_non_none_args(&exprs[1..])?;
@@ -653,6 +670,36 @@ impl Environment {
             Some(expr) => self.evaluate(expr),
             None => Ok(None),
         }
+    }
+
+    fn evaluate_and(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+        for expr in args {
+            match self.evaluate(expr) {
+                Ok(Some(Expr::Bool(b))) => {
+                    if b {
+                        continue;
+                    }
+                    return Ok(Some(Expr::Bool(false)));
+                }
+                _ => return Err("Cannot \"and\" type"),
+            }
+        }
+        Ok(Some(Expr::Bool(true)))
+    }
+
+    fn evaluate_or(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+        for expr in args {
+            match self.evaluate(expr) {
+                Ok(Some(Expr::Bool(b))) => {
+                    if b {
+                        return Ok(Some(Expr::Bool(true)));
+                    }
+                    continue;
+                }
+                _ => return Err("Cannot \"or\" type"),
+            }
+        }
+        Ok(Some(Expr::Bool(false)))
     }
 }
 
@@ -875,8 +922,28 @@ mod tests {
     }
 
     #[test]
+    fn test_and_or_not() {
+        let cases = vec![
+            ("(and)", Some(Expr::Bool(true))),
+            ("(and #t #t #f)", Some(Expr::Bool(false))),
+            ("(and #t #t #t)", Some(Expr::Bool(true))),
+            ("(or)", Some(Expr::Bool(false))),
+            ("(or #f #f #f)", Some(Expr::Bool(false))),
+            ("(or #f #t #f)", Some(Expr::Bool(true))),
+            ("(not #t)", Some(Expr::Bool(false))),
+            ("(not #f)", Some(Expr::Bool(true))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
     fn test_quote_eval() {
         let cases = vec![
+            ("'()", Some(Expr::List(vec![]))),
+            (
+                "'(#t #f)",
+                Some(Expr::List(vec![Expr::Bool(true), Expr::Bool(false)])),
+            ),
             ("(eval '42.0)", Some(Expr::Float(42.0))),
             ("(eval '(* 3 4))", Some(Expr::Integer(12))),
             ("(define (f x) (eval '(* 3 x)))", None),
