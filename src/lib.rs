@@ -373,6 +373,16 @@ fn builtin_list(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     Ok(Some(Expr::List(values)))
 }
 
+fn builtin_apply(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 2 {
+        return Err("Apply needs exactly two argument");
+    }
+    match (&values[0], &values[1]) {
+        (Expr::Procedure(proc), Expr::List(v)) => proc.call(v.to_vec()),
+        _ => Err("Apply needs a procedure and a list as arguments"),
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
     data: HashMap<String, Expr>,
@@ -445,6 +455,7 @@ impl Environment {
             ("<=", builtin_leq as BuiltInFnType),
             (">=", builtin_geq as BuiltInFnType),
             ("list", builtin_list as BuiltInFnType),
+            ("apply", builtin_apply as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(
@@ -504,7 +515,7 @@ impl Environment {
             Expr::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
             Expr::Keyword(Keyword::Begin) => self.evaluate_begin(&exprs[1..]),
             _ => match self.evaluate(&exprs[0]) {
-                Ok(Some(Expr::Procedure(mut p))) => {
+                Ok(Some(Expr::Procedure(p))) => {
                     let args = self.evaluate_non_none_args(&exprs[1..])?;
                     p.call(args)
                 }
@@ -640,7 +651,7 @@ impl Environment {
 }
 
 trait Callable {
-    fn call(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str>;
+    fn call(&self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str>;
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -657,7 +668,7 @@ impl UserDefinedProcedure {
 }
 
 impl Callable for UserDefinedProcedure {
-    fn call(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    fn call(&self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
         }
@@ -681,7 +692,7 @@ pub struct BuiltInProcedure {
 }
 
 impl Callable for BuiltInProcedure {
-    fn call(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    fn call(&self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         (self.func)(args)
     }
 }
@@ -693,7 +704,7 @@ pub enum Procedure {
 }
 
 impl Callable for Procedure {
-    fn call(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    fn call(&self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         match self {
             Procedure::UserDefined(proc) => proc.call(args),
             Procedure::BuiltIn(proc) => proc.call(args),
@@ -860,6 +871,15 @@ mod tests {
             ("(eval '(* 3 4))", Some(Expr::Integer(12))),
             ("(define (f x) (eval '(* 3 x)))", None),
             ("(f 5)", Some(Expr::Integer(15))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_apply() {
+        let cases = vec![
+            ("(apply + '(3 4))", Some(Expr::Integer(7))),
+            ("(apply * (list -5 4))", Some(Expr::Integer(-20))),
         ];
         validate(cases);
     }
