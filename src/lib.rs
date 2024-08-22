@@ -95,7 +95,6 @@ impl Iterator for Tokenizer<'_> {
 pub enum Keyword {
     Lambda,
     Quote,
-    Eval,
     Define,
     If,
     Let,
@@ -108,7 +107,6 @@ impl Keyword {
         match s {
             "lambda" => Some(Keyword::Lambda),
             "quote" => Some(Keyword::Quote),
-            "eval" => Some(Keyword::Eval),
             "define" => Some(Keyword::Define),
             "if" => Some(Keyword::If),
             "let" => Some(Keyword::Let),
@@ -289,21 +287,29 @@ impl Expr {
     }
 }
 
-fn builtin_add(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_eval(values: Vec<Expr>, env: &Environment) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Eval needs exactly one argument");
+    }
+    let mut child = env.child();
+    child.evaluate(&values[0])
+}
+
+fn builtin_add(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     let res = values
         .into_iter()
         .try_fold(Expr::Integer(0), |acc, x| acc.add(&x))?;
     Ok(Some(res))
 }
 
-fn builtin_mul(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_mul(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     let res = values
         .into_iter()
         .try_fold(Expr::Integer(1), |acc, x| acc.mul(&x))?;
     Ok(Some(res))
 }
 
-fn builtin_sub(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_sub(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     let mut values_iter = values.into_iter();
     match values_iter.next() {
         None => Ok(Some(Expr::Integer(0))),
@@ -314,7 +320,7 @@ fn builtin_sub(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     }
 }
 
-fn builtin_abs(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_abs(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     if values.len() > 1 {
         return Err("Abs needs exactly one argument");
     }
@@ -329,7 +335,7 @@ fn builtin_abs(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     Ok(Some(res_value))
 }
 
-fn builtin_div(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_div(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     let mut values_iter = values.into_iter();
     match values_iter.next() {
         None => Ok(Some(Expr::Integer(1))),
@@ -353,37 +359,37 @@ fn builtin_cmp(values: Vec<Expr>, method: CmpFnType) -> Result<Option<Expr>, &'s
     Ok(Some(Expr::Bool(true)))
 }
 
-fn builtin_lt(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_lt(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     builtin_cmp(values, Expr::lt)
 }
 
-fn builtin_gt(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_gt(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     builtin_cmp(values, Expr::gt)
 }
 
-fn builtin_leq(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_leq(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     builtin_cmp(values, Expr::leq)
 }
 
-fn builtin_geq(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_geq(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     builtin_cmp(values, Expr::geq)
 }
 
-fn builtin_list(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_list(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     Ok(Some(Expr::List(values)))
 }
 
-fn builtin_apply(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_apply(values: Vec<Expr>, env: &Environment) -> Result<Option<Expr>, &'static str> {
     if values.len() != 2 {
         return Err("Apply needs exactly two argument");
     }
     match (&values[0], &values[1]) {
-        (Expr::Procedure(proc), Expr::List(v)) => proc.call(v.to_vec()),
+        (Expr::Procedure(proc), Expr::List(v)) => proc.call(v.to_vec(), env),
         _ => Err("Apply needs a procedure and a list as arguments"),
     }
 }
 
-fn builtin_length(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_length(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument");
     }
@@ -422,7 +428,7 @@ pub struct Environment {
     head: EnvironmentLink,
 }
 
-type BuiltInFnType = fn(Vec<Expr>) -> Result<Option<Expr>, &'static str>;
+type BuiltInFnType = fn(Vec<Expr>, &Environment) -> Result<Option<Expr>, &'static str>;
 
 impl Environment {
     pub fn empty() -> Environment {
@@ -455,6 +461,7 @@ impl Environment {
         };
         // TODO add all built-in procedures in standard env
         let to_set = vec![
+            ("eval", builtin_eval as BuiltInFnType),
             ("+", builtin_add as BuiltInFnType),
             ("-", builtin_sub as BuiltInFnType),
             ("*", builtin_mul as BuiltInFnType),
@@ -520,7 +527,6 @@ impl Environment {
         match &exprs[0] {
             Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(&exprs[1..]),
             Expr::Keyword(Keyword::Quote) => self.evaluate_quote(&exprs[1..]),
-            Expr::Keyword(Keyword::Eval) => self.evaluate_eval(&exprs[1..]),
             Expr::Keyword(Keyword::Define) => self.evaluate_define(&exprs[1..]),
             Expr::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
             Expr::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
@@ -528,7 +534,7 @@ impl Environment {
             _ => match self.evaluate(&exprs[0]) {
                 Ok(Some(Expr::Procedure(p))) => {
                     let args = self.evaluate_non_none_args(&exprs[1..])?;
-                    p.call(args)
+                    p.call(args, self)
                 }
                 _ => Err("Not a procedure call"),
             },
@@ -557,17 +563,6 @@ impl Environment {
             return Err("Quote needs exactly one arguments");
         }
         Ok(Some(args[0].clone()))
-    }
-
-    fn evaluate_eval(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
-        if args.len() > 1 {
-            return Err("Eval needs exactly one argument");
-        }
-        let value = self.evaluate(&args[0])?;
-        match value {
-            Some(expr) => self.evaluate(&expr),
-            None => Err("No expression to evaluate"),
-        }
     }
 
     fn evaluate_define(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
@@ -662,7 +657,7 @@ impl Environment {
 }
 
 trait Callable {
-    fn call(&self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str>;
+    fn call(&self, args: Vec<Expr>, env: &Environment) -> Result<Option<Expr>, &'static str>;
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -679,7 +674,7 @@ impl UserDefinedProcedure {
 }
 
 impl Callable for UserDefinedProcedure {
-    fn call(&self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    fn call(&self, args: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
         if args.len() != self.params.len() {
             return Err("Incorrect number of arguments");
         }
@@ -699,12 +694,12 @@ impl Callable for UserDefinedProcedure {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BuiltInProcedure {
-    func: fn(Vec<Expr>) -> Result<Option<Expr>, &'static str>,
+    func: fn(Vec<Expr>, env: &Environment) -> Result<Option<Expr>, &'static str>,
 }
 
 impl Callable for BuiltInProcedure {
-    fn call(&self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
-        (self.func)(args)
+    fn call(&self, args: Vec<Expr>, env: &Environment) -> Result<Option<Expr>, &'static str> {
+        (self.func)(args, env)
     }
 }
 
@@ -715,10 +710,10 @@ pub enum Procedure {
 }
 
 impl Callable for Procedure {
-    fn call(&self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    fn call(&self, args: Vec<Expr>, env: &Environment) -> Result<Option<Expr>, &'static str> {
         match self {
-            Procedure::UserDefined(proc) => proc.call(args),
-            Procedure::BuiltIn(proc) => proc.call(args),
+            Procedure::UserDefined(proc) => proc.call(args, env),
+            Procedure::BuiltIn(proc) => proc.call(args, env),
         }
     }
 }
@@ -796,13 +791,15 @@ mod tests {
 
     #[test]
     fn test_builtin_add() {
+        let empty = Environment::empty();
+
         let values = vec![Expr::Integer(10), Expr::Float(42.0)];
 
-        assert_eq!(builtin_add(values), Ok(Some(Expr::Float(52.0))));
+        assert_eq!(builtin_add(values, &empty), Ok(Some(Expr::Float(52.0))));
 
         let values = vec![Expr::Float(42.0), Expr::Integer(13)];
 
-        assert_eq!(builtin_add(values), Ok(Some(Expr::Float(55.0))));
+        assert_eq!(builtin_add(values, &empty), Ok(Some(Expr::Float(55.0))));
 
         let values = vec![
             Expr::Float(42.0),
@@ -810,7 +807,7 @@ mod tests {
             Expr::Str("hey, hey".to_string()),
         ];
 
-        assert_eq!(builtin_add(values), Err("Cannot add types"));
+        assert_eq!(builtin_add(values, &empty), Err("Cannot add types"));
     }
 
     fn validate(cases: Vec<(&str, Option<Expr>)>) {
