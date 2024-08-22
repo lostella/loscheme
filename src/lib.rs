@@ -316,15 +316,15 @@ fn builtin_sub(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
 
 fn builtin_abs(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() > 1 {
-        return Err("abs needs exactly one argument");
+        return Err("Abs needs exactly one argument");
     }
     let res_value = match values.first() {
         Some(value) => match value {
             Expr::Integer(n) => Expr::Integer(if *n >= 0 { *n } else { -*n }),
             Expr::Float(n) => Expr::Float(if *n >= 0.0 { *n } else { -*n }),
-            _ => return Err("abs needs a number argument"),
+            _ => return Err("Abs needs a number argument"),
         },
-        _ => return Err("abs needs exactly one argument"),
+        _ => return Err("Abs needs exactly one argument"),
     };
     Ok(Some(res_value))
 }
