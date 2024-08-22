@@ -383,6 +383,16 @@ fn builtin_apply(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     }
 }
 
+fn builtin_length(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Length needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::List(v) => Ok(Some(Expr::Integer(v.len() as i64))),
+        _ => Err("Apply needs a list as argument"),
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
     data: HashMap<String, Expr>,
@@ -456,6 +466,7 @@ impl Environment {
             (">=", builtin_geq as BuiltInFnType),
             ("list", builtin_list as BuiltInFnType),
             ("apply", builtin_apply as BuiltInFnType),
+            ("length", builtin_length as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(
@@ -860,6 +871,8 @@ mod tests {
                 "(let ((a 14) (b 7)) (+ a b) (- a b))",
                 Some(Expr::Integer(7)),
             ),
+            ("(length '())", Some(Expr::Integer(0))),
+            ("(length '(4 5 6))", Some(Expr::Integer(3))),
         ];
         validate(cases);
     }
