@@ -23,7 +23,7 @@ fn main() {
                         for expr in exprs {
                             let res = env.evaluate(&expr);
                             match res {
-                                Ok(Some(v)) => println!("{}", v.to_string()),
+                                Ok(Some(v)) => println!("{}", v),
                                 Ok(None) => println!(),
                                 Err(err) => println!("Error (eval): {}", err),
                             };

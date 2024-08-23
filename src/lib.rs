@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt;
 use std::iter::{zip, Peekable};
 use std::rc::Rc;
 use std::str::{Chars, FromStr};
@@ -122,17 +123,17 @@ impl FromStr for Keyword {
     }
 }
 
-impl ToString for Keyword {
-    fn to_string(&self) -> String {
+impl fmt::Display for Keyword {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Keyword::Lambda => "lambda".to_string(),
-            Keyword::Quote => "quote".to_string(),
-            Keyword::Define => "define".to_string(),
-            Keyword::If => "if".to_string(),
-            Keyword::Let => "let".to_string(),
-            Keyword::Begin => "begin".to_string(),
-            Keyword::And => "and".to_string(),
-            Keyword::Or => "or".to_string(),
+            Keyword::Lambda => write!(f, "lambda"),
+            Keyword::Quote => write!(f, "quote"),
+            Keyword::Define => write!(f, "define"),
+            Keyword::If => write!(f, "if"),
+            Keyword::Let => write!(f, "let"),
+            Keyword::Begin => write!(f, "begin"),
+            Keyword::And => write!(f, "and"),
+            Keyword::Or => write!(f, "or"),
         }
     }
 }
@@ -226,25 +227,25 @@ pub fn parse_code(code: &str) -> Result<Vec<Expr>, &'static str> {
     parser.parse()
 }
 
-impl ToString for Expr {
-    fn to_string(&self) -> String {
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Bool(v) => v.to_string(),
-            Expr::Integer(v) => v.to_string(),
-            Expr::Float(v) => v.to_string(),
-            Expr::Str(v) => "\"".to_string() + v + "\"",
+            Expr::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
+            Expr::Integer(v) => write!(f, "{}", v),
+            Expr::Float(v) => write!(f, "{}", v),
+            Expr::Str(v) => write!(f, "\"{}\"", v),
             Expr::List(v) => {
                 let mut res = String::new();
                 res.push('(');
                 let strings: Vec<String> = v.iter().map(|x| x.to_string()).collect();
                 res.push_str(&strings.join(" "));
                 res.push(')');
-                res
+                write!(f, "{res}")
             }
-            Expr::Symbol(s) => s.to_string(),
-            Expr::Keyword(k) => k.to_string(),
-            Expr::Procedure(Procedure::BuiltIn(_)) => "#[built-in procedure]".to_string(),
-            Expr::Procedure(Procedure::UserDefined(_)) => "#[user-defined procedure]".to_string(),
+            Expr::Symbol(s) => write!(f, "{}", s),
+            Expr::Keyword(k) => write!(f, "{}", k),
+            Expr::Procedure(Procedure::BuiltIn(_)) => write!(f, "#[built-in procedure]"),
+            Expr::Procedure(Procedure::UserDefined(_)) => write!(f, "#[user-defined procedure]"),
         }
     }
 }
