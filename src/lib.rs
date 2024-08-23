@@ -1245,4 +1245,31 @@ mod tests {
         ];
         validate(cases);
     }
+
+    #[test]
+    fn test_higher_order() {
+        let cases = vec![
+            ("(define (make-adder n) (lambda (x) (+ x n)))", None),
+            ("((make-adder 3) 7)", Some(Expr::Integer(10))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_nested_function() {
+        let cases = vec![
+            ("(define (outer-func x) (define (inner-func y) (+ x y)) (inner-func 10))", None),
+            ("(outer-func 5)", Some(Expr::Integer(15))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_function_scope() {
+        let cases = vec![
+            ("(define (outer x) (define y (+ x 1)) (lambda (z) (+ y z)))", None),
+            ("((outer 3) 2)", Some(Expr::Integer(6))),
+        ];
+        validate(cases);
+    }
 }
