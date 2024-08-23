@@ -1,13 +1,15 @@
 use loscheme::{parse_code, Environment};
 use std::io::{self, BufRead, Write};
 
+const INPUT_PROMPT: &str = "λ~>";
+
 fn main() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut env = Environment::standard().child();
 
     loop {
-        print!("λ~> ");
+        print!("{} ", INPUT_PROMPT);
         stdout.flush().unwrap();
 
         let mut input = String::new();
@@ -24,7 +26,7 @@ fn main() {
                             let res = env.evaluate(&expr);
                             match res {
                                 Ok(Some(v)) => println!("{}", v),
-                                Ok(None) => println!(),
+                                Ok(None) => (),
                                 Err(err) => println!("Error (eval): {}", err),
                             };
                         }
