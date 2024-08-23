@@ -489,11 +489,56 @@ fn builtin_isnumber(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
 
 fn builtin_issymbol(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
-        return Err("Number? needs exactly one argument");
+        return Err("Symbol? needs exactly one argument");
     }
     match &values[0] {
         Expr::Symbol(_) => Ok(Some(Expr::Bool(true))),
         _ => Ok(Some(Expr::Bool(false))),
+    }
+}
+
+fn builtin_cons(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 2 {
+        return Err("Cons needs exactly two argument");
+    }
+    match &values[1] {
+        Expr::List(v) => {
+            let mut res = Vec::new();
+            res.push(values[0].clone());
+            res.append(&mut v.clone());
+            Ok(Some(Expr::List(res)))
+        }
+        _ => Err("Cons needs a list as second argument"),
+    }
+}
+
+fn builtin_car(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Car needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::List(v) => {
+            if v.is_empty() {
+                return Err("List must be non-empty");
+            }
+            Ok(Some(v[0].clone()))
+        }
+        _ => Err("Car needs a list as argument"),
+    }
+}
+
+fn builtin_cdr(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Cdr needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::List(v) => {
+            if v.is_empty() {
+                return Err("List must be non-empty");
+            }
+            Ok(Some(Expr::List(v[1..].to_vec())))
+        }
+        _ => Err("Cdr needs a list as argument"),
     }
 }
 
@@ -577,6 +622,9 @@ impl Environment {
             ("null?", builtin_isnull as BuiltInFnType),
             ("number?", builtin_isnumber as BuiltInFnType),
             ("symbol?", builtin_issymbol as BuiltInFnType),
+            ("cons", builtin_cons as BuiltInFnType),
+            ("car", builtin_car as BuiltInFnType),
+            ("cdr", builtin_cdr as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(
@@ -1273,6 +1321,27 @@ mod tests {
                 None,
             ),
             ("((outer 3) 2)", Some(Expr::Integer(6))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_cons_car_cdr() {
+        let cases = vec![
+            ("(cons 1 '())", Some(Expr::List(vec![Expr::Integer(1)]))),
+            (
+                "(cons 1 '(2 3))",
+                Some(Expr::List(vec![
+                    Expr::Integer(1),
+                    Expr::Integer(2),
+                    Expr::Integer(3),
+                ])),
+            ),
+            ("(car '(1 2 3))", Some(Expr::Integer(1))),
+            (
+                "(cdr '(1 2 3))",
+                Some(Expr::List(vec![Expr::Integer(2), Expr::Integer(3)])),
+            ),
         ];
         validate(cases);
     }
