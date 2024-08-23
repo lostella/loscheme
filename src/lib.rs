@@ -1220,4 +1220,29 @@ mod tests {
         ];
         validate(cases);
     }
+
+    #[test]
+    fn test_define_let_lambda() {
+        let cases = vec![
+            ("(define f (let ((a 3)) (lambda (x) (* a x))))", None),
+            ("(f 5)", Some(Expr::Integer(15))),
+            ("(f -4)", Some(Expr::Integer(-12))),
+            ("(define a 1)", None),
+            ("(f 5)", Some(Expr::Integer(15))),
+            ("(f -4)", Some(Expr::Integer(-12))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_define_with_unbound() {
+        let cases = vec![
+            ("(define (f x) (+ a x))", None),
+            ("(define a 3)", None),
+            ("(f 5)", Some(Expr::Integer(8))),
+            ("(define a -17)", None),
+            ("(f 3)", Some(Expr::Integer(-14))),
+        ];
+        validate(cases);
+    }
 }
