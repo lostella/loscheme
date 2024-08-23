@@ -99,6 +99,7 @@ pub enum Keyword {
     Define,
     If,
     Let,
+    Set,
     Begin,
     And,
     Or,
@@ -115,6 +116,7 @@ impl FromStr for Keyword {
             "define" => Ok(Keyword::Define),
             "if" => Ok(Keyword::If),
             "let" => Ok(Keyword::Let),
+            "set!" => Ok(Keyword::Set),
             "begin" => Ok(Keyword::Begin),
             "and" => Ok(Keyword::And),
             "or" => Ok(Keyword::Or),
@@ -131,6 +133,7 @@ impl fmt::Display for Keyword {
             Keyword::Define => write!(f, "define"),
             Keyword::If => write!(f, "if"),
             Keyword::Let => write!(f, "let"),
+            Keyword::Set => write!(f, "set!"),
             Keyword::Begin => write!(f, "begin"),
             Keyword::And => write!(f, "and"),
             Keyword::Or => write!(f, "or"),
@@ -681,6 +684,7 @@ impl Environment {
             Expr::Keyword(Keyword::Define) => self.evaluate_define(&exprs[1..]),
             Expr::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
             Expr::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
+            Expr::Keyword(Keyword::Set) => self.evaluate_set(&exprs[1..]),
             Expr::Keyword(Keyword::Begin) => self.evaluate_begin(&exprs[1..]),
             Expr::Keyword(Keyword::And) => self.evaluate_and(&exprs[1..]),
             Expr::Keyword(Keyword::Or) => self.evaluate_or(&exprs[1..]),
@@ -796,6 +800,28 @@ impl Environment {
             }
         }
         Err("First argument to let must be a list")
+    }
+
+    fn evaluate_set(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+        if args.len() != 2 {
+            return Err("Set! needs exactly two arguments");
+        }
+        match &args[0] {
+            Expr::Symbol(s) => match self.get(s) {
+                Some(_) => {
+                    let v = self.evaluate(&args[1])?;
+                    match v {
+                        Some(val) => {
+                            self.set(s.to_string(), val);
+                            Ok(None)
+                        }
+                        None => Err("No value to set"),
+                    }
+                }
+                _ => Err("Symbol is not bound"),
+            },
+            _ => Err("First argument to set! must be a symbol"),
+        }
     }
 
     fn evaluate_begin(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
@@ -1085,6 +1111,8 @@ mod tests {
                     Expr::Integer(4),
                 ])),
             ),
+            ("(set! a -1)", None),
+            ("a", Some(Expr::Integer(-1))),
         ];
         validate(cases);
     }
