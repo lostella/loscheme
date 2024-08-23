@@ -332,14 +332,6 @@ impl Expr {
     }
 }
 
-fn builtin_eval(values: Vec<Expr>, env: &Environment) -> Result<Option<Expr>, &'static str> {
-    if values.len() != 1 {
-        return Err("Eval needs exactly one argument");
-    }
-    let mut child = env.child();
-    child.evaluate(&values[0])
-}
-
 fn builtin_add(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
     let res = values
         .into_iter()
@@ -567,7 +559,6 @@ impl Environment {
         };
         // TODO add all built-in procedures in standard env
         let to_set = vec![
-            ("eval", builtin_eval as BuiltInFnType),
             ("+", builtin_add as BuiltInFnType),
             ("-", builtin_sub as BuiltInFnType),
             ("*", builtin_mul as BuiltInFnType),
@@ -1068,17 +1059,22 @@ mod tests {
     }
 
     #[test]
-    fn test_quote_eval() {
+    fn test_quote() {
         let cases = vec![
             ("'()", Some(Expr::List(vec![]))),
             (
                 "'(#t #f)",
                 Some(Expr::List(vec![Expr::Bool(true), Expr::Bool(false)])),
             ),
-            ("(eval '42.0)", Some(Expr::Float(42.0))),
-            ("(eval '(* 3 4))", Some(Expr::Integer(12))),
-            ("(define (f x) (eval '(* 3 x)))", None),
-            ("(f 5)", Some(Expr::Integer(15))),
+            ("'42.0", Some(Expr::Float(42.0))),
+            (
+                "'(* 3 4)",
+                Some(Expr::List(vec![
+                    Expr::Symbol("*".to_string()),
+                    Expr::Integer(3),
+                    Expr::Integer(4),
+                ])),
+            ),
         ];
         validate(cases);
     }
