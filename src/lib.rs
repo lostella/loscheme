@@ -1256,7 +1256,10 @@ mod tests {
     #[test]
     fn test_nested_function() {
         let cases = vec![
-            ("(define (outer-func x) (define (inner-func y) (+ x y)) (inner-func 10))", None),
+            (
+                "(define (outer-func x) (define (inner-func y) (+ x y)) (inner-func 10))",
+                None,
+            ),
             ("(outer-func 5)", Some(Expr::Integer(15))),
         ];
         validate(cases);
@@ -1265,7 +1268,10 @@ mod tests {
     #[test]
     fn test_function_scope() {
         let cases = vec![
-            ("(define (outer x) (define y (+ x 1)) (lambda (z) (+ y z)))", None),
+            (
+                "(define (outer x) (define y (+ x 1)) (lambda (z) (+ y z)))",
+                None,
+            ),
             ("((outer 3) 2)", Some(Expr::Integer(6))),
         ];
         validate(cases);
