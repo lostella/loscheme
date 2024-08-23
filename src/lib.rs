@@ -409,8 +409,19 @@ fn builtin_length(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'
     }
     match &values[0] {
         Expr::List(v) => Ok(Some(Expr::Integer(v.len() as i64))),
-        _ => Err("Apply needs a list as argument"),
+        _ => Err("Length needs a list as argument"),
     }
+}
+
+fn builtin_append(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
+    let mut all = Vec::new();
+    for value in values {
+        match value {
+            Expr::List(v) => all.extend(v),
+            _ => return Err("Append needs lists as arguments"),
+        }
+    }
+    Ok(Some(Expr::List(all)))
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -489,6 +500,7 @@ impl Environment {
             ("list", builtin_list as BuiltInFnType),
             ("apply", builtin_apply as BuiltInFnType),
             ("length", builtin_length as BuiltInFnType),
+            ("append", builtin_append as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(
@@ -917,6 +929,15 @@ mod tests {
             ),
             ("(length '())", Some(Expr::Integer(0))),
             ("(length '(4 5 6))", Some(Expr::Integer(3))),
+            (
+                "(append '(1 2) '(3) '() '(4))",
+                Some(Expr::List(vec![
+                    Expr::Integer(1),
+                    Expr::Integer(2),
+                    Expr::Integer(3),
+                    Expr::Integer(4),
+                ])),
+            ),
         ];
         validate(cases);
     }
