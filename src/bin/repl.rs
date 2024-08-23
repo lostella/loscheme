@@ -18,16 +18,23 @@ fn main() {
             }
             Ok(_) => {
                 input = input.trim().to_string();
-                let expr = &parse_code(&input).unwrap()[0];
-                let res = env.evaluate(expr);
-                println!("=> {:?}", res);
+                match parse_code(&input) {
+                    Ok(exprs) => {
+                        for expr in exprs {
+                            let res = env.evaluate(&expr);
+                            match res {
+                                Ok(Some(v)) => println!("{}", v.to_string()),
+                                Ok(None) => println!(),
+                                Err(err) => println!("Error (eval): {}", err),
+                            };
+                        }
+                    }
+                    Err(err) => println!("Error (parsing): {}", err),
+                }
             }
             Err(err) => {
-                println!("Error: {}", err);
-                break;
+                println!("Error (I/O): {}", err);
             }
         }
     }
-
-    println!("Exiting...");
 }

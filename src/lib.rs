@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::{zip, Peekable};
 use std::rc::Rc;
-use std::str::Chars;
+use std::str::{Chars, FromStr};
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
@@ -104,18 +104,35 @@ pub enum Keyword {
     // TODO add more special forms here
 }
 
-impl Keyword {
-    fn from_str(s: &str) -> Option<Self> {
+impl FromStr for Keyword {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "lambda" => Some(Keyword::Lambda),
-            "quote" => Some(Keyword::Quote),
-            "define" => Some(Keyword::Define),
-            "if" => Some(Keyword::If),
-            "let" => Some(Keyword::Let),
-            "begin" => Some(Keyword::Begin),
-            "and" => Some(Keyword::And),
-            "or" => Some(Keyword::Or),
-            _ => None,
+            "lambda" => Ok(Keyword::Lambda),
+            "quote" => Ok(Keyword::Quote),
+            "define" => Ok(Keyword::Define),
+            "if" => Ok(Keyword::If),
+            "let" => Ok(Keyword::Let),
+            "begin" => Ok(Keyword::Begin),
+            "and" => Ok(Keyword::And),
+            "or" => Ok(Keyword::Or),
+            _ => Err("Not a keyword"),
+        }
+    }
+}
+
+impl ToString for Keyword {
+    fn to_string(&self) -> String {
+        match self {
+            Keyword::Lambda => "lambda".to_string(),
+            Keyword::Quote => "quote".to_string(),
+            Keyword::Define => "define".to_string(),
+            Keyword::If => "if".to_string(),
+            Keyword::Let => "let".to_string(),
+            Keyword::Begin => "begin".to_string(),
+            Keyword::And => "and".to_string(),
+            Keyword::Or => "or".to_string(),
         }
     }
 }
@@ -195,7 +212,7 @@ impl<'a> Parser<'a> {
             Ok(Expr::Bool(false))
         } else if s.starts_with('"') && s.ends_with('"') {
             Ok(Expr::Str(s[1..s.len() - 1].to_string()))
-        } else if let Some(keyword) = Keyword::from_str(&s) {
+        } else if let Ok(keyword) = Keyword::from_str(&s) {
             Ok(Expr::Keyword(keyword))
         } else {
             Ok(Expr::Symbol(s))
@@ -207,6 +224,29 @@ pub fn parse_code(code: &str) -> Result<Vec<Expr>, &'static str> {
     let tokenizer = Tokenizer::new(code);
     let mut parser = Parser::new(tokenizer);
     parser.parse()
+}
+
+impl ToString for Expr {
+    fn to_string(&self) -> String {
+        match self {
+            Expr::Bool(v) => v.to_string(),
+            Expr::Integer(v) => v.to_string(),
+            Expr::Float(v) => v.to_string(),
+            Expr::Str(v) => "\"".to_string() + v + "\"",
+            Expr::List(v) => {
+                let mut res = String::new();
+                res.push('(');
+                let strings: Vec<String> = v.iter().map(|x| x.to_string()).collect();
+                res.push_str(&strings.join(" "));
+                res.push(')');
+                res
+            }
+            Expr::Symbol(s) => s.to_string(),
+            Expr::Keyword(k) => k.to_string(),
+            Expr::Procedure(Procedure::BuiltIn(_)) => "#[built-in procedure]".to_string(),
+            Expr::Procedure(Procedure::UserDefined(_)) => "#[user-defined procedure]".to_string(),
+        }
+    }
 }
 
 impl Expr {
@@ -874,6 +914,31 @@ mod tests {
         ])];
         let expressions: Vec<Expr> = parse_code(code).unwrap();
         assert_eq!(expressions, expected);
+    }
+
+    #[test]
+    fn test_external_repr() {
+        let expr = Expr::List(vec![
+            Expr::Keyword(Keyword::Define),
+            Expr::List(vec![
+                Expr::Symbol("f".to_string()),
+                Expr::Symbol("x".to_string()),
+            ]),
+            Expr::Str("hello, world!".to_string()),
+            Expr::List(vec![
+                Expr::Keyword(Keyword::Quote),
+                Expr::Symbol("a".to_string()),
+            ]),
+            Expr::List(vec![
+                Expr::Symbol("*".to_string()),
+                Expr::Symbol("x".to_string()),
+                Expr::Symbol("2".to_string()),
+            ]),
+        ]);
+        assert_eq!(
+            expr.to_string(),
+            "(define (f x) \"hello, world!\" (quote a) (* x 2))"
+        );
     }
 
     #[test]
