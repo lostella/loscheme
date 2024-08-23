@@ -424,6 +424,46 @@ fn builtin_append(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'
     Ok(Some(Expr::List(all)))
 }
 
+fn builtin_islist(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("List? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::List(_) => Ok(Some(Expr::Bool(true))),
+        _ => Ok(Some(Expr::Bool(false))),
+    }
+}
+
+fn builtin_isnull(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Null? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::List(v) => Ok(Some(Expr::Bool(v.is_empty()))),
+        _ => Ok(Some(Expr::Bool(false))),
+    }
+}
+
+fn builtin_isnumber(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Number? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Float(_) | Expr::Integer(_) => Ok(Some(Expr::Bool(true))),
+        _ => Ok(Some(Expr::Bool(false))),
+    }
+}
+
+fn builtin_issymbol(values: Vec<Expr>, _: &Environment) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Number? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Symbol(_) => Ok(Some(Expr::Bool(true))),
+        _ => Ok(Some(Expr::Bool(false))),
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
     data: HashMap<String, Expr>,
@@ -501,6 +541,10 @@ impl Environment {
             ("apply", builtin_apply as BuiltInFnType),
             ("length", builtin_length as BuiltInFnType),
             ("append", builtin_append as BuiltInFnType),
+            ("list?", builtin_islist as BuiltInFnType),
+            ("null?", builtin_isnull as BuiltInFnType),
+            ("number?", builtin_isnumber as BuiltInFnType),
+            ("symbol?", builtin_issymbol as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(
@@ -969,6 +1013,35 @@ mod tests {
             ("(eval '(* 3 4))", Some(Expr::Integer(12))),
             ("(define (f x) (eval '(* 3 x)))", None),
             ("(f 5)", Some(Expr::Integer(15))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_predicates() {
+        let cases = vec![
+            ("(list? '())", Some(Expr::Bool(true))),
+            ("(list? '(1 2 3))", Some(Expr::Bool(true))),
+            ("(list? (list 1 2 3))", Some(Expr::Bool(true))),
+            ("(list? 42)", Some(Expr::Bool(false))),
+            ("(null? 0)", Some(Expr::Bool(false))),
+            ("(null? #f)", Some(Expr::Bool(false))),
+            ("(null? '())", Some(Expr::Bool(true))),
+            ("(null? '(1))", Some(Expr::Bool(false))),
+            ("(number? 42)", Some(Expr::Bool(true))),
+            ("(number? 42.0)", Some(Expr::Bool(true))),
+            ("(number? \"hello\")", Some(Expr::Bool(false))),
+            ("(number? 'a)", Some(Expr::Bool(false))),
+            ("(number? '())", Some(Expr::Bool(false))),
+            ("(number? '(1 2 3))", Some(Expr::Bool(false))),
+            ("(number? #t)", Some(Expr::Bool(false))),
+            ("(symbol? 42)", Some(Expr::Bool(false))),
+            ("(symbol? 42.0)", Some(Expr::Bool(false))),
+            ("(symbol? \"hello\")", Some(Expr::Bool(false))),
+            ("(symbol? 'a)", Some(Expr::Bool(true))),
+            ("(symbol? '())", Some(Expr::Bool(false))),
+            ("(symbol? '(1 2 3))", Some(Expr::Bool(false))),
+            ("(symbol? #t)", Some(Expr::Bool(false))),
         ];
         validate(cases);
     }
