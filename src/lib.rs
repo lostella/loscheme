@@ -98,6 +98,7 @@ pub enum Keyword {
     Quote,
     Define,
     If,
+    Cond,
     Let,
     Set,
     Begin,
@@ -115,6 +116,7 @@ impl FromStr for Keyword {
             "quote" => Ok(Keyword::Quote),
             "define" => Ok(Keyword::Define),
             "if" => Ok(Keyword::If),
+            "cond" => Ok(Keyword::Cond),
             "let" => Ok(Keyword::Let),
             "set!" => Ok(Keyword::Set),
             "begin" => Ok(Keyword::Begin),
@@ -132,6 +134,7 @@ impl fmt::Display for Keyword {
             Keyword::Quote => write!(f, "quote"),
             Keyword::Define => write!(f, "define"),
             Keyword::If => write!(f, "if"),
+            Keyword::Cond => write!(f, "cond"),
             Keyword::Let => write!(f, "let"),
             Keyword::Set => write!(f, "set!"),
             Keyword::Begin => write!(f, "begin"),
@@ -683,6 +686,7 @@ impl Environment {
             Expr::Keyword(Keyword::Quote) => self.evaluate_quote(&exprs[1..]),
             Expr::Keyword(Keyword::Define) => self.evaluate_define(&exprs[1..]),
             Expr::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
+            Expr::Keyword(Keyword::Cond) => self.evaluate_cond(&exprs[1..]),
             Expr::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
             Expr::Keyword(Keyword::Set) => self.evaluate_set(&exprs[1..]),
             Expr::Keyword(Keyword::Begin) => self.evaluate_begin(&exprs[1..]),
@@ -765,6 +769,27 @@ impl Environment {
             Some(Expr::Bool(false)) => self.evaluate(&args[2]),
             _ => Err("First argument to if did not evaluate to a boolean"),
         }
+    }
+
+    fn evaluate_cond(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+        for clause in args {
+            match clause {
+                Expr::List(v) => {
+                    if let Expr::Symbol(s) = &v[0] {
+                        if s == "else" {
+                            return self.evaluate_begin(&v[1..]);
+                        }
+                    }
+                    match self.evaluate(&v[0])? {
+                        Some(Expr::Bool(true)) => return self.evaluate_begin(&v[1..]),
+                        Some(Expr::Bool(false)) => continue,
+                        _ => return Err("Clause did not evaluate to a boolean"),
+                    }
+                }
+                _ => return Err("Not a list"),
+            }
+        }
+        Ok(None)
     }
 
     fn evaluate_let(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
@@ -1370,6 +1395,20 @@ mod tests {
                 "(cdr '(1 2 3))",
                 Some(Expr::List(vec![Expr::Integer(2), Expr::Integer(3)])),
             ),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_cond() {
+        let cases = vec![
+            (
+                "(define (f x) (cond ((< x 0) 'negative) ((> x 0) 'positive) (else 'zero)))",
+                None,
+            ),
+            ("(f -1)", Some(Expr::Symbol("negative".to_string()))),
+            ("(f 0)", Some(Expr::Symbol("zero".to_string()))),
+            ("(f 1)", Some(Expr::Symbol("positive".to_string()))),
         ];
         validate(cases);
     }
