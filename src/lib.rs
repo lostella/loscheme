@@ -98,6 +98,8 @@ pub enum Keyword {
     Quote,
     Define,
     If,
+    When,
+    Unless,
     Cond,
     Let,
     Set,
@@ -116,6 +118,8 @@ impl FromStr for Keyword {
             "quote" => Ok(Keyword::Quote),
             "define" => Ok(Keyword::Define),
             "if" => Ok(Keyword::If),
+            "when" => Ok(Keyword::When),
+            "unless" => Ok(Keyword::Unless),
             "cond" => Ok(Keyword::Cond),
             "let" => Ok(Keyword::Let),
             "set!" => Ok(Keyword::Set),
@@ -134,6 +138,8 @@ impl fmt::Display for Keyword {
             Keyword::Quote => write!(f, "quote"),
             Keyword::Define => write!(f, "define"),
             Keyword::If => write!(f, "if"),
+            Keyword::When => write!(f, "when"),
+            Keyword::Unless => write!(f, "unless"),
             Keyword::Cond => write!(f, "cond"),
             Keyword::Let => write!(f, "let"),
             Keyword::Set => write!(f, "set!"),
@@ -687,6 +693,8 @@ impl Environment {
             Expr::Keyword(Keyword::Define) => self.evaluate_define(&exprs[1..]),
             Expr::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
             Expr::Keyword(Keyword::Cond) => self.evaluate_cond(&exprs[1..]),
+            Expr::Keyword(Keyword::When) => self.evaluate_when(&exprs[1..]),
+            Expr::Keyword(Keyword::Unless) => self.evaluate_unless(&exprs[1..]),
             Expr::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
             Expr::Keyword(Keyword::Set) => self.evaluate_set(&exprs[1..]),
             Expr::Keyword(Keyword::Begin) => self.evaluate_begin(&exprs[1..]),
@@ -761,12 +769,18 @@ impl Environment {
     }
 
     fn evaluate_if(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
-        if args.len() != 3 {
-            return Err("If needs exactly three arguments");
+        if args.len() < 2 || args.len() > 3 {
+            return Err("If accepts two or three arguments");
         }
         match self.evaluate(&args[0])? {
             Some(Expr::Bool(true)) => self.evaluate(&args[1]),
-            Some(Expr::Bool(false)) => self.evaluate(&args[2]),
+            Some(Expr::Bool(false)) => {
+                if args.len() == 2 {
+                    Ok(None)
+                } else {
+                    self.evaluate(&args[2])
+                }
+            }
             _ => Err("First argument to if did not evaluate to a boolean"),
         }
     }
@@ -789,6 +803,30 @@ impl Environment {
                 _ => return Err("Not a list"),
             }
         }
+        Ok(None)
+    }
+
+    fn evaluate_when(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+        if args.is_empty() {
+            return Err("When needs at least one argument");
+        }
+        let _ = match self.evaluate(&args[0])? {
+            Some(Expr::Bool(true)) => self.evaluate_begin(&args[1..]),
+            Some(Expr::Bool(false)) => Ok(None),
+            _ => Err("First argument to when did not evaluate to a boolean"),
+        };
+        Ok(None)
+    }
+
+    fn evaluate_unless(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+        if args.is_empty() {
+            return Err("Unless needs at least one argument");
+        }
+        let _ = match self.evaluate(&args[0])? {
+            Some(Expr::Bool(true)) => Ok(None),
+            Some(Expr::Bool(false)) => self.evaluate_begin(&args[1..]),
+            _ => Err("First argument to unless did not evaluate to a boolean"),
+        };
         Ok(None)
     }
 
@@ -1409,6 +1447,22 @@ mod tests {
             ("(f -1)", Some(Expr::Symbol("negative".to_string()))),
             ("(f 0)", Some(Expr::Symbol("zero".to_string()))),
             ("(f 1)", Some(Expr::Symbol("positive".to_string()))),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_when_unless() {
+        let cases = vec![
+            ("(define a 42)", None),
+            ("(when (> 0 1) (set! a 43))", None),
+            ("a", Some(Expr::Integer(42))),
+            ("(when (> 1 0) (set! a 44))", None),
+            ("a", Some(Expr::Integer(44))),
+            ("(unless (> 0 1) (set! a 43))", None),
+            ("a", Some(Expr::Integer(43))),
+            ("(unless (> 1 0) (set! a 42))", None),
+            ("a", Some(Expr::Integer(43))),
         ];
         validate(cases);
     }
