@@ -497,10 +497,9 @@ fn builtin_length(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Cons(_) => Ok(Some(Expr::Integer(values[0].to_vec()?.len() as i64))),
-        Expr::Null => Ok(Some(Expr::Integer(0 as i64))),
-        _ => Err("Length needs a list as argument"),
+    match &values[0].to_vec() {
+        Ok(v) => Ok(Some(Expr::Integer(v.len() as i64))),
+        _ => Err("Cannot compute length (is it a list?)"),
     }
 }
 
@@ -747,7 +746,7 @@ impl Environment {
     }
 
     fn evaluate_lambda(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
-        if args.len() < 1 {
+        if args.is_empty() {
             return Err("Lambda needs at least one argument");
         }
         match &args[0] {
