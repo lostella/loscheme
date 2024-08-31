@@ -151,15 +151,22 @@ impl fmt::Display for Keyword {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct Cons {
+    car: Expr,
+    cdr: Expr,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
+    Null,
     Integer(i64),
     Float(f64),
     Str(String),
     Bool(bool),
-    Procedure(Procedure),
-    List(Vec<Expr>),
     Keyword(Keyword),
     Symbol(String),
+    Procedure(Procedure),
+    Cons(Box<Cons>),
 }
 
 pub struct Parser<'a> {
@@ -192,15 +199,17 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_list(&mut self) -> Result<Expr, &'static str> {
-        let mut expressions = Vec::new();
-        while let Some(token) = self.tokens.peek() {
+        if let Some(token) = self.tokens.peek() {
             match token {
                 Token::RParen => {
                     self.tokens.next();
-                    return Ok(Expr::List(expressions));
+                    return Ok(Expr::Null);
                 }
                 _ => {
-                    expressions.push(self.parse_expression()?);
+                    return Ok(Expr::Cons(Box::new(Cons {
+                        car: self.parse_expression()?,
+                        cdr: self.parse_list()?,
+                    })));
                 }
             }
         }
@@ -208,10 +217,13 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_quote(&mut self) -> Result<Expr, &'static str> {
-        Ok(Expr::List(vec![
-            Expr::Keyword(Keyword::Quote),
-            self.parse_expression()?,
-        ]))
+        Ok(Expr::Cons(Box::new(Cons {
+            car: Expr::Keyword(Keyword::Quote),
+            cdr: Expr::Cons(Box::new(Cons {
+                car: self.parse_expression()?,
+                cdr: Expr::Null,
+            })),
+        })))
     }
 
     fn parse_atom(&self, s: String) -> Result<Expr, &'static str> {
@@ -242,27 +254,60 @@ pub fn parse_code(code: &str) -> Result<Vec<Expr>, &'static str> {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Expr::Null => write!(f, "()"),
             Expr::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
             Expr::Integer(v) => write!(f, "{}", v),
             Expr::Float(v) => write!(f, "{}", v),
             Expr::Str(v) => write!(f, "\"{}\"", v),
-            Expr::List(v) => {
-                let mut res = String::new();
-                res.push('(');
-                let strings: Vec<String> = v.iter().map(|x| x.to_string()).collect();
-                res.push_str(&strings.join(" "));
-                res.push(')');
-                write!(f, "{res}")
-            }
-            Expr::Symbol(s) => write!(f, "{}", s),
             Expr::Keyword(k) => write!(f, "{}", k),
+            Expr::Symbol(s) => write!(f, "{}", s),
             Expr::Procedure(Procedure::BuiltIn(_)) => write!(f, "#[built-in procedure]"),
             Expr::Procedure(Procedure::UserDefined(_)) => write!(f, "#[user-defined procedure]"),
+            Expr::Cons(_) => {
+                write!(f, "(")?;
+                let mut strings = Vec::new();
+                match self.to_vec() {
+                    Ok(v) => {
+                        for x in v {
+                            strings.push(x.to_string());
+                        }
+                    }
+                    _ => strings.push("!!!".to_string()),
+                }
+                let inner = &strings.join(" ");
+                write!(f, "{inner})")?;
+                Ok(())
+            }
         }
     }
 }
 
 impl Expr {
+    fn from_vec(v: Vec<Expr>) -> Self {
+        match v.len() {
+            0 => Expr::Null,
+            _ => Expr::Cons(Box::new(Cons {
+                car: v[0].clone(),
+                cdr: Expr::from_vec(v[1..].to_vec()),
+            })),
+        }
+    }
+
+    fn to_vec(&self) -> Result<Vec<Expr>, &'static str> {
+        let mut res = Vec::new();
+        let mut cur = self;
+        loop {
+            match cur {
+                Expr::Cons(pair) => {
+                    res.push(pair.car.clone());
+                    cur = &pair.cdr;
+                }
+                Expr::Null => return Ok(res),
+                _ => return Err("Not a proper list"),
+            }
+        }
+    }
+
     fn add(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a + b)),
@@ -435,15 +480,15 @@ fn builtin_not(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
 }
 
 fn builtin_list(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
-    Ok(Some(Expr::List(values)))
+    Ok(Some(Expr::from_vec(values)))
 }
 
 fn builtin_apply(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 2 {
         return Err("Apply needs exactly two argument");
     }
-    match (&values[0], &values[1]) {
-        (Expr::Procedure(proc), Expr::List(v)) => proc.call(v.to_vec()),
+    match &values[0] {
+        Expr::Procedure(proc) => proc.call(values[1].to_vec()?),
         _ => Err("Apply needs a procedure and a list as arguments"),
     }
 }
@@ -452,9 +497,9 @@ fn builtin_length(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument");
     }
-    match &values[0] {
-        Expr::List(v) => Ok(Some(Expr::Integer(v.len() as i64))),
-        _ => Err("Length needs a list as argument"),
+    match &values[0].to_vec() {
+        Ok(v) => Ok(Some(Expr::Integer(v.len() as i64))),
+        _ => Err("Cannot compute length (is it a list?)"),
     }
 }
 
@@ -462,11 +507,22 @@ fn builtin_append(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     let mut all = Vec::new();
     for value in values {
         match value {
-            Expr::List(v) => all.extend(v),
+            Expr::Cons(_) => all.extend(value.to_vec()?),
+            Expr::Null => (),
             _ => return Err("Append needs lists as arguments"),
         }
     }
-    Ok(Some(Expr::List(all)))
+    Ok(Some(Expr::from_vec(all)))
+}
+
+fn builtin_ispair(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Pair? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Cons(_) => Ok(Some(Expr::Bool(true))),
+        _ => Ok(Some(Expr::Bool(false))),
+    }
 }
 
 fn builtin_islist(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
@@ -474,7 +530,12 @@ fn builtin_islist(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         return Err("List? needs exactly one argument");
     }
     match &values[0] {
-        Expr::List(_) => Ok(Some(Expr::Bool(true))),
+        Expr::Cons(pair) => match builtin_islist(vec![pair.cdr.clone()])? {
+            Some(Expr::Bool(true)) => Ok(Some(Expr::Bool(true))),
+            Some(Expr::Bool(false)) => Ok(Some(Expr::Bool(false))),
+            _ => Err("Unexpected non-boolean"),
+        },
+        Expr::Null => Ok(Some(Expr::Bool(true))),
         _ => Ok(Some(Expr::Bool(false))),
     }
 }
@@ -484,7 +545,7 @@ fn builtin_isnull(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         return Err("Null? needs exactly one argument");
     }
     match &values[0] {
-        Expr::List(v) => Ok(Some(Expr::Bool(v.is_empty()))),
+        Expr::Null => Ok(Some(Expr::Bool(true))),
         _ => Ok(Some(Expr::Bool(false))),
     }
 }
@@ -513,15 +574,10 @@ fn builtin_cons(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 2 {
         return Err("Cons needs exactly two argument");
     }
-    match &values[1] {
-        Expr::List(v) => {
-            let mut res = Vec::new();
-            res.push(values[0].clone());
-            res.append(&mut v.clone());
-            Ok(Some(Expr::List(res)))
-        }
-        _ => Err("Cons needs a list as second argument"),
-    }
+    Ok(Some(Expr::Cons(Box::new(Cons {
+        car: values[0].clone(),
+        cdr: values[1].clone(),
+    }))))
 }
 
 fn builtin_car(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
@@ -529,13 +585,8 @@ fn builtin_car(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         return Err("Car needs exactly one argument");
     }
     match &values[0] {
-        Expr::List(v) => {
-            if v.is_empty() {
-                return Err("List must be non-empty");
-            }
-            Ok(Some(v[0].clone()))
-        }
-        _ => Err("Car needs a list as argument"),
+        Expr::Cons(p) => Ok(Some(p.car.clone())),
+        _ => Err("Car needs a pair as argument"),
     }
 }
 
@@ -544,13 +595,8 @@ fn builtin_cdr(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         return Err("Cdr needs exactly one argument");
     }
     match &values[0] {
-        Expr::List(v) => {
-            if v.is_empty() {
-                return Err("List must be non-empty");
-            }
-            Ok(Some(Expr::List(v[1..].to_vec())))
-        }
-        _ => Err("Cdr needs a list as argument"),
+        Expr::Cons(p) => Ok(Some(p.cdr.clone())),
+        _ => Err("Cdr needs a pair as argument"),
     }
 }
 
@@ -630,6 +676,7 @@ impl Environment {
             ("apply", builtin_apply as BuiltInFnType),
             ("length", builtin_length as BuiltInFnType),
             ("append", builtin_append as BuiltInFnType),
+            ("pair?", builtin_ispair as BuiltInFnType),
             ("list?", builtin_islist as BuiltInFnType),
             ("null?", builtin_isnull as BuiltInFnType),
             ("number?", builtin_isnumber as BuiltInFnType),
@@ -661,12 +708,38 @@ impl Environment {
             Expr::Float(_) => Ok(Some(expr.clone())),
             Expr::Str(_) => Ok(Some(expr.clone())),
             Expr::Bool(_) => Ok(Some(expr.clone())),
-            Expr::List(v) => self.evaluate_nonatomic(v),
+            Expr::Cons(p) => self.evaluate_pair(p),
             Expr::Symbol(s) => match self.get(s) {
                 Some(value) => Ok(Some(value.clone())),
                 None => Err("Undefined symbol"),
             },
             _ => Err("Cannot evaluate expression"),
+        }
+    }
+
+    fn evaluate_pair(&mut self, pair: &Cons) -> Result<Option<Expr>, &'static str> {
+        let args = pair.cdr.to_vec()?;
+
+        match &pair.car {
+            Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(&args),
+            Expr::Keyword(Keyword::Quote) => self.evaluate_quote(&args),
+            Expr::Keyword(Keyword::Define) => self.evaluate_define(&args),
+            Expr::Keyword(Keyword::If) => self.evaluate_if(&args),
+            Expr::Keyword(Keyword::Cond) => self.evaluate_cond(&args),
+            Expr::Keyword(Keyword::When) => self.evaluate_when(&args),
+            Expr::Keyword(Keyword::Unless) => self.evaluate_unless(&args),
+            Expr::Keyword(Keyword::Let) => self.evaluate_let(&args),
+            Expr::Keyword(Keyword::Set) => self.evaluate_set(&args),
+            Expr::Keyword(Keyword::Begin) => self.evaluate_begin(&args),
+            Expr::Keyword(Keyword::And) => self.evaluate_and(&args),
+            Expr::Keyword(Keyword::Or) => self.evaluate_or(&args),
+            _ => match self.evaluate(&pair.car) {
+                Ok(Some(Expr::Procedure(proc))) => {
+                    let call_args = self.evaluate_non_none_args(&args)?;
+                    proc.call(call_args)
+                }
+                _ => Err("Not a procedure call"),
+            },
         }
     }
 
@@ -683,44 +756,24 @@ impl Environment {
         Ok(res)
     }
 
-    fn evaluate_nonatomic(&mut self, exprs: &[Expr]) -> Result<Option<Expr>, &'static str> {
-        if exprs.is_empty() {
-            return Err("Cannot evaluate empty, non-atomic expressions");
-        }
-        match &exprs[0] {
-            Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(&exprs[1..]),
-            Expr::Keyword(Keyword::Quote) => self.evaluate_quote(&exprs[1..]),
-            Expr::Keyword(Keyword::Define) => self.evaluate_define(&exprs[1..]),
-            Expr::Keyword(Keyword::If) => self.evaluate_if(&exprs[1..]),
-            Expr::Keyword(Keyword::Cond) => self.evaluate_cond(&exprs[1..]),
-            Expr::Keyword(Keyword::When) => self.evaluate_when(&exprs[1..]),
-            Expr::Keyword(Keyword::Unless) => self.evaluate_unless(&exprs[1..]),
-            Expr::Keyword(Keyword::Let) => self.evaluate_let(&exprs[1..]),
-            Expr::Keyword(Keyword::Set) => self.evaluate_set(&exprs[1..]),
-            Expr::Keyword(Keyword::Begin) => self.evaluate_begin(&exprs[1..]),
-            Expr::Keyword(Keyword::And) => self.evaluate_and(&exprs[1..]),
-            Expr::Keyword(Keyword::Or) => self.evaluate_or(&exprs[1..]),
-            _ => match self.evaluate(&exprs[0]) {
-                Ok(Some(Expr::Procedure(p))) => {
-                    let args = self.evaluate_non_none_args(&exprs[1..])?;
-                    p.call(args)
-                }
-                _ => Err("Not a procedure call"),
-            },
-        }
-    }
-
     fn evaluate_lambda(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+        if args.is_empty() {
+            return Err("Lambda needs at least one argument");
+        }
         match &args[0] {
-            Expr::List(v) => {
-                let mut ids = Vec::with_capacity(v.len());
-                for expr in v {
+            Expr::Cons(_) => {
+                let mut params = Vec::new();
+                for expr in &args[0].to_vec()? {
                     match expr {
-                        Expr::Symbol(s) => ids.push(s.clone()),
+                        Expr::Symbol(s) => params.push(s.to_string()),
                         _ => return Err("Not a symbol"),
                     }
                 }
-                let proc = UserDefinedProcedure::new(ids, args[1..].to_vec(), self.clone());
+                let proc = UserDefinedProcedure {
+                    params,
+                    body: args[1..].to_vec(),
+                    env: self.clone(),
+                };
                 Ok(Some(Expr::Procedure(Procedure::UserDefined(proc))))
             }
             _ => Err("First argument to lambda must be a list of symbols"),
@@ -729,7 +782,7 @@ impl Environment {
 
     fn evaluate_quote(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
         if args.len() != 1 {
-            return Err("Quote needs exactly one arguments");
+            return Err("Quote needs exactly one argument");
         }
         Ok(Some(args[0].clone()))
     }
@@ -748,7 +801,8 @@ impl Environment {
                 }
                 Ok(None)
             }
-            Expr::List(v) => {
+            Expr::Cons(_) => {
+                let v = &args[0].to_vec()?;
                 let mut ids = Vec::with_capacity(v.len() - 1);
                 for expr in v {
                     match expr {
@@ -756,8 +810,11 @@ impl Environment {
                         _ => return Err("Not a symbol"),
                     }
                 }
-                let proc =
-                    UserDefinedProcedure::new(ids[1..].to_vec(), args[1..].to_vec(), self.clone());
+                let proc = UserDefinedProcedure {
+                    params: ids[1..].to_vec(),
+                    body: args[1..].to_vec(),
+                    env: self.clone(),
+                };
                 self.set(
                     ids[0].to_string(),
                     Expr::Procedure(Procedure::UserDefined(proc)),
@@ -788,7 +845,8 @@ impl Environment {
     fn evaluate_cond(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
         for clause in args {
             match clause {
-                Expr::List(v) => {
+                Expr::Cons(_) => {
+                    let v = clause.to_vec()?;
                     if let Expr::Symbol(s) = &v[0] {
                         if s == "else" {
                             return self.evaluate_begin(&v[1..]);
@@ -834,11 +892,13 @@ impl Environment {
         if args.is_empty() {
             return Err("Let needs at least one argument");
         }
-        if let Expr::List(v) = &args[0] {
+        if let Expr::Cons(_) = &args[0] {
+            let v = args[0].to_vec()?;
             let mut child = self.child();
             for expr in v {
                 match expr {
-                    Expr::List(p) => {
+                    Expr::Cons(_) => {
+                        let p = expr.to_vec()?;
                         if p.len() != 2 {
                             return Err("Not a 2-list");
                         }
@@ -939,12 +999,6 @@ pub struct UserDefinedProcedure {
     env: Environment,
 }
 
-impl UserDefinedProcedure {
-    pub fn new(params: Vec<String>, body: Vec<Expr>, env: Environment) -> Self {
-        Self { params, body, env }
-    }
-}
-
 impl Callable for UserDefinedProcedure {
     fn call(&self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.len() != self.params.len() {
@@ -1029,13 +1083,13 @@ mod tests {
     #[test]
     fn test_parser() {
         let code = "(define (square x) (* x x))";
-        let expected = vec![Expr::List(vec![
+        let expected = vec![Expr::from_vec(vec![
             Expr::Keyword(Keyword::Define),
-            Expr::List(vec![
+            Expr::from_vec(vec![
                 Expr::Symbol("square".to_string()),
                 Expr::Symbol("x".to_string()),
             ]),
-            Expr::List(vec![
+            Expr::from_vec(vec![
                 Expr::Symbol("*".to_string()),
                 Expr::Symbol("x".to_string()),
                 Expr::Symbol("x".to_string()),
@@ -1046,19 +1100,27 @@ mod tests {
     }
 
     #[test]
+    fn test_pair_vs_vec() {
+        let v = vec![Expr::Integer(3), Expr::Integer(2), Expr::Integer(1)];
+        let expr = Expr::from_vec(v.clone());
+        let res = expr.to_vec();
+        assert_eq!(res, Ok(v));
+    }
+
+    #[test]
     fn test_external_repr() {
-        let expr = Expr::List(vec![
+        let expr = Expr::from_vec(vec![
             Expr::Keyword(Keyword::Define),
-            Expr::List(vec![
+            Expr::from_vec(vec![
                 Expr::Symbol("f".to_string()),
                 Expr::Symbol("x".to_string()),
             ]),
             Expr::Str("hello, world!".to_string()),
-            Expr::List(vec![
+            Expr::from_vec(vec![
                 Expr::Keyword(Keyword::Quote),
                 Expr::Symbol("a".to_string()),
             ]),
-            Expr::List(vec![
+            Expr::from_vec(vec![
                 Expr::Symbol("*".to_string()),
                 Expr::Symbol("x".to_string()),
                 Expr::Symbol("2".to_string()),
@@ -1145,7 +1207,7 @@ mod tests {
             ("(>= 1 1 2)", Some(Expr::Bool(false))),
             (
                 "(list 1 2 3)",
-                Some(Expr::List(vec![
+                Some(Expr::from_vec(vec![
                     Expr::Integer(1),
                     Expr::Integer(2),
                     Expr::Integer(3),
@@ -1167,7 +1229,7 @@ mod tests {
             ("(length '(4 5 6))", Some(Expr::Integer(3))),
             (
                 "(append '(1 2) '(3) '() '(4))",
-                Some(Expr::List(vec![
+                Some(Expr::from_vec(vec![
                     Expr::Integer(1),
                     Expr::Integer(2),
                     Expr::Integer(3),
@@ -1198,15 +1260,29 @@ mod tests {
     #[test]
     fn test_quote() {
         let cases = vec![
-            ("'()", Some(Expr::List(vec![]))),
+            ("(quote ())", Some(Expr::from_vec(vec![]))),
+            (
+                "(quote (#t #f))",
+                Some(Expr::from_vec(vec![Expr::Bool(true), Expr::Bool(false)])),
+            ),
+            ("(quote 42.0)", Some(Expr::Float(42.0))),
+            (
+                "(quote (* 3 4))",
+                Some(Expr::from_vec(vec![
+                    Expr::Symbol("*".to_string()),
+                    Expr::Integer(3),
+                    Expr::Integer(4),
+                ])),
+            ),
+            ("'()", Some(Expr::from_vec(vec![]))),
             (
                 "'(#t #f)",
-                Some(Expr::List(vec![Expr::Bool(true), Expr::Bool(false)])),
+                Some(Expr::from_vec(vec![Expr::Bool(true), Expr::Bool(false)])),
             ),
             ("'42.0", Some(Expr::Float(42.0))),
             (
                 "'(* 3 4)",
-                Some(Expr::List(vec![
+                Some(Expr::from_vec(vec![
                     Expr::Symbol("*".to_string()),
                     Expr::Integer(3),
                     Expr::Integer(4),
@@ -1223,6 +1299,12 @@ mod tests {
             ("(list? '(1 2 3))", Some(Expr::Bool(true))),
             ("(list? (list 1 2 3))", Some(Expr::Bool(true))),
             ("(list? 42)", Some(Expr::Bool(false))),
+            ("(list? (cons 17 18))", Some(Expr::Bool(false))),
+            ("(pair? '())", Some(Expr::Bool(false))),
+            ("(pair? '(1 2 3))", Some(Expr::Bool(true))),
+            ("(pair? (list 1 2 3))", Some(Expr::Bool(true))),
+            ("(pair? 42)", Some(Expr::Bool(false))),
+            ("(pair? (cons 17 18))", Some(Expr::Bool(true))),
             ("(null? 0)", Some(Expr::Bool(false))),
             ("(null? #f)", Some(Expr::Bool(false))),
             ("(null? '())", Some(Expr::Bool(true))),
@@ -1419,10 +1501,10 @@ mod tests {
     #[test]
     fn test_cons_car_cdr() {
         let cases = vec![
-            ("(cons 1 '())", Some(Expr::List(vec![Expr::Integer(1)]))),
+            ("(cons 1 '())", Some(Expr::from_vec(vec![Expr::Integer(1)]))),
             (
                 "(cons 1 '(2 3))",
-                Some(Expr::List(vec![
+                Some(Expr::from_vec(vec![
                     Expr::Integer(1),
                     Expr::Integer(2),
                     Expr::Integer(3),
@@ -1431,7 +1513,14 @@ mod tests {
             ("(car '(1 2 3))", Some(Expr::Integer(1))),
             (
                 "(cdr '(1 2 3))",
-                Some(Expr::List(vec![Expr::Integer(2), Expr::Integer(3)])),
+                Some(Expr::from_vec(vec![Expr::Integer(2), Expr::Integer(3)])),
+            ),
+            (
+                "(cons 1 2)",
+                Some(Expr::Cons(Box::new(Cons {
+                    car: Expr::Integer(1),
+                    cdr: Expr::Integer(2),
+                }))),
             ),
         ];
         validate(cases);
