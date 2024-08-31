@@ -515,6 +515,16 @@ fn builtin_append(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     Ok(Some(Expr::from_vec(all)))
 }
 
+fn builtin_ispair(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+    if values.len() != 1 {
+        return Err("Pair? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Cons(_) => Ok(Some(Expr::Bool(true))),
+        _ => Ok(Some(Expr::Bool(false))),
+    }
+}
+
 fn builtin_islist(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("List? needs exactly one argument");
@@ -666,6 +676,7 @@ impl Environment {
             ("apply", builtin_apply as BuiltInFnType),
             ("length", builtin_length as BuiltInFnType),
             ("append", builtin_append as BuiltInFnType),
+            ("pair?", builtin_ispair as BuiltInFnType),
             ("list?", builtin_islist as BuiltInFnType),
             ("null?", builtin_isnull as BuiltInFnType),
             ("number?", builtin_isnumber as BuiltInFnType),
@@ -1288,6 +1299,12 @@ mod tests {
             ("(list? '(1 2 3))", Some(Expr::Bool(true))),
             ("(list? (list 1 2 3))", Some(Expr::Bool(true))),
             ("(list? 42)", Some(Expr::Bool(false))),
+            ("(list? (cons 17 18))", Some(Expr::Bool(false))),
+            ("(pair? '())", Some(Expr::Bool(false))),
+            ("(pair? '(1 2 3))", Some(Expr::Bool(true))),
+            ("(pair? (list 1 2 3))", Some(Expr::Bool(true))),
+            ("(pair? 42)", Some(Expr::Bool(false))),
+            ("(pair? (cons 17 18))", Some(Expr::Bool(true))),
             ("(null? 0)", Some(Expr::Bool(false))),
             ("(null? #f)", Some(Expr::Bool(false))),
             ("(null? '())", Some(Expr::Bool(true))),
@@ -1497,6 +1514,13 @@ mod tests {
             (
                 "(cdr '(1 2 3))",
                 Some(Expr::from_vec(vec![Expr::Integer(2), Expr::Integer(3)])),
+            ),
+            (
+                "(cons 1 2)",
+                Some(Expr::Cons(Box::new(Cons {
+                    car: Expr::Integer(1),
+                    cdr: Expr::Integer(2),
+                }))),
             ),
         ];
         validate(cases);
