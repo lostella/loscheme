@@ -267,12 +267,12 @@ impl fmt::Display for Expr {
                 write!(f, "(")?;
                 let mut cur = p;
                 loop {
-                    write!(f, "{}", p.car)?;
-                    match p.cdr {
+                    write!(f, "{}", cur.car)?;
+                    match &cur.cdr {
                         Expr::Null => break,
                         Expr::Cons(pp) => cur = &pp,
                         _ => {
-                            write!(f, " . {}", p.cdr)?;
+                            write!(f, " . {}", cur.cdr)?;
                             break
                         }
                     }
