@@ -27,15 +27,15 @@ fn main() {
                             match res {
                                 Ok(Some(v)) => println!("{}", v),
                                 Ok(None) => (),
-                                Err(err) => println!("Error (eval): {}", err),
+                                Err(err) => eprintln!("Error (eval): {}", err),
                             };
                         }
                     }
-                    Err(err) => println!("Error (parsing): {}", err),
+                    Err(err) => eprintln!("Error (parsing): {}", err),
                 }
             }
             Err(err) => {
-                println!("Error (I/O): {}", err);
+                eprintln!("Error (I/O): {}", err);
             }
         }
     }
