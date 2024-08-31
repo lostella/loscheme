@@ -1,7 +1,7 @@
 use loscheme::{parse_code, Environment};
 use std::io::{self, BufRead, Write};
 
-const INPUT_PROMPT: &str = "λ~>";
+const INPUT_PROMPT: &str = "λscm>";
 
 fn main() {
     let stdin = io::stdin();
