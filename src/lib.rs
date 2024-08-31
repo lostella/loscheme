@@ -270,10 +270,10 @@ impl fmt::Display for Expr {
                     write!(f, "{}", cur.car)?;
                     match &cur.cdr {
                         Expr::Null => break,
-                        Expr::Cons(pp) => cur = &pp,
+                        Expr::Cons(pp) => cur = pp,
                         _ => {
                             write!(f, " . {}", cur.cdr)?;
-                            break
+                            break;
                         }
                     }
                     write!(f, " ")?;
