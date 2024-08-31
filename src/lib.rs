@@ -263,19 +263,22 @@ impl fmt::Display for Expr {
             Expr::Symbol(s) => write!(f, "{}", s),
             Expr::Procedure(Procedure::BuiltIn(_)) => write!(f, "#[built-in procedure]"),
             Expr::Procedure(Procedure::UserDefined(_)) => write!(f, "#[user-defined procedure]"),
-            Expr::Cons(_) => {
+            Expr::Cons(p) => {
                 write!(f, "(")?;
-                let mut strings = Vec::new();
-                match self.to_vec() {
-                    Ok(v) => {
-                        for x in v {
-                            strings.push(x.to_string());
+                let mut cur = p;
+                loop {
+                    write!(f, "{}", cur.car)?;
+                    match &cur.cdr {
+                        Expr::Null => break,
+                        Expr::Cons(pp) => cur = pp,
+                        _ => {
+                            write!(f, " . {}", cur.cdr)?;
+                            break;
                         }
                     }
-                    _ => strings.push("!!!".to_string()),
+                    write!(f, " ")?;
                 }
-                let inner = &strings.join(" ");
-                write!(f, "{inner})")?;
+                write!(f, ")")?;
                 Ok(())
             }
         }
@@ -1125,10 +1128,14 @@ mod tests {
                 Expr::Symbol("x".to_string()),
                 Expr::Symbol("2".to_string()),
             ]),
+            Expr::Cons(Box::new(Cons {
+                car: Expr::Integer(-1),
+                cdr: Expr::Integer(1),
+            })),
         ]);
         assert_eq!(
             expr.to_string(),
-            "(define (f x) \"hello, world!\" (quote a) (* x 2))"
+            "(define (f x) \"hello, world!\" (quote a) (* x 2) (-1 . 1))"
         );
     }
 
