@@ -1234,14 +1234,6 @@ mod tests {
                 }))),
             ),
             (
-                "(list 1 2 3)",
-                Some(Expr::from_vec(vec![
-                    Expr::Integer(1),
-                    Expr::Integer(2),
-                    Expr::Integer(3),
-                ])),
-            ),
-            (
                 "'(1 . 2)",
                 Some(Expr::Cons(Box::new(Cons {
                     car: Expr::Integer(1),
@@ -1259,7 +1251,33 @@ mod tests {
                 }))),
             ),
             (
+                "'(1 . (2 . 3))",
+                Some(Expr::Cons(Box::new(Cons {
+                    car: Expr::Integer(1),
+                    cdr: Expr::Cons(Box::new(Cons {
+                        car: Expr::Integer(2),
+                        cdr: Expr::Integer(3),
+                    })),
+                }))),
+            ),
+            (
+                "(list 1 2 3)",
+                Some(Expr::from_vec(vec![
+                    Expr::Integer(1),
+                    Expr::Integer(2),
+                    Expr::Integer(3),
+                ])),
+            ),
+            (
                 "'(1 2 3)",
+                Some(Expr::from_vec(vec![
+                    Expr::Integer(1),
+                    Expr::Integer(2),
+                    Expr::Integer(3),
+                ])),
+            ),
+            (
+                "'(1 . (2 . (3 . ())))",
                 Some(Expr::from_vec(vec![
                     Expr::Integer(1),
                     Expr::Integer(2),
