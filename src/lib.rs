@@ -10,6 +10,7 @@ pub enum Token {
     LParen,
     RParen,
     Quote,
+    Dot,
     Atom(String),
 }
 
@@ -79,6 +80,10 @@ impl Iterator for Tokenizer<'_> {
                 '\'' => {
                     self.input.next();
                     return Some(Token::Quote);
+                }
+                '.' => {
+                    self.input.next();
+                    return Some(Token::Dot);
                 }
                 '"' => {
                     return Some(Token::Atom(self.read_string_literal()));
@@ -193,6 +198,7 @@ impl<'a> Parser<'a> {
             Some(Token::LParen) => self.parse_list(),
             Some(Token::Quote) => self.parse_quote(),
             Some(Token::Atom(s)) => self.parse_atom(s),
+            Some(Token::Dot) => Err("Unexpected dot"),
             Some(Token::RParen) => Err("Unexpected closing parenthesis"),
             None => Err("Unexpected end of input"),
         }
@@ -204,6 +210,14 @@ impl<'a> Parser<'a> {
                 Token::RParen => {
                     self.tokens.next();
                     return Ok(Expr::Null);
+                }
+                Token::Dot => {
+                    self.tokens.next();
+                    let res = self.parse_expression();
+                    match self.tokens.next() {
+                        Some(Token::RParen) => return res,
+                        _ => return Err("Expected closing parenthesis"),
+                    }
                 }
                 _ => {
                     return Ok(Expr::Cons(Box::new(Cons {
@@ -1213,7 +1227,39 @@ mod tests {
             ("(>= 1 1 1)", Some(Expr::Bool(true))),
             ("(>= 1 1 2)", Some(Expr::Bool(false))),
             (
+                "(cons 1 2)",
+                Some(Expr::Cons(Box::new(Cons {
+                    car: Expr::Integer(1),
+                    cdr: Expr::Integer(2),
+                }))),
+            ),
+            (
                 "(list 1 2 3)",
+                Some(Expr::from_vec(vec![
+                    Expr::Integer(1),
+                    Expr::Integer(2),
+                    Expr::Integer(3),
+                ])),
+            ),
+            (
+                "'(1 . 2)",
+                Some(Expr::Cons(Box::new(Cons {
+                    car: Expr::Integer(1),
+                    cdr: Expr::Integer(2),
+                }))),
+            ),
+            (
+                "'(1 2 . 3)",
+                Some(Expr::Cons(Box::new(Cons {
+                    car: Expr::Integer(1),
+                    cdr: Expr::Cons(Box::new(Cons {
+                        car: Expr::Integer(2),
+                        cdr: Expr::Integer(3),
+                    })),
+                }))),
+            ),
+            (
+                "'(1 2 3)",
                 Some(Expr::from_vec(vec![
                     Expr::Integer(1),
                     Expr::Integer(2),
