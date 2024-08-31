@@ -30,9 +30,8 @@ fn main() {
             for expr in exprs {
                 let res = env.evaluate(&expr);
                 match res {
-                    Ok(Some(v)) => println!("{}", v),
-                    Ok(None) => (),
                     Err(err) => eprintln!("Error (eval): {}", err),
+                    _ => (),
                 };
             }
         }
