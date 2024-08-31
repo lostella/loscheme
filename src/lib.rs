@@ -263,19 +263,22 @@ impl fmt::Display for Expr {
             Expr::Symbol(s) => write!(f, "{}", s),
             Expr::Procedure(Procedure::BuiltIn(_)) => write!(f, "#[built-in procedure]"),
             Expr::Procedure(Procedure::UserDefined(_)) => write!(f, "#[user-defined procedure]"),
-            Expr::Cons(_) => {
+            Expr::Cons(p) => {
                 write!(f, "(")?;
-                let mut strings = Vec::new();
-                match self.to_vec() {
-                    Ok(v) => {
-                        for x in v {
-                            strings.push(x.to_string());
+                let mut cur = p;
+                loop {
+                    write!(f, "{}", p.car)?;
+                    match p.cdr {
+                        Expr::Null => break,
+                        Expr::Cons(pp) => cur = pp,
+                        _ => {
+                            write!(f, " . {}", p.cdr)?;
+                            break
                         }
                     }
-                    _ => strings.push("!!!".to_string()),
+                    write!(f, " ", p.car)?;
                 }
-                let inner = &strings.join(" ");
-                write!(f, "{inner})")?;
+                write!(f, ")")?;
                 Ok(())
             }
         }
