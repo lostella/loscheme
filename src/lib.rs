@@ -1128,10 +1128,14 @@ mod tests {
                 Expr::Symbol("x".to_string()),
                 Expr::Symbol("2".to_string()),
             ]),
+            Expr::Cons(Box::new(Cons {
+                car: Expr::Integer(-1),
+                cdr: Expr::Integer(1),
+            })),
         ]);
         assert_eq!(
             expr.to_string(),
-            "(define (f x) \"hello, world!\" (quote a) (* x 2))"
+            "(define (f x) \"hello, world!\" (quote a) (* x 2) (-1 . 1))"
         );
     }
 
