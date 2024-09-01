@@ -587,32 +587,31 @@ fn builtin_issymbol(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     }
 }
 
-fn builtin_cons(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_cons(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 2 {
         return Err("Cons needs exactly two argument");
     }
-    Ok(Some(Expr::Cons(Box::new(Cons {
-        car: values[0].clone(),
-        cdr: values[1].clone(),
-    }))))
+    let car = values.remove(0);
+    let cdr = values.remove(0);
+    Ok(Some(Expr::Cons(Box::new(Cons { car, cdr }))))
 }
 
-fn builtin_car(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_car(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("Car needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Cons(p) => Ok(Some(p.car.clone())),
+    match values.remove(0) {
+        Expr::Cons(p) => Ok(Some(p.car)),
         _ => Err("Car needs a pair as argument"),
     }
 }
 
-fn builtin_cdr(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_cdr(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("Cdr needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Cons(p) => Ok(Some(p.cdr.clone())),
+    match values.remove(0) {
+        Expr::Cons(p) => Ok(Some(p.cdr)),
         _ => Err("Cdr needs a pair as argument"),
     }
 }
