@@ -542,7 +542,7 @@ fn builtin_ispair(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     }
 }
 
-fn builtin_islist(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_islist(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("List? needs exactly one argument");
     }
