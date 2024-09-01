@@ -930,13 +930,11 @@ impl Environment {
                     _ => return Err("Not a list"),
                 }
             }
-            for expr in &args[1..args.len() - 1] {
-                let _ = child.evaluate(expr);
+            let mut out = None;
+            for expr in args[1..].iter() {
+                out = child.evaluate(expr)?;
             }
-            match args.last() {
-                Some(expr) => return child.evaluate(expr),
-                None => return Ok(None),
-            }
+            return Ok(out);
         }
         Err("First argument to let must be a list")
     }
@@ -964,13 +962,11 @@ impl Environment {
     }
 
     fn evaluate_begin(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
-        for expr in &args[..args.len() - 1] {
-            let _ = self.evaluate(expr);
+        let mut out = None;
+        for expr in args {
+            out = self.evaluate(expr)?;
         }
-        match args.last() {
-            Some(expr) => self.evaluate(expr),
-            None => Ok(None),
-        }
+        Ok(out)
     }
 
     fn evaluate_and(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
@@ -1024,13 +1020,11 @@ impl Callable for UserDefinedProcedure {
         for (param, arg) in zip(&self.params, args) {
             local_env.set(param.to_string(), arg);
         }
-        for expr in &self.body[..self.body.len() - 1] {
-            let _ = local_env.evaluate(expr);
+        let mut out = None;
+        for expr in self.body.iter() {
+            out = local_env.evaluate(expr)?;
         }
-        match self.body.last() {
-            Some(expr) => local_env.evaluate(expr),
-            None => Ok(None),
-        }
+        Ok(out)
     }
 }
 
