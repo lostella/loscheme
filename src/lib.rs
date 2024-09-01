@@ -300,12 +300,12 @@ impl fmt::Display for Expr {
 }
 
 impl Expr {
-    fn from_vec(v: Vec<Expr>) -> Self {
+    fn from_vec(mut v: Vec<Expr>) -> Self {
         match v.len() {
             0 => Expr::Null,
             _ => Expr::Cons(Box::new(Cons {
-                car: v[0].clone(),
-                cdr: Expr::from_vec(v[1..].to_vec()),
+                car: v.remove(0),
+                cdr: Expr::from_vec(v),
             })),
         }
     }
@@ -727,7 +727,7 @@ impl Environment {
             Expr::Bool(_) => Ok(Some(expr.clone())),
             Expr::Cons(p) => self.evaluate_pair(p),
             Expr::Symbol(s) => match self.get(s) {
-                Some(value) => Ok(Some(value.clone())),
+                Some(value) => Ok(Some(value)),
                 None => Err("Undefined symbol"),
             },
             _ => Err("Cannot evaluate expression"),

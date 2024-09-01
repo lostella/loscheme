@@ -29,10 +29,9 @@ fn main() {
         Ok(exprs) => {
             for expr in exprs {
                 let res = env.evaluate(&expr);
-                match res {
-                    Err(err) => eprintln!("Error (eval): {}", err),
-                    _ => (),
-                };
+                if let Err(err) = res {
+                    eprintln!("Error (eval): {}", err)
+                }
             }
         }
         Err(err) => eprintln!("Error (parsing): {}", err),
