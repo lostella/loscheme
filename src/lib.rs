@@ -546,8 +546,8 @@ fn builtin_islist(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("List? needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Cons(pair) => match builtin_islist(vec![pair.cdr.clone()])? {
+    match values.remove(0) {
+        Expr::Cons(pair) => match builtin_islist(vec![pair.cdr])? {
             Some(Expr::Bool(true)) => Ok(Some(Expr::Bool(true))),
             Some(Expr::Bool(false)) => Ok(Some(Expr::Bool(false))),
             _ => Err("Unexpected non-boolean"),
