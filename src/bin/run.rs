@@ -28,7 +28,7 @@ fn main() {
     match parse_code(&code) {
         Ok(exprs) => {
             for expr in exprs {
-                let res = env.evaluate(&expr);
+                let res = env.evaluate(expr);
                 if let Err(err) = res {
                     eprintln!("Error (eval): {}", err)
                 }

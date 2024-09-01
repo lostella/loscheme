@@ -310,14 +310,14 @@ impl Expr {
         }
     }
 
-    fn to_vec(&self) -> Result<Vec<Expr>, &'static str> {
+    fn into_vec(self) -> Result<Vec<Expr>, &'static str> {
         let mut res = Vec::new();
         let mut cur = self;
         loop {
             match cur {
                 Expr::Cons(pair) => {
-                    res.push(pair.car.clone());
-                    cur = &pair.cdr;
+                    res.push(pair.car);
+                    cur = pair.cdr;
                 }
                 Expr::Null => return Ok(res),
                 _ => return Err("Not a proper list"),
@@ -500,21 +500,21 @@ fn builtin_list(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     Ok(Some(Expr::from_vec(values)))
 }
 
-fn builtin_apply(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_apply(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 2 {
         return Err("Apply needs exactly two argument");
     }
-    match &values[0] {
-        Expr::Procedure(proc) => proc.call(values[1].to_vec()?),
+    match values.remove(0) {
+        Expr::Procedure(proc) => proc.call(values.remove(0).into_vec()?),
         _ => Err("Apply needs a procedure and a list as arguments"),
     }
 }
 
-fn builtin_length(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
+fn builtin_length(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument");
     }
-    match &values[0].to_vec() {
+    match values.remove(0).into_vec() {
         Ok(v) => Ok(Some(Expr::Integer(v.len() as i64))),
         _ => Err("Cannot compute length (is it a list?)"),
     }
@@ -524,7 +524,7 @@ fn builtin_append(values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     let mut all = Vec::new();
     for value in values {
         match value {
-            Expr::Cons(_) => all.extend(value.to_vec()?),
+            Expr::Cons(_) => all.extend(value.into_vec()?),
             Expr::Null => (),
             _ => return Err("Append needs lists as arguments"),
         }
@@ -718,14 +718,14 @@ impl Environment {
         self.head.borrow().get(key)
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Option<Expr>, &'static str> {
+    pub fn evaluate(&mut self, expr: Expr) -> Result<Option<Expr>, &'static str> {
         match expr {
-            Expr::Integer(_) => Ok(Some(expr.clone())),
-            Expr::Float(_) => Ok(Some(expr.clone())),
-            Expr::Str(_) => Ok(Some(expr.clone())),
-            Expr::Bool(_) => Ok(Some(expr.clone())),
-            Expr::Cons(p) => self.evaluate_pair(p),
-            Expr::Symbol(s) => match self.get(s) {
+            Expr::Integer(_) => Ok(Some(expr)),
+            Expr::Float(_) => Ok(Some(expr)),
+            Expr::Str(_) => Ok(Some(expr)),
+            Expr::Bool(_) => Ok(Some(expr)),
+            Expr::Cons(p) => self.evaluate_pair(*p),
+            Expr::Symbol(s) => match self.get(&s) {
                 Some(value) => Ok(Some(value)),
                 None => Err("Undefined symbol"),
             },
@@ -733,25 +733,25 @@ impl Environment {
         }
     }
 
-    fn evaluate_pair(&mut self, pair: &Cons) -> Result<Option<Expr>, &'static str> {
-        let args = pair.cdr.to_vec()?;
+    fn evaluate_pair(&mut self, pair: Cons) -> Result<Option<Expr>, &'static str> {
+        let args = pair.cdr.into_vec()?;
 
-        match &pair.car {
-            Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(&args),
-            Expr::Keyword(Keyword::Quote) => self.evaluate_quote(&args),
-            Expr::Keyword(Keyword::Define) => self.evaluate_define(&args),
-            Expr::Keyword(Keyword::If) => self.evaluate_if(&args),
-            Expr::Keyword(Keyword::Cond) => self.evaluate_cond(&args),
-            Expr::Keyword(Keyword::When) => self.evaluate_when(&args),
-            Expr::Keyword(Keyword::Unless) => self.evaluate_unless(&args),
-            Expr::Keyword(Keyword::Let) => self.evaluate_let(&args),
-            Expr::Keyword(Keyword::Set) => self.evaluate_set(&args),
-            Expr::Keyword(Keyword::Begin) => self.evaluate_begin(&args),
-            Expr::Keyword(Keyword::And) => self.evaluate_and(&args),
-            Expr::Keyword(Keyword::Or) => self.evaluate_or(&args),
-            _ => match self.evaluate(&pair.car) {
+        match pair.car {
+            Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(args),
+            Expr::Keyword(Keyword::Quote) => self.evaluate_quote(args),
+            Expr::Keyword(Keyword::Define) => self.evaluate_define(args),
+            Expr::Keyword(Keyword::If) => self.evaluate_if(args),
+            Expr::Keyword(Keyword::Cond) => self.evaluate_cond(args),
+            Expr::Keyword(Keyword::When) => self.evaluate_when(args),
+            Expr::Keyword(Keyword::Unless) => self.evaluate_unless(args),
+            Expr::Keyword(Keyword::Let) => self.evaluate_let(args),
+            Expr::Keyword(Keyword::Set) => self.evaluate_set(args),
+            Expr::Keyword(Keyword::Begin) => self.evaluate_begin(args),
+            Expr::Keyword(Keyword::And) => self.evaluate_and(args),
+            Expr::Keyword(Keyword::Or) => self.evaluate_or(args),
+            _ => match self.evaluate(pair.car) {
                 Ok(Some(Expr::Procedure(proc))) => {
-                    let call_args = self.evaluate_non_none_args(&args)?;
+                    let call_args = self.evaluate_non_none_args(args)?;
                     proc.call(call_args)
                 }
                 _ => Err("Not a procedure call"),
@@ -759,7 +759,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_non_none_args(&mut self, exprs: &[Expr]) -> Result<Vec<Expr>, &'static str> {
+    fn evaluate_non_none_args(&mut self, exprs: Vec<Expr>) -> Result<Vec<Expr>, &'static str> {
         let mut res = Vec::with_capacity(exprs.len());
         for expr in exprs {
             match self.evaluate(expr)? {
@@ -772,14 +772,15 @@ impl Environment {
         Ok(res)
     }
 
-    fn evaluate_lambda(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_lambda(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.is_empty() {
             return Err("Lambda needs at least one argument");
         }
-        match &args[0] {
+        let lambda_args = args.remove(0);
+        match lambda_args {
             Expr::Cons(_) => {
                 let mut params = Vec::new();
-                for expr in &args[0].to_vec()? {
+                for expr in lambda_args.into_vec()? {
                     match expr {
                         Expr::Symbol(s) => params.push(s.to_string()),
                         _ => return Err("Not a symbol"),
@@ -787,7 +788,7 @@ impl Environment {
                 }
                 let proc = UserDefinedProcedure {
                     params,
-                    body: args[1..].to_vec(),
+                    body: args,
                     env: self.clone(),
                 };
                 Ok(Some(Expr::Procedure(Procedure::UserDefined(proc))))
@@ -796,29 +797,30 @@ impl Environment {
         }
     }
 
-    fn evaluate_quote(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_quote(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.len() != 1 {
             return Err("Quote needs exactly one argument");
         }
-        Ok(Some(args[0].clone()))
+        Ok(Some(args.remove(0)))
     }
 
-    fn evaluate_define(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_define(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.len() < 2 {
             return Err("Define needs at least two arguments");
         }
-        match &args[0] {
+        let form = args.remove(0);
+        match form {
             Expr::Symbol(key) => {
-                if args.len() != 2 {
+                if args.len() != 1 {
                     return Err("Define with a symbol needs two arguments");
                 }
-                if let Some(value) = self.evaluate(&args[1])? {
+                if let Some(value) = self.evaluate(args.remove(0))? {
                     self.set(key.to_string(), value);
                 }
                 Ok(None)
             }
             Expr::Cons(_) => {
-                let v = &args[0].to_vec()?;
+                let v = form.into_vec()?;
                 let mut ids = Vec::with_capacity(v.len() - 1);
                 for expr in v {
                     match expr {
@@ -828,7 +830,7 @@ impl Environment {
                 }
                 let proc = UserDefinedProcedure {
                     params: ids[1..].to_vec(),
-                    body: args[1..].to_vec(),
+                    body: args,
                     env: self.clone(),
                 };
                 self.set(
@@ -841,35 +843,36 @@ impl Environment {
         }
     }
 
-    fn evaluate_if(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_if(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.len() < 2 || args.len() > 3 {
             return Err("If accepts two or three arguments");
         }
-        match self.evaluate(&args[0])? {
-            Some(Expr::Bool(true)) => self.evaluate(&args[1]),
+        match self.evaluate(args.remove(0))? {
+            Some(Expr::Bool(true)) => self.evaluate(args.remove(0)),
             Some(Expr::Bool(false)) => {
-                if args.len() == 2 {
+                if args.len() == 1 {
                     Ok(None)
                 } else {
-                    self.evaluate(&args[2])
+                    self.evaluate(args.remove(1))
                 }
             }
             _ => Err("First argument to if did not evaluate to a boolean"),
         }
     }
 
-    fn evaluate_cond(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_cond(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         for clause in args {
             match clause {
                 Expr::Cons(_) => {
-                    let v = clause.to_vec()?;
-                    if let Expr::Symbol(s) = &v[0] {
+                    let mut v = clause.into_vec()?;
+                    let test = v.remove(0);
+                    if let Expr::Symbol(s) = &test {
                         if s == "else" {
-                            return self.evaluate_begin(&v[1..]);
+                            return self.evaluate_begin(v);
                         }
                     }
-                    match self.evaluate(&v[0])? {
-                        Some(Expr::Bool(true)) => return self.evaluate_begin(&v[1..]),
+                    match self.evaluate(test)? {
+                        Some(Expr::Bool(true)) => return self.evaluate_begin(v),
                         Some(Expr::Bool(false)) => continue,
                         _ => return Err("Clause did not evaluate to a boolean"),
                     }
@@ -880,47 +883,48 @@ impl Environment {
         Ok(None)
     }
 
-    fn evaluate_when(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_when(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.is_empty() {
             return Err("When needs at least one argument");
         }
-        let _ = match self.evaluate(&args[0])? {
-            Some(Expr::Bool(true)) => self.evaluate_begin(&args[1..]),
+        let _ = match self.evaluate(args.remove(0))? {
+            Some(Expr::Bool(true)) => self.evaluate_begin(args),
             Some(Expr::Bool(false)) => Ok(None),
             _ => Err("First argument to when did not evaluate to a boolean"),
         };
         Ok(None)
     }
 
-    fn evaluate_unless(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_unless(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.is_empty() {
             return Err("Unless needs at least one argument");
         }
-        let _ = match self.evaluate(&args[0])? {
+        let _ = match self.evaluate(args.remove(0))? {
             Some(Expr::Bool(true)) => Ok(None),
-            Some(Expr::Bool(false)) => self.evaluate_begin(&args[1..]),
+            Some(Expr::Bool(false)) => self.evaluate_begin(args),
             _ => Err("First argument to unless did not evaluate to a boolean"),
         };
         Ok(None)
     }
 
-    fn evaluate_let(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_let(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.is_empty() {
             return Err("Let needs at least one argument");
         }
-        if let Expr::Cons(_) = &args[0] {
-            let v = args[0].to_vec()?;
+        let bindings = args.remove(0);
+        if let Expr::Cons(_) = bindings {
+            let v = bindings.into_vec()?;
             let mut child = self.child();
             for expr in v {
                 match expr {
                     Expr::Cons(_) => {
-                        let p = expr.to_vec()?;
+                        let mut p = expr.into_vec()?;
                         if p.len() != 2 {
                             return Err("Not a 2-list");
                         }
-                        match &p[0] {
+                        match p.remove(0) {
                             Expr::Symbol(s) => {
-                                if let Some(vv) = child.evaluate(&p[1])? {
+                                if let Some(vv) = child.evaluate(p.remove(0))? {
                                     child.set(s.to_string(), vv);
                                 }
                             }
@@ -931,7 +935,7 @@ impl Environment {
                 }
             }
             let mut out = None;
-            for expr in args[1..].iter() {
+            for expr in args.into_iter() {
                 out = child.evaluate(expr)?;
             }
             return Ok(out);
@@ -939,14 +943,15 @@ impl Environment {
         Err("First argument to let must be a list")
     }
 
-    fn evaluate_set(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_set(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments");
         }
-        match &args[0] {
-            Expr::Symbol(s) => match self.get(s) {
+        let what = args.remove(0);
+        match what {
+            Expr::Symbol(s) => match self.get(&s) {
                 Some(_) => {
-                    let v = self.evaluate(&args[1])?;
+                    let v = self.evaluate(args.remove(0))?;
                     match v {
                         Some(val) => {
                             self.set(s.to_string(), val);
@@ -961,15 +966,15 @@ impl Environment {
         }
     }
 
-    fn evaluate_begin(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_begin(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         let mut out = None;
-        for expr in args {
+        for expr in args.into_iter() {
             out = self.evaluate(expr)?;
         }
         Ok(out)
     }
 
-    fn evaluate_and(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_and(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         for expr in args {
             match self.evaluate(expr) {
                 Ok(Some(Expr::Bool(b))) => {
@@ -984,7 +989,7 @@ impl Environment {
         Ok(Some(Expr::Bool(true)))
     }
 
-    fn evaluate_or(&mut self, args: &[Expr]) -> Result<Option<Expr>, &'static str> {
+    fn evaluate_or(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         for expr in args {
             match self.evaluate(expr) {
                 Ok(Some(Expr::Bool(b))) => {
@@ -1022,7 +1027,7 @@ impl Callable for UserDefinedProcedure {
         }
         let mut out = None;
         for expr in self.body.iter() {
-            out = local_env.evaluate(expr)?;
+            out = local_env.evaluate(expr.clone())?;
         }
         Ok(out)
     }
@@ -1113,7 +1118,7 @@ mod tests {
     fn test_pair_vs_vec() {
         let v = vec![Expr::Integer(3), Expr::Integer(2), Expr::Integer(1)];
         let expr = Expr::from_vec(v.clone());
-        let res = expr.to_vec();
+        let res = expr.into_vec();
         assert_eq!(res, Ok(v));
     }
 
@@ -1184,7 +1189,7 @@ mod tests {
     fn validate(cases: Vec<(&str, Option<Expr>)>) {
         let mut env = Environment::standard().child();
         for (code, val) in cases {
-            let expr = &parse_code(code).unwrap()[0];
+            let expr = parse_code(code).unwrap().remove(0);
             assert_eq!(env.evaluate(expr), Ok(val));
         }
     }
