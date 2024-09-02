@@ -782,7 +782,7 @@ impl Environment {
                 let mut params = Vec::new();
                 for expr in lambda_args.into_vec()? {
                     match expr {
-                        Expr::Symbol(s) => params.push(s.to_string()),
+                        Expr::Symbol(s) => params.push(s),
                         _ => return Err("Not a symbol"),
                     }
                 }
@@ -815,7 +815,7 @@ impl Environment {
                     return Err("Define with a symbol needs two arguments");
                 }
                 if let Some(value) = self.evaluate(args.remove(0))? {
-                    self.set(key.to_string(), value);
+                    self.set(key, value);
                 }
                 Ok(None)
             }
@@ -828,15 +828,13 @@ impl Environment {
                         _ => return Err("Not a symbol"),
                     }
                 }
+                let key = ids.remove(0);
                 let proc = UserDefinedProcedure {
-                    params: ids[1..].to_vec(),
+                    params: ids,
                     body: args,
                     env: self.clone(),
                 };
-                self.set(
-                    ids[0].to_string(),
-                    Expr::Procedure(Procedure::UserDefined(proc)),
-                );
+                self.set(key, Expr::Procedure(Procedure::UserDefined(proc)));
                 Ok(None)
             }
             _ => Err("Define needs a symbol or a list as first argument"),
@@ -925,7 +923,7 @@ impl Environment {
                         match p.remove(0) {
                             Expr::Symbol(s) => {
                                 if let Some(vv) = child.evaluate(p.remove(0))? {
-                                    child.set(s.to_string(), vv);
+                                    child.set(s, vv);
                                 }
                             }
                             _ => return Err("Not a symbol"),
@@ -954,7 +952,7 @@ impl Environment {
                     let v = self.evaluate(args.remove(0))?;
                     match v {
                         Some(val) => {
-                            self.set(s.to_string(), val);
+                            self.set(s, val);
                             Ok(None)
                         }
                         None => Err("No value to set"),
