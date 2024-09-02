@@ -942,7 +942,7 @@ impl Environment {
         let what = args.remove(0);
         match what {
             Expr::Symbol(s) => {
-                if self.get(&s) == None {
+                if self.get(&s).is_none() {
                     return Err("Symbol is not bound");
                 }
                 match self.evaluate(args.remove(0))? {
