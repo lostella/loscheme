@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::{zip, Peekable};
+use std::mem::take;
 use std::rc::Rc;
 use std::str::{Chars, FromStr};
 
@@ -161,8 +162,9 @@ pub struct Cons {
     cdr: Expr,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub enum Expr {
+    #[default]
     Null,
     Integer(i64),
     Float(f64),
@@ -304,8 +306,8 @@ impl Expr {
         match v.len() {
             0 => Expr::Null,
             _ => Expr::Cons(Box::new(Cons {
-                car: v.remove(0),
-                cdr: Expr::from_vec(v),
+                car: take(&mut v[0]),
+                cdr: Expr::from_vec(v.split_off(1)),
             })),
         }
     }
@@ -504,8 +506,10 @@ fn builtin_apply(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 2 {
         return Err("Apply needs exactly two argument");
     }
-    match values.remove(0) {
-        Expr::Procedure(proc) => proc.call(values.remove(0).into_vec()?),
+    let first = take(&mut values[0]);
+    let second = take(&mut values[1]);
+    match first {
+        Expr::Procedure(proc) => proc.call(second.into_vec()?),
         _ => Err("Apply needs a procedure and a list as arguments"),
     }
 }
@@ -514,7 +518,7 @@ fn builtin_length(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument");
     }
-    match values.remove(0).into_vec() {
+    match take(&mut values[0]).into_vec() {
         Ok(v) => Ok(Some(Expr::Integer(v.len() as i64))),
         _ => Err("Cannot compute length (is it a list?)"),
     }
@@ -546,7 +550,7 @@ fn builtin_islist(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("List? needs exactly one argument");
     }
-    match values.remove(0) {
+    match take(&mut values[0]) {
         Expr::Cons(pair) => match builtin_islist(vec![pair.cdr])? {
             Some(Expr::Bool(true)) => Ok(Some(Expr::Bool(true))),
             Some(Expr::Bool(false)) => Ok(Some(Expr::Bool(false))),
@@ -591,8 +595,8 @@ fn builtin_cons(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 2 {
         return Err("Cons needs exactly two argument");
     }
-    let car = values.remove(0);
-    let cdr = values.remove(0);
+    let car = take(&mut values[0]);
+    let cdr = take(&mut values[1]);
     Ok(Some(Expr::Cons(Box::new(Cons { car, cdr }))))
 }
 
@@ -600,7 +604,7 @@ fn builtin_car(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("Car needs exactly one argument");
     }
-    match values.remove(0) {
+    match take(&mut values[0]) {
         Expr::Cons(p) => Ok(Some(p.car)),
         _ => Err("Car needs a pair as argument"),
     }
@@ -610,7 +614,7 @@ fn builtin_cdr(mut values: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
     if values.len() != 1 {
         return Err("Cdr needs exactly one argument");
     }
-    match values.remove(0) {
+    match take(&mut values[0]) {
         Expr::Cons(p) => Ok(Some(p.cdr)),
         _ => Err("Cdr needs a pair as argument"),
     }
@@ -776,7 +780,7 @@ impl Environment {
         if args.is_empty() {
             return Err("Lambda needs at least one argument");
         }
-        let lambda_args = args.remove(0);
+        let lambda_args = take(&mut args[0]);
         match lambda_args {
             Expr::Cons(_) => {
                 let mut params = Vec::new();
@@ -788,7 +792,7 @@ impl Environment {
                 }
                 let proc = UserDefinedProcedure {
                     params,
-                    body: args,
+                    body: args.split_off(1),
                     env: self.clone(),
                 };
                 Ok(Some(Expr::Procedure(Procedure::UserDefined(proc))))
@@ -801,37 +805,37 @@ impl Environment {
         if args.len() != 1 {
             return Err("Quote needs exactly one argument");
         }
-        Ok(Some(args.remove(0)))
+        Ok(Some(take(&mut args[0])))
     }
 
     fn evaluate_define(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         if args.len() < 2 {
             return Err("Define needs at least two arguments");
         }
-        let form = args.remove(0);
+        let form = take(&mut args[0]);
         match form {
             Expr::Symbol(key) => {
-                if args.len() != 1 {
+                if args.len() != 2 {
                     return Err("Define with a symbol needs two arguments");
                 }
-                if let Some(value) = self.evaluate(args.remove(0))? {
+                if let Some(value) = self.evaluate(take(&mut args[1]))? {
                     self.set(key, value);
                 }
                 Ok(None)
             }
             Expr::Cons(_) => {
                 let v = form.into_vec()?;
-                let mut ids = Vec::with_capacity(v.len() - 1);
+                let mut ids = Vec::new();
                 for expr in v {
                     match expr {
                         Expr::Symbol(s) => ids.push(s),
                         _ => return Err("Not a symbol"),
                     }
                 }
-                let key = ids.remove(0);
+                let key = take(&mut ids[0]);
                 let proc = UserDefinedProcedure {
-                    params: ids,
-                    body: args,
+                    params: ids.split_off(1),
+                    body: args.split_off(1),
                     env: self.clone(),
                 };
                 self.set(key, Expr::Procedure(Procedure::UserDefined(proc)));
@@ -845,13 +849,13 @@ impl Environment {
         if args.len() < 2 || args.len() > 3 {
             return Err("If accepts two or three arguments");
         }
-        match self.evaluate(args.remove(0))? {
-            Some(Expr::Bool(true)) => self.evaluate(args.remove(0)),
+        match self.evaluate(take(&mut args[0]))? {
+            Some(Expr::Bool(true)) => self.evaluate(take(&mut args[1])),
             Some(Expr::Bool(false)) => {
-                if args.len() == 1 {
+                if args.len() == 2 {
                     Ok(None)
                 } else {
-                    self.evaluate(args.remove(1))
+                    self.evaluate(take(&mut args[2]))
                 }
             }
             _ => Err("First argument to if did not evaluate to a boolean"),
@@ -884,8 +888,8 @@ impl Environment {
         if args.is_empty() {
             return Err("When needs at least one argument");
         }
-        let _ = match self.evaluate(args.remove(0))? {
-            Some(Expr::Bool(true)) => self.evaluate_begin(args),
+        let _ = match self.evaluate(take(&mut args[0]))? {
+            Some(Expr::Bool(true)) => self.evaluate_begin(args.split_off(1)),
             Some(Expr::Bool(false)) => Ok(None),
             _ => Err("First argument to when did not evaluate to a boolean"),
         };
@@ -896,9 +900,9 @@ impl Environment {
         if args.is_empty() {
             return Err("Unless needs at least one argument");
         }
-        let _ = match self.evaluate(args.remove(0))? {
+        let _ = match self.evaluate(take(&mut args[0]))? {
             Some(Expr::Bool(true)) => Ok(None),
-            Some(Expr::Bool(false)) => self.evaluate_begin(args),
+            Some(Expr::Bool(false)) => self.evaluate_begin(args.split_off(1)),
             _ => Err("First argument to unless did not evaluate to a boolean"),
         };
         Ok(None)
@@ -908,7 +912,7 @@ impl Environment {
         if args.is_empty() {
             return Err("Let needs at least one argument");
         }
-        let bindings = args.remove(0);
+        let bindings = take(&mut args[0]);
         let mut child = self.child();
         for expr in bindings.into_vec()? {
             match expr {
@@ -929,7 +933,7 @@ impl Environment {
             }
         }
         let mut out = None;
-        for expr in args.into_iter() {
+        for expr in args.split_off(1).into_iter() {
             out = child.evaluate(expr)?;
         }
         Ok(out)
@@ -939,13 +943,13 @@ impl Environment {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments");
         }
-        let what = args.remove(0);
+        let what = take(&mut args[0]);
         match what {
             Expr::Symbol(s) => {
                 if self.get(&s).is_none() {
                     return Err("Symbol is not bound");
                 }
-                match self.evaluate(args.remove(0))? {
+                match self.evaluate(take(&mut args[1]))? {
                     Some(val) => {
                         self.set(s, val);
                         Ok(None)
