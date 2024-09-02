@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::{zip, Peekable};
-use std::mem::take;
+use std::mem::{replace, take};
 use std::rc::Rc;
 use std::str::{Chars, FromStr};
 
@@ -763,17 +763,17 @@ impl Environment {
         }
     }
 
-    fn evaluate_non_none_args(&mut self, exprs: Vec<Expr>) -> Result<Vec<Expr>, &'static str> {
-        let mut res = Vec::with_capacity(exprs.len());
-        for expr in exprs {
+    fn evaluate_non_none_args(&mut self, mut exprs: Vec<Expr>) -> Result<Vec<Expr>, &'static str> {
+        for k in 0..exprs.len() {
+            let expr = take(&mut exprs[k]);
             match self.evaluate(expr)? {
                 Some(value) => {
-                    res.push(value);
+                    let _ = replace(&mut exprs[k], value);
                 }
                 None => return Err("Some argument has no value"),
             }
         }
-        Ok(res)
+        Ok(exprs)
     }
 
     fn evaluate_lambda(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
