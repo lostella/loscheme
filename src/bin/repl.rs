@@ -1,4 +1,4 @@
-use loscheme::{parse_code, Environment};
+use loscheme::{parse_code, Environment, Expr};
 use std::io::{self, BufRead, Write};
 
 const INPUT_PROMPT: &str = "λscm>";
@@ -25,8 +25,8 @@ fn main() {
                         for expr in exprs {
                             let res = env.evaluate(expr);
                             match res {
-                                Ok(Some(v)) => println!("{}", v),
-                                Ok(None) => (),
+                                Ok(Expr::Unspecified) => (),
+                                Ok(v) => println!("{}", v),
                                 Err(err) => eprintln!("Error (eval): {}", err),
                             };
                         }
