@@ -824,7 +824,7 @@ impl Environment {
                 let mut ids = Vec::with_capacity(v.len() - 1);
                 for expr in v {
                     match expr {
-                        Expr::Symbol(s) => ids.push(s.clone()),
+                        Expr::Symbol(s) => ids.push(s),
                         _ => return Err("Not a symbol"),
                     }
                 }
@@ -861,16 +861,15 @@ impl Environment {
     fn evaluate_cond(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         for clause in args {
             match clause {
-                Expr::Cons(_) => {
-                    let mut v = clause.into_vec()?;
-                    let test = v.remove(0);
-                    if let Expr::Symbol(s) = &test {
+                Expr::Cons(p) => {
+                    let seq = p.cdr.into_vec()?;
+                    if let Expr::Symbol(s) = &p.car {
                         if s == "else" {
-                            return self.evaluate_begin(v);
+                            return self.evaluate_begin(seq);
                         }
                     }
-                    match self.evaluate(test)? {
-                        Some(Expr::Bool(true)) => return self.evaluate_begin(v),
+                    match self.evaluate(p.car)? {
+                        Some(Expr::Bool(true)) => return self.evaluate_begin(seq),
                         Some(Expr::Bool(false)) => continue,
                         _ => return Err("Clause did not evaluate to a boolean"),
                     }
@@ -910,35 +909,30 @@ impl Environment {
             return Err("Let needs at least one argument");
         }
         let bindings = args.remove(0);
-        if let Expr::Cons(_) = bindings {
-            let v = bindings.into_vec()?;
-            let mut child = self.child();
-            for expr in v {
-                match expr {
-                    Expr::Cons(_) => {
-                        let mut p = expr.into_vec()?;
-                        if p.len() != 2 {
+        let mut child = self.child();
+        for expr in bindings.into_vec()? {
+            match expr {
+                Expr::Cons(p) => match (p.car, p.cdr) {
+                    (Expr::Symbol(s), Expr::Cons(cdr)) => {
+                        if cdr.cdr != Expr::Null {
                             return Err("Not a 2-list");
                         }
-                        match p.remove(0) {
-                            Expr::Symbol(s) => {
-                                if let Some(vv) = child.evaluate(p.remove(0))? {
-                                    child.set(s, vv);
-                                }
-                            }
-                            _ => return Err("Not a symbol"),
+                        if let Some(vv) = child.evaluate(cdr.car)? {
+                            child.set(s, vv);
+                        } else {
+                            return Err("No value to bind");
                         }
                     }
-                    _ => return Err("Not a list"),
-                }
+                    _ => return Err("Not a symbol"),
+                },
+                _ => return Err("Not a 2-list"),
             }
-            let mut out = None;
-            for expr in args.into_iter() {
-                out = child.evaluate(expr)?;
-            }
-            return Ok(out);
         }
-        Err("First argument to let must be a list")
+        let mut out = None;
+        for expr in args.into_iter() {
+            out = child.evaluate(expr)?;
+        }
+        Ok(out)
     }
 
     fn evaluate_set(&mut self, mut args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
@@ -947,19 +941,18 @@ impl Environment {
         }
         let what = args.remove(0);
         match what {
-            Expr::Symbol(s) => match self.get(&s) {
-                Some(_) => {
-                    let v = self.evaluate(args.remove(0))?;
-                    match v {
-                        Some(val) => {
-                            self.set(s, val);
-                            Ok(None)
-                        }
-                        None => Err("No value to set"),
-                    }
+            Expr::Symbol(s) => {
+                if self.get(&s) == None {
+                    return Err("Symbol is not bound");
                 }
-                _ => Err("Symbol is not bound"),
-            },
+                match self.evaluate(args.remove(0))? {
+                    Some(val) => {
+                        self.set(s, val);
+                        Ok(None)
+                    }
+                    None => Err("No value to set"),
+                }
+            }
             _ => Err("First argument to set! must be a symbol"),
         }
     }
@@ -975,12 +968,8 @@ impl Environment {
     fn evaluate_and(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         for expr in args {
             match self.evaluate(expr) {
-                Ok(Some(Expr::Bool(b))) => {
-                    if b {
-                        continue;
-                    }
-                    return Ok(Some(Expr::Bool(false)));
-                }
+                Ok(Some(Expr::Bool(true))) => continue,
+                Ok(Some(Expr::Bool(false))) => return Ok(Some(Expr::Bool(false))),
                 _ => return Err("Cannot \"and\" type"),
             }
         }
@@ -990,12 +979,8 @@ impl Environment {
     fn evaluate_or(&mut self, args: Vec<Expr>) -> Result<Option<Expr>, &'static str> {
         for expr in args {
             match self.evaluate(expr) {
-                Ok(Some(Expr::Bool(b))) => {
-                    if b {
-                        return Ok(Some(Expr::Bool(true)));
-                    }
-                    continue;
-                }
+                Ok(Some(Expr::Bool(true))) => return Ok(Some(Expr::Bool(true))),
+                Ok(Some(Expr::Bool(false))) => continue,
                 _ => return Err("Cannot \"or\" type"),
             }
         }
