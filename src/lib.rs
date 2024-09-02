@@ -739,7 +739,7 @@ impl Environment {
     }
 
     fn evaluate_pair(&mut self, pair: Cons) -> Result<Expr, &'static str> {
-        let args = pair.cdr.into_vec()?;
+        let mut args = pair.cdr.into_vec()?;
 
         match pair.car {
             Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(args),
@@ -756,20 +756,15 @@ impl Environment {
             Expr::Keyword(Keyword::Or) => self.evaluate_or(args),
             _ => match self.evaluate(pair.car) {
                 Ok(Expr::Procedure(proc)) => {
-                    let call_args = self.evaluate_non_none_args(args)?;
-                    proc.call(call_args)
+                    for elem in &mut args {
+                        let expr = take(elem);
+                        let _ = replace(elem, self.evaluate(expr)?);
+                    }
+                    proc.call(args)
                 }
                 _ => Err("Not a procedure call"),
             },
         }
-    }
-
-    fn evaluate_non_none_args(&mut self, mut exprs: Vec<Expr>) -> Result<Vec<Expr>, &'static str> {
-        for elem in &mut exprs {
-            let expr = take(elem);
-            let _ = replace(elem, self.evaluate(expr)?);
-        }
-        Ok(exprs)
     }
 
     fn evaluate_lambda(&mut self, mut args: Vec<Expr>) -> Result<Expr, &'static str> {
