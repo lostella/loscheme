@@ -408,6 +408,16 @@ impl Expr {
             _ => Err("Cannot compare types"),
         }
     }
+
+    fn iseq(&self, other: &Expr) -> Result<Expr, &'static str> {
+        match (self, other) {
+            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a == b)),
+            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool(*a as f64 == *b)),
+            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a == b)),
+            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a == *b as f64)),
+            _ => Err("Cannot compare types"),
+        }
+    }
 }
 
 fn builtin_add(values: Vec<Expr>) -> Result<Expr, &'static str> {
@@ -488,6 +498,10 @@ fn builtin_leq(values: Vec<Expr>) -> Result<Expr, &'static str> {
 
 fn builtin_geq(values: Vec<Expr>) -> Result<Expr, &'static str> {
     builtin_cmp(values, Expr::geq)
+}
+
+fn builtin_iseq(values: Vec<Expr>) -> Result<Expr, &'static str> {
+    builtin_cmp(values, Expr::iseq)
 }
 
 fn builtin_not(values: Vec<Expr>) -> Result<Expr, &'static str> {
@@ -621,6 +635,24 @@ fn builtin_cdr(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
     }
 }
 
+fn builtin_filter(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
+    if values.len() != 2 {
+        return Err("Filter needs exactly two argument");
+    }
+    let pred = take(&mut values[0]);
+    let orig = take(&mut values[1]).into_vec()?;
+    match pred {
+        Expr::Procedure(proc) => {
+            let v = orig
+                .into_iter()
+                .filter(|x| proc.call(vec![x.clone()]) == Ok(Expr::Bool(true)))
+                .collect();
+            Ok(Expr::from_vec(v))
+        }
+        _ => Err("Not a procedure"),
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
     data: HashMap<String, Expr>,
@@ -692,6 +724,7 @@ impl Environment {
             (">", builtin_gt as BuiltInFnType),
             ("<=", builtin_leq as BuiltInFnType),
             (">=", builtin_geq as BuiltInFnType),
+            ("=", builtin_iseq as BuiltInFnType),
             ("not", builtin_not as BuiltInFnType),
             ("list", builtin_list as BuiltInFnType),
             ("apply", builtin_apply as BuiltInFnType),
@@ -705,6 +738,7 @@ impl Environment {
             ("cons", builtin_cons as BuiltInFnType),
             ("car", builtin_car as BuiltInFnType),
             ("cdr", builtin_cdr as BuiltInFnType),
+            ("filter", builtin_filter as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(
@@ -1190,6 +1224,8 @@ mod tests {
             ("(> 1 3 2)", Expr::Bool(false)),
             ("(>= 1 1 1)", Expr::Bool(true)),
             ("(>= 1 1 2)", Expr::Bool(false)),
+            ("(= -1 -1 -1)", Expr::Bool(true)),
+            ("(= -1 -1 -2)", Expr::Bool(false)),
             (
                 "(cons 1 2)",
                 Expr::Cons(Box::new(Cons {
@@ -1587,6 +1623,25 @@ mod tests {
             ("a", Expr::Integer(43)),
             ("(unless (> 1 0) (set! a 42))", Expr::Unspecified),
             ("a", Expr::Integer(43)),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_filter() {
+        let cases = vec![
+            (
+                "(filter (lambda (x) (< x 3)) '(5 4 3 2 1))",
+                Expr::from_vec(vec![Expr::Integer(2), Expr::Integer(1)]),
+            ),
+            (
+                "(filter (lambda (x) (< x 0)) '(-5 4 -3 2 -1))",
+                Expr::from_vec(vec![
+                    Expr::Integer(-5),
+                    Expr::Integer(-3),
+                    Expr::Integer(-1),
+                ]),
+            ),
         ];
         validate(cases);
     }
