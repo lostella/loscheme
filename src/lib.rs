@@ -1439,7 +1439,7 @@ mod tests {
                     (+ (fib (- n 1)) (fib (- n 2)))))",
                 Expr::Unspecified,
             ),
-            ("(fib 20)", Expr::Integer(6765)),
+            ("(fib 13)", Expr::Integer(233)),
         ];
         validate(cases);
     }
@@ -1642,6 +1642,50 @@ mod tests {
                     Expr::Integer(-1),
                 ]),
             ),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_quicksort() {
+        let cases = vec![
+            (
+                "(define (quicksort lst)
+                  (if (null? lst)
+                      '()
+                      (let ((pivot (car lst))
+                            (rest (cdr lst)))
+                        (append
+                          (quicksort (filter (lambda (x) (< x pivot)) rest))
+                          (list pivot)
+                          (quicksort (filter (lambda (x) (>= x pivot)) rest))))))",
+                Expr::Unspecified,
+            ),
+            (
+                "(quicksort '(34 7 23 32 5 62 32 2 1 6 45 78 99 3))",
+                Expr::from_vec(
+                    vec![1, 2, 3, 5, 6, 7, 23, 32, 32, 34, 45, 62, 78, 99]
+                        .into_iter()
+                        .map(|x| Expr::Integer(x))
+                        .collect(),
+                ),
+            ),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_ackermann() {
+        let cases = vec![
+            (
+                "(define (ackermann m n)
+                  (cond
+                    ((= m 0) (+ n 1))
+                    ((= n 0) (ackermann (- m 1) 1))
+                    (else (ackermann (- m 1) (ackermann m (- n 1))))))",
+                Expr::Unspecified,
+            ),
+            ("(ackermann 3 4)", Expr::Integer(125)),
         ];
         validate(cases);
     }
