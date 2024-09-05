@@ -329,6 +329,22 @@ impl Expr {
         }
     }
 
+    fn borrow_vec(&self) -> Result<Vec<&Expr>, &'static str> {
+        let mut cur = self;
+        let mut args = Vec::new();
+        loop {
+            match cur {
+                Expr::Null => break,
+                Expr::Cons(pair) => {
+                    args.push(&pair.car);
+                    cur = &pair.cdr;
+                }
+                _ => return Err("Not a proper list"),
+            }
+        }
+        Ok(args)
+    }
+
     fn add(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a + b)),
@@ -757,13 +773,13 @@ impl Environment {
         self.head.borrow().get(key)
     }
 
-    pub fn evaluate(&mut self, expr: Expr) -> Result<Expr, &'static str> {
+    pub fn evaluate(&mut self, expr: &Expr) -> Result<Expr, &'static str> {
         match expr {
-            Expr::Integer(_) => Ok(expr),
-            Expr::Float(_) => Ok(expr),
-            Expr::Str(_) => Ok(expr),
-            Expr::Bool(_) => Ok(expr),
-            Expr::Cons(p) => self.evaluate_pair(*p),
+            Expr::Integer(_) => Ok(expr.clone()),
+            Expr::Float(_) => Ok(expr.clone()),
+            Expr::Str(_) => Ok(expr.clone()),
+            Expr::Bool(_) => Ok(expr.clone()),
+            Expr::Cons(p) => self.evaluate_pair(p),
             Expr::Symbol(s) => match self.get(&s) {
                 Some(value) => Ok(value),
                 None => Err("Undefined symbol"),
@@ -772,10 +788,10 @@ impl Environment {
         }
     }
 
-    fn evaluate_pair(&mut self, pair: Cons) -> Result<Expr, &'static str> {
-        let mut args = pair.cdr.into_vec()?;
+    fn evaluate_pair(&mut self, pair: &Cons) -> Result<Expr, &'static str> {
+        let args = pair.cdr.borrow_vec()?;
 
-        match pair.car {
+        match &pair.car {
             Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(args),
             Expr::Keyword(Keyword::Quote) => self.evaluate_quote(args),
             Expr::Keyword(Keyword::Define) => self.evaluate_define(args),
@@ -788,36 +804,39 @@ impl Environment {
             Expr::Keyword(Keyword::Begin) => self.evaluate_begin(args),
             Expr::Keyword(Keyword::And) => self.evaluate_and(args),
             Expr::Keyword(Keyword::Or) => self.evaluate_or(args),
-            _ => match self.evaluate(pair.car) {
+            car => match self.evaluate(car) {
                 Ok(Expr::Procedure(proc)) => {
-                    for elem in &mut args {
-                        let expr = take(elem);
-                        let _ = replace(elem, self.evaluate(expr)?);
+                    let mut args_values = Vec::new();
+                    for arg in args {
+                        args_values.push(self.evaluate(arg)?)
                     }
-                    proc.call(args)
+                    proc.call(args_values)
                 }
                 _ => Err("Not a procedure call"),
             },
         }
     }
 
-    fn evaluate_lambda(&mut self, mut args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_lambda(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.is_empty() {
             return Err("Lambda needs at least one argument");
         }
-        let lambda_args = take(&mut args[0]);
-        match lambda_args {
+        match args[0] {
             Expr::Cons(_) => {
                 let mut params = Vec::new();
-                for expr in lambda_args.into_vec()? {
+                for expr in args[0].borrow_vec()? {
                     match expr {
-                        Expr::Symbol(s) => params.push(s),
+                        Expr::Symbol(s) => params.push(s.clone()),
                         _ => return Err("Not a symbol"),
                     }
                 }
+                let mut body = Vec::new();
+                for expr in args.split_off(1) {
+                    body.push(expr.clone())
+                }
                 let proc = UserDefinedProcedure {
                     params,
-                    body: args.split_off(1),
+                    body,
                     env: self.clone(),
                 };
                 Ok(Expr::Procedure(Procedure::UserDefined(proc)))
@@ -826,51 +845,53 @@ impl Environment {
         }
     }
 
-    fn evaluate_quote(&mut self, mut args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_quote(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.len() != 1 {
             return Err("Quote needs exactly one argument");
         }
-        Ok(take(&mut args[0]))
+        Ok(args[0].clone())
     }
 
-    fn evaluate_define(&mut self, mut args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_define(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.is_empty() {
             return Err("Define needs at least one argument");
         }
-        let form = take(&mut args[0]);
-        match form {
+        match args[0] {
             Expr::Symbol(key) => {
                 let value = match args.len() {
                     1 => Expr::Unspecified,
-                    2 => self.evaluate(take(&mut args[1]))?,
+                    2 => self.evaluate(args[1])?,
                     _ => return Err("Define with a symbol gets at most two arguments"),
                 };
-                self.set(key, value);
+                self.set(key.clone(), value);
                 Ok(Expr::Unspecified)
             }
             Expr::Cons(_) => {
-                let v = form.into_vec()?;
-                let mut ids = Vec::new();
-                for expr in v {
+                let mut params = Vec::new();
+                for expr in args[0].borrow_vec()? {
                     match expr {
-                        Expr::Symbol(s) => ids.push(s),
+                        Expr::Symbol(s) => params.push(s.clone()),
                         _ => return Err("Not a symbol"),
                     }
                 }
-                let key = take(&mut ids[0]);
+                let mut body = Vec::new();
+                for expr in args.split_off(1) {
+                    body.push(expr.clone())
+                }
+                let key = &params[0];
                 let proc = UserDefinedProcedure {
-                    params: ids.split_off(1),
-                    body: args.split_off(1),
+                    params: params.split_off(1),
+                    body,
                     env: self.clone(),
                 };
-                self.set(key, Expr::Procedure(Procedure::UserDefined(proc)));
+                self.set(key.clone(), Expr::Procedure(Procedure::UserDefined(proc)));
                 Ok(Expr::Unspecified)
             }
             _ => Err("Define needs a symbol or a list as first argument"),
         }
     }
 
-    fn evaluate_if(&mut self, mut args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_if(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.len() < 2 || args.len() > 3 {
             return Err("If accepts two or three arguments");
         }
@@ -887,7 +908,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_cond(&mut self, args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_cond(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
         for clause in args {
             match clause {
                 Expr::Cons(p) => {
@@ -909,7 +930,7 @@ impl Environment {
         Ok(Expr::Unspecified)
     }
 
-    fn evaluate_when(&mut self, mut args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_when(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.is_empty() {
             return Err("When needs at least one argument");
         }
@@ -920,7 +941,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_unless(&mut self, mut args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_unless(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.is_empty() {
             return Err("Unless needs at least one argument");
         }
@@ -931,7 +952,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_let(&mut self, mut args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_let(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.is_empty() {
             return Err("Let needs at least one argument");
         }
@@ -959,7 +980,7 @@ impl Environment {
         Ok(out)
     }
 
-    fn evaluate_set(&mut self, mut args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_set(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments");
         }
@@ -977,7 +998,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_begin(&mut self, args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_begin(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
         let mut out = Expr::Unspecified;
         for expr in args.into_iter() {
             out = self.evaluate(expr)?;
@@ -985,7 +1006,7 @@ impl Environment {
         Ok(out)
     }
 
-    fn evaluate_and(&mut self, args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_and(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
         for expr in args {
             match self.evaluate(expr) {
                 Ok(Expr::Bool(true)) => continue,
@@ -996,7 +1017,7 @@ impl Environment {
         Ok(Expr::Bool(true))
     }
 
-    fn evaluate_or(&mut self, args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_or(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
         for expr in args {
             match self.evaluate(expr) {
                 Ok(Expr::Bool(true)) => return Ok(Expr::Bool(true)),
