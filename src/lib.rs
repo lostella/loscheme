@@ -959,9 +959,8 @@ impl Environment {
         if args.is_empty() {
             return Err("Let needs at least one argument");
         }
-        let bindings = args[0];
         let mut child = self.child();
-        for expr in bindings.borrow_vec()? {
+        for expr in args[0].borrow_vec()? {
             match expr {
                 Expr::Cons(p) => match (&p.car, &p.cdr) {
                     (Expr::Symbol(s), Expr::Cons(cdr)) => {
@@ -987,8 +986,7 @@ impl Environment {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments");
         }
-        let what = args[0];
-        match what {
+        match args[0] {
             Expr::Symbol(s) => {
                 if self.get(s).is_none() {
                     return Err("Symbol is not bound");
