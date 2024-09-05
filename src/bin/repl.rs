@@ -23,7 +23,7 @@ fn main() {
                 match parse_code(&input) {
                     Ok(exprs) => {
                         for expr in exprs {
-                            let res = env.evaluate(expr);
+                            let res = env.evaluate(&expr);
                             match res {
                                 Ok(Expr::Unspecified) => (),
                                 Ok(v) => println!("{}", v),
