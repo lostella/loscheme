@@ -331,18 +331,18 @@ impl Expr {
 
     fn borrow_vec(&self) -> Result<Vec<&Expr>, &'static str> {
         let mut cur = self;
-        let mut args = Vec::new();
+        let mut res = Vec::new();
         loop {
             match cur {
                 Expr::Null => break,
                 Expr::Cons(pair) => {
-                    args.push(&pair.car);
+                    res.push(&pair.car);
                     cur = &pair.cdr;
                 }
                 _ => return Err("Not a proper list"),
             }
         }
-        Ok(args)
+        Ok(res)
     }
 
     fn add(&self, other: &Expr) -> Result<Expr, &'static str> {
