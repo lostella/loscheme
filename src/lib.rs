@@ -622,6 +622,78 @@ fn builtin_issymbol(values: Vec<Expr>) -> Result<Expr, &'static str> {
     }
 }
 
+fn builtin_isstring(values: Vec<Expr>) -> Result<Expr, &'static str> {
+    if values.len() != 1 {
+        return Err("String? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Str(_) => Ok(Expr::Bool(true)),
+        _ => Ok(Expr::Bool(false)),
+    }
+}
+
+fn builtin_isboolean(values: Vec<Expr>) -> Result<Expr, &'static str> {
+    if values.len() != 1 {
+        return Err("Boolean? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Bool(_) => Ok(Expr::Bool(true)),
+        _ => Ok(Expr::Bool(false)),
+    }
+}
+
+fn builtin_isprocedure(values: Vec<Expr>) -> Result<Expr, &'static str> {
+    if values.len() != 1 {
+        return Err("Procedure? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Procedure(_) => Ok(Expr::Bool(true)),
+        _ => Ok(Expr::Bool(false)),
+    }
+}
+
+fn builtin_iseven(values: Vec<Expr>) -> Result<Expr, &'static str> {
+    if values.len() != 1 {
+        return Err("Even? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Integer(v) => Ok(Expr::Bool(v % 2 == 0)),
+        _ => Err("Even? needs an integer argument"),
+    }
+}
+
+fn builtin_isodd(values: Vec<Expr>) -> Result<Expr, &'static str> {
+    if values.len() != 1 {
+        return Err("Odd? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Integer(v) => Ok(Expr::Bool(v % 2 != 0)),
+        _ => Err("Odd? needs an integer argument"),
+    }
+}
+
+fn builtin_ispositive(values: Vec<Expr>) -> Result<Expr, &'static str> {
+    if values.len() != 1 {
+        return Err("Positive? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Integer(v) => Ok(Expr::Bool(*v > 0)),
+        Expr::Float(v) => Ok(Expr::Bool(*v > 0 as f64)),
+        _ => Err("Positive? needs a number argument"),
+    }
+}
+
+fn builtin_isnegative(values: Vec<Expr>) -> Result<Expr, &'static str> {
+    if values.len() != 1 {
+        return Err("Negative? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Integer(v) => Ok(Expr::Bool(*v < 0)),
+        Expr::Float(v) => Ok(Expr::Bool(*v < 0 as f64)),
+        _ => Err("Negative? needs a number argument"),
+    }
+}
+
 fn builtin_cons(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
     if values.len() != 2 {
         return Err("Cons needs exactly two argument");
@@ -751,6 +823,13 @@ impl Environment {
             ("null?", builtin_isnull as BuiltInFnType),
             ("number?", builtin_isnumber as BuiltInFnType),
             ("symbol?", builtin_issymbol as BuiltInFnType),
+            ("string?", builtin_isstring as BuiltInFnType),
+            ("boolean?", builtin_isboolean as BuiltInFnType),
+            ("procedure?", builtin_isprocedure as BuiltInFnType),
+            ("even?", builtin_iseven as BuiltInFnType),
+            ("odd?", builtin_isodd as BuiltInFnType),
+            ("positive?", builtin_ispositive as BuiltInFnType),
+            ("negative?", builtin_isnegative as BuiltInFnType),
             ("cons", builtin_cons as BuiltInFnType),
             ("car", builtin_car as BuiltInFnType),
             ("cdr", builtin_cdr as BuiltInFnType),
@@ -1401,6 +1480,35 @@ mod tests {
             ("(symbol? '())", Expr::Bool(false)),
             ("(symbol? '(1 2 3))", Expr::Bool(false)),
             ("(symbol? #t)", Expr::Bool(false)),
+            ("(string? \"hello\")", Expr::Bool(true)),
+            ("(string? 3.14)", Expr::Bool(false)),
+            ("(string? '())", Expr::Bool(false)),
+            ("(boolean? #t)", Expr::Bool(true)),
+            ("(boolean? #f)", Expr::Bool(true)),
+            ("(boolean? \"hello\")", Expr::Bool(false)),
+            ("(boolean? 3.14)", Expr::Bool(false)),
+            ("(boolean? '())", Expr::Bool(false)),
+            ("(procedure? (lambda (x) (* 2 x)))", Expr::Bool(true)),
+            ("(procedure? #f)", Expr::Bool(false)),
+            ("(procedure? \"hello\")", Expr::Bool(false)),
+            ("(procedure? 3.14)", Expr::Bool(false)),
+            ("(procedure? '())", Expr::Bool(false)),
+            ("(even? 2)", Expr::Bool(true)),
+            ("(even? 3)", Expr::Bool(false)),
+            ("(even? -2)", Expr::Bool(true)),
+            ("(even? -3)", Expr::Bool(false)),
+            ("(odd? 2)", Expr::Bool(false)),
+            ("(odd? 3)", Expr::Bool(true)),
+            ("(odd? -2)", Expr::Bool(false)),
+            ("(odd? -3)", Expr::Bool(true)),
+            ("(positive? 2)", Expr::Bool(true)),
+            ("(positive? 2.0)", Expr::Bool(true)),
+            ("(positive? -2)", Expr::Bool(false)),
+            ("(positive? -2.0)", Expr::Bool(false)),
+            ("(negative? 2)", Expr::Bool(false)),
+            ("(negative? 2.0)", Expr::Bool(false)),
+            ("(negative? -2)", Expr::Bool(true)),
+            ("(negative? -2.0)", Expr::Bool(true)),
         ];
         validate(cases);
     }
