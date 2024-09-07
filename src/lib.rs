@@ -526,7 +526,7 @@ fn builtin_not(values: Vec<Expr>) -> Result<Expr, &'static str> {
     }
     match values[0] {
         Expr::Bool(b) => Ok(Expr::Bool(!b)),
-        _ => Err("Cannot negate type"),
+        _ => Ok(Expr::Bool(false)),
     }
 }
 
@@ -694,6 +694,17 @@ fn builtin_isnegative(values: Vec<Expr>) -> Result<Expr, &'static str> {
     }
 }
 
+fn builtin_iszero(values: Vec<Expr>) -> Result<Expr, &'static str> {
+    if values.len() != 1 {
+        return Err("Zero? needs exactly one argument");
+    }
+    match &values[0] {
+        Expr::Integer(v) => Ok(Expr::Bool(*v == 0)),
+        Expr::Float(v) => Ok(Expr::Bool(*v == 0 as f64)),
+        _ => Err("Zero? needs a number argument"),
+    }
+}
+
 fn builtin_cons(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
     if values.len() != 2 {
         return Err("Cons needs exactly two argument");
@@ -830,6 +841,7 @@ impl Environment {
             ("odd?", builtin_isodd as BuiltInFnType),
             ("positive?", builtin_ispositive as BuiltInFnType),
             ("negative?", builtin_isnegative as BuiltInFnType),
+            ("zero?", builtin_iszero as BuiltInFnType),
             ("cons", builtin_cons as BuiltInFnType),
             ("car", builtin_car as BuiltInFnType),
             ("cdr", builtin_cdr as BuiltInFnType),
@@ -1410,6 +1422,10 @@ mod tests {
             ("(or #f #t #f)", Expr::Bool(true)),
             ("(not #t)", Expr::Bool(false)),
             ("(not #f)", Expr::Bool(true)),
+            ("(not 3)", Expr::Bool(false)),
+            ("(not (list 3))", Expr::Bool(false)),
+            ("(not '())", Expr::Bool(false)),
+            ("(not 'nil)", Expr::Bool(false)),
         ];
         validate(cases);
     }
@@ -1509,6 +1525,14 @@ mod tests {
             ("(negative? 2.0)", Expr::Bool(false)),
             ("(negative? -2)", Expr::Bool(true)),
             ("(negative? -2.0)", Expr::Bool(true)),
+            ("(zero? 0)", Expr::Bool(true)),
+            ("(zero? 0.0)", Expr::Bool(true)),
+            ("(zero? -0)", Expr::Bool(true)),
+            ("(zero? -0.0)", Expr::Bool(true)),
+            ("(zero? 1)", Expr::Bool(false)),
+            ("(zero? 0.0001)", Expr::Bool(false)),
+            ("(zero? -1)", Expr::Bool(false)),
+            ("(zero? -0.0001)", Expr::Bool(false)),
         ];
         validate(cases);
     }
