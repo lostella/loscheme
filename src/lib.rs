@@ -436,36 +436,34 @@ impl Expr {
     }
 }
 
-fn builtin_add(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_add(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     let res = values
         .into_iter()
         .try_fold(Expr::Integer(0), |acc, x| acc.add(&x))?;
-    Ok(res)
+    Ok(MaybeValue::Just(res))
 }
 
-fn builtin_mul(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_mul(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     let res = values
         .into_iter()
         .try_fold(Expr::Integer(1), |acc, x| acc.mul(&x))?;
-    Ok(res)
+    Ok(MaybeValue::Just(res))
 }
 
-fn builtin_sub(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_sub(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     let mut values_iter = values.into_iter();
-    match values_iter.next() {
-        None => Ok(Expr::Integer(0)),
-        Some(v) => {
-            let res = values_iter.try_fold(v, |acc, x| acc.sub(&x))?;
-            Ok(res)
-        }
-    }
+    let res = match values_iter.next() {
+        None => Expr::Integer(0),
+        Some(v) => values_iter.try_fold(v, |acc, x| acc.sub(&x))?,
+    };
+    Ok(MaybeValue::Just(res))
 }
 
-fn builtin_abs(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_abs(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Abs needs exactly one argument");
     }
-    let res_value = match values.first() {
+    let res = match values.first() {
         Some(value) => match value {
             Expr::Integer(n) => Expr::Integer(if *n >= 0 { *n } else { -*n }),
             Expr::Float(n) => Expr::Float(if *n >= 0.0 { *n } else { -*n }),
@@ -473,90 +471,88 @@ fn builtin_abs(values: Vec<Expr>) -> Result<Expr, &'static str> {
         },
         _ => return Err("Abs needs exactly one argument"),
     };
-    Ok(res_value)
+    Ok(MaybeValue::Just(res))
 }
 
-fn builtin_div(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_div(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     let mut values_iter = values.into_iter();
-    match values_iter.next() {
-        None => Ok(Expr::Integer(1)),
-        Some(v) => {
-            let res = values_iter.try_fold(v, |acc, x| acc.div(&x))?;
-            Ok(res)
-        }
-    }
+    let res = match values_iter.next() {
+        None => Expr::Integer(1),
+        Some(v) => values_iter.try_fold(v, |acc, x| acc.div(&x))?,
+    };
+    Ok(MaybeValue::Just(res))
 }
 
 type CmpFnType = fn(&Expr, &Expr) -> Result<Expr, &'static str>;
 
-fn builtin_cmp(values: Vec<Expr>, method: CmpFnType) -> Result<Expr, &'static str> {
+fn builtin_cmp(values: Vec<Expr>, method: CmpFnType) -> Result<MaybeValue, &'static str> {
     for (a, b) in values.iter().zip(values.iter().skip(1)) {
         match method(a, b) {
-            Ok(Expr::Bool(false)) => return Ok(Expr::Bool(false)),
+            Ok(Expr::Bool(false)) => return Ok(MaybeValue::Just(Expr::Bool(false))),
             Err(s) => return Err(s),
             _ => (),
         }
     }
-    Ok(Expr::Bool(true))
+    Ok(MaybeValue::Just(Expr::Bool(true)))
 }
 
-fn builtin_lt(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_lt(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     builtin_cmp(values, Expr::lt)
 }
 
-fn builtin_gt(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_gt(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     builtin_cmp(values, Expr::gt)
 }
 
-fn builtin_leq(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_leq(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     builtin_cmp(values, Expr::leq)
 }
 
-fn builtin_geq(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_geq(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     builtin_cmp(values, Expr::geq)
 }
 
-fn builtin_iseq(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_iseq(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     builtin_cmp(values, Expr::iseq)
 }
 
-fn builtin_not(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_not(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Not needs exactly one argument");
     }
-    match values[0] {
-        Expr::Bool(b) => Ok(Expr::Bool(!b)),
-        _ => Ok(Expr::Bool(false)),
-    }
+    Ok(MaybeValue::Just(Expr::Bool(match values[0] {
+        Expr::Bool(b) => !b,
+        _ => false,
+    })))
 }
 
-fn builtin_list(values: Vec<Expr>) -> Result<Expr, &'static str> {
-    Ok(Expr::from_vec(values))
+fn builtin_list(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
+    Ok(MaybeValue::Just(Expr::from_vec(values)))
 }
 
-fn builtin_apply(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_apply(mut values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 2 {
         return Err("Apply needs exactly two argument");
     }
     let first = take(&mut values[0]);
     let second = take(&mut values[1]);
     match first {
-        Expr::Procedure(proc) => proc.call(second.into_vec()?),
+        Expr::Procedure(proc) => Ok(MaybeValue::TailCall(proc, second.into_vec()?)),
         _ => Err("Apply needs a procedure and a list as arguments"),
     }
 }
 
-fn builtin_length(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_length(mut values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument");
     }
     match take(&mut values[0]).into_vec() {
-        Ok(v) => Ok(Expr::Integer(v.len() as i64)),
+        Ok(v) => Ok(MaybeValue::Just(Expr::Integer(v.len() as i64))),
         _ => Err("Cannot compute length (is it a list?)"),
     }
 }
 
-fn builtin_append(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_append(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     let mut all = Vec::new();
     for value in values {
         match value {
@@ -565,176 +561,176 @@ fn builtin_append(values: Vec<Expr>) -> Result<Expr, &'static str> {
             _ => return Err("Append needs lists as arguments"),
         }
     }
-    Ok(Expr::from_vec(all))
+    Ok(MaybeValue::Just(Expr::from_vec(all)))
 }
 
-fn builtin_ispair(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_ispair(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Pair? needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Cons(_) => Ok(Expr::Bool(true)),
-        _ => Ok(Expr::Bool(false)),
-    }
+    Ok(MaybeValue::Just(Expr::Bool(matches!(
+        &values[0],
+        Expr::Cons(_)
+    ))))
 }
 
-fn builtin_islist(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_islist(mut values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("List? needs exactly one argument");
     }
     match take(&mut values[0]) {
         Expr::Cons(pair) => match builtin_islist(vec![pair.cdr])? {
-            Expr::Bool(b) => Ok(Expr::Bool(b)),
+            MaybeValue::Just(Expr::Bool(b)) => Ok(MaybeValue::Just(Expr::Bool(b))),
             _ => Err("Unexpected non-boolean"),
         },
-        Expr::Null => Ok(Expr::Bool(true)),
-        _ => Ok(Expr::Bool(false)),
+        Expr::Null => Ok(MaybeValue::Just(Expr::Bool(true))),
+        _ => Ok(MaybeValue::Just(Expr::Bool(false))),
     }
 }
 
-fn builtin_isnull(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_isnull(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Null? needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Null => Ok(Expr::Bool(true)),
-        _ => Ok(Expr::Bool(false)),
-    }
+    Ok(MaybeValue::Just(Expr::Bool(matches!(
+        &values[0],
+        Expr::Null
+    ))))
 }
 
-fn builtin_isnumber(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_isnumber(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Number? needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Float(_) | Expr::Integer(_) => Ok(Expr::Bool(true)),
-        _ => Ok(Expr::Bool(false)),
-    }
+    Ok(MaybeValue::Just(Expr::Bool(matches!(
+        &values[0],
+        Expr::Float(_) | Expr::Integer(_)
+    ))))
 }
 
-fn builtin_issymbol(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_issymbol(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Symbol? needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Symbol(_) => Ok(Expr::Bool(true)),
-        _ => Ok(Expr::Bool(false)),
-    }
+    Ok(MaybeValue::Just(Expr::Bool(matches!(
+        &values[0],
+        Expr::Symbol(_)
+    ))))
 }
 
-fn builtin_isstring(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_isstring(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("String? needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Str(_) => Ok(Expr::Bool(true)),
-        _ => Ok(Expr::Bool(false)),
-    }
+    Ok(MaybeValue::Just(Expr::Bool(matches!(
+        &values[0],
+        Expr::Str(_)
+    ))))
 }
 
-fn builtin_isboolean(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_isboolean(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Boolean? needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Bool(_) => Ok(Expr::Bool(true)),
-        _ => Ok(Expr::Bool(false)),
-    }
+    Ok(MaybeValue::Just(Expr::Bool(matches!(
+        &values[0],
+        Expr::Bool(_)
+    ))))
 }
 
-fn builtin_isprocedure(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_isprocedure(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Procedure? needs exactly one argument");
     }
-    match &values[0] {
-        Expr::Procedure(_) => Ok(Expr::Bool(true)),
-        _ => Ok(Expr::Bool(false)),
-    }
+    Ok(MaybeValue::Just(Expr::Bool(matches!(
+        &values[0],
+        Expr::Procedure(_)
+    ))))
 }
 
-fn builtin_iseven(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_iseven(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Even? needs exactly one argument");
     }
     match &values[0] {
-        Expr::Integer(v) => Ok(Expr::Bool(v % 2 == 0)),
+        Expr::Integer(v) => Ok(MaybeValue::Just(Expr::Bool(v % 2 == 0))),
         _ => Err("Even? needs an integer argument"),
     }
 }
 
-fn builtin_isodd(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_isodd(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Odd? needs exactly one argument");
     }
     match &values[0] {
-        Expr::Integer(v) => Ok(Expr::Bool(v % 2 != 0)),
+        Expr::Integer(v) => Ok(MaybeValue::Just(Expr::Bool(v % 2 != 0))),
         _ => Err("Odd? needs an integer argument"),
     }
 }
 
-fn builtin_ispositive(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_ispositive(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Positive? needs exactly one argument");
     }
     match &values[0] {
-        Expr::Integer(v) => Ok(Expr::Bool(*v > 0)),
-        Expr::Float(v) => Ok(Expr::Bool(*v > 0 as f64)),
+        Expr::Integer(v) => Ok(MaybeValue::Just(Expr::Bool(*v > 0))),
+        Expr::Float(v) => Ok(MaybeValue::Just(Expr::Bool(*v > 0 as f64))),
         _ => Err("Positive? needs a number argument"),
     }
 }
 
-fn builtin_isnegative(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_isnegative(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Negative? needs exactly one argument");
     }
     match &values[0] {
-        Expr::Integer(v) => Ok(Expr::Bool(*v < 0)),
-        Expr::Float(v) => Ok(Expr::Bool(*v < 0 as f64)),
+        Expr::Integer(v) => Ok(MaybeValue::Just(Expr::Bool(*v < 0))),
+        Expr::Float(v) => Ok(MaybeValue::Just(Expr::Bool(*v < 0 as f64))),
         _ => Err("Negative? needs a number argument"),
     }
 }
 
-fn builtin_iszero(values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_iszero(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Zero? needs exactly one argument");
     }
     match &values[0] {
-        Expr::Integer(v) => Ok(Expr::Bool(*v == 0)),
-        Expr::Float(v) => Ok(Expr::Bool(*v == 0 as f64)),
+        Expr::Integer(v) => Ok(MaybeValue::Just(Expr::Bool(*v == 0))),
+        Expr::Float(v) => Ok(MaybeValue::Just(Expr::Bool(*v == 0 as f64))),
         _ => Err("Zero? needs a number argument"),
     }
 }
 
-fn builtin_cons(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_cons(mut values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 2 {
         return Err("Cons needs exactly two argument");
     }
     let car = take(&mut values[0]);
     let cdr = take(&mut values[1]);
-    Ok(Expr::Cons(Box::new(Cons { car, cdr })))
+    Ok(MaybeValue::Just(Expr::Cons(Box::new(Cons { car, cdr }))))
 }
 
-fn builtin_car(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_car(mut values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Car needs exactly one argument");
     }
     match take(&mut values[0]) {
-        Expr::Cons(p) => Ok(p.car),
+        Expr::Cons(p) => Ok(MaybeValue::Just(p.car)),
         _ => Err("Car needs a pair as argument"),
     }
 }
 
-fn builtin_cdr(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_cdr(mut values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Cdr needs exactly one argument");
     }
     match take(&mut values[0]) {
-        Expr::Cons(p) => Ok(p.cdr),
+        Expr::Cons(p) => Ok(MaybeValue::Just(p.cdr)),
         _ => Err("Cdr needs a pair as argument"),
     }
 }
 
-fn builtin_filter(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
+fn builtin_filter(mut values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 2 {
         return Err("Filter needs exactly two argument");
     }
@@ -742,13 +738,30 @@ fn builtin_filter(mut values: Vec<Expr>) -> Result<Expr, &'static str> {
     let orig = take(&mut values[1]).into_vec()?;
     match pred {
         Expr::Procedure(proc) => {
-            let v = orig
-                .into_iter()
-                .filter(|x| proc.call(vec![x.clone()]) == Ok(Expr::Bool(true)))
-                .collect();
-            Ok(Expr::from_vec(v))
+            let mut v = Vec::new();
+            for x in orig {
+                if proc.call(vec![x.clone()])?.materialize()? == Expr::Bool(true) {
+                    v.push(x)
+                }
+            }
+            Ok(MaybeValue::Just(Expr::from_vec(v)))
         }
         _ => Err("Not a procedure"),
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum MaybeValue {
+    Just(Expr),
+    TailCall(Procedure, Vec<Expr>),
+}
+
+impl MaybeValue {
+    fn materialize(self) -> Result<Expr, &'static str> {
+        match self {
+            Self::Just(expr) => Ok(expr),
+            Self::TailCall(proc, args) => proc.call(args)?.materialize(),
+        }
     }
 }
 
@@ -781,7 +794,7 @@ pub struct Environment {
     head: EnvironmentLink,
 }
 
-type BuiltInFnType = fn(Vec<Expr>) -> Result<Expr, &'static str>;
+type BuiltInFnType = fn(Vec<Expr>) -> Result<MaybeValue, &'static str>;
 
 impl Environment {
     pub fn empty() -> Environment {
@@ -865,43 +878,47 @@ impl Environment {
     }
 
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Expr, &'static str> {
+        self.maybe_evaluate(expr)?.materialize()
+    }
+
+    fn maybe_evaluate(&mut self, expr: &Expr) -> Result<MaybeValue, &'static str> {
         match expr {
-            Expr::Integer(_) => Ok(expr.clone()),
-            Expr::Float(_) => Ok(expr.clone()),
-            Expr::Str(_) => Ok(expr.clone()),
-            Expr::Bool(_) => Ok(expr.clone()),
-            Expr::Cons(p) => self.evaluate_pair(p),
+            Expr::Integer(_) => Ok(MaybeValue::Just(expr.clone())),
+            Expr::Float(_) => Ok(MaybeValue::Just(expr.clone())),
+            Expr::Str(_) => Ok(MaybeValue::Just(expr.clone())),
+            Expr::Bool(_) => Ok(MaybeValue::Just(expr.clone())),
+            Expr::Cons(p) => self.maybe_evaluate_pair(p),
             Expr::Symbol(s) => match self.get(s) {
-                Some(value) => Ok(value),
+                Some(value) => Ok(MaybeValue::Just(value)),
                 None => Err("Undefined symbol"),
             },
             _ => Err("Cannot evaluate expression"),
         }
     }
 
-    fn evaluate_pair(&mut self, pair: &Cons) -> Result<Expr, &'static str> {
+    fn maybe_evaluate_pair(&mut self, pair: &Cons) -> Result<MaybeValue, &'static str> {
         let args = pair.cdr.borrow_vec()?;
 
         match &pair.car {
-            Expr::Keyword(Keyword::Quote) => self.evaluate_quote(args),
-            Expr::Keyword(Keyword::Lambda) => self.evaluate_lambda(args),
-            Expr::Keyword(Keyword::Define) => self.evaluate_define(args),
+            Expr::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(args)?)),
+            Expr::Keyword(Keyword::Lambda) => Ok(MaybeValue::Just(self.evaluate_lambda(args)?)),
+            Expr::Keyword(Keyword::Define) => Ok(MaybeValue::Just(self.evaluate_define(args)?)),
+            Expr::Keyword(Keyword::Set) => Ok(MaybeValue::Just(self.evaluate_set(args)?)),
             Expr::Keyword(Keyword::If) => self.evaluate_if(args),
             Expr::Keyword(Keyword::Cond) => self.evaluate_cond(args),
             Expr::Keyword(Keyword::When) => self.evaluate_when(args),
             Expr::Keyword(Keyword::Unless) => self.evaluate_unless(args),
             Expr::Keyword(Keyword::Let) => self.evaluate_let(args),
-            Expr::Keyword(Keyword::Set) => self.evaluate_set(args),
             Expr::Keyword(Keyword::Begin) => self.evaluate_begin(args),
-            Expr::Keyword(Keyword::And) => self.evaluate_and(args),
-            Expr::Keyword(Keyword::Or) => self.evaluate_or(args),
+            Expr::Keyword(Keyword::And) => Ok(MaybeValue::Just(self.evaluate_and(args)?)),
+            Expr::Keyword(Keyword::Or) => Ok(MaybeValue::Just(self.evaluate_or(args)?)),
             car => match self.evaluate(car) {
                 Ok(Expr::Procedure(proc)) => {
                     let mut args_values = Vec::new();
                     for arg in args {
                         args_values.push(self.evaluate(arg)?)
                     }
-                    proc.call(args_values)
+                    Ok(MaybeValue::TailCall(proc, args_values))
                 }
                 _ => Err("Not a procedure call"),
             },
@@ -985,24 +1002,41 @@ impl Environment {
         }
     }
 
-    fn evaluate_if(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_set(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
+        if args.len() != 2 {
+            return Err("Set! needs exactly two arguments");
+        }
+        match args[0] {
+            Expr::Symbol(s) => {
+                if self.get(s).is_none() {
+                    return Err("Symbol is not bound");
+                }
+                let value = self.evaluate(args[1])?;
+                self.set(s.clone(), value);
+                Ok(Expr::Unspecified)
+            }
+            _ => Err("First argument to set! must be a symbol"),
+        }
+    }
+
+    fn evaluate_if(&mut self, args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         if args.len() < 2 || args.len() > 3 {
             return Err("If accepts two or three arguments");
         }
         match self.evaluate(args[0])? {
-            Expr::Bool(true) => self.evaluate(args[1]),
+            Expr::Bool(true) => self.maybe_evaluate(args[1]),
             Expr::Bool(false) => {
                 if args.len() == 2 {
-                    Ok(Expr::Unspecified)
+                    Ok(MaybeValue::Just(Expr::Unspecified))
                 } else {
-                    self.evaluate(args[2])
+                    self.maybe_evaluate(args[2])
                 }
             }
             _ => Err("First argument to if did not evaluate to a boolean"),
         }
     }
 
-    fn evaluate_cond(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_cond(&mut self, args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         for clause in args {
             match clause {
                 Expr::Cons(p) => {
@@ -1021,32 +1055,32 @@ impl Environment {
                 _ => return Err("Not a list"),
             }
         }
-        Ok(Expr::Unspecified)
+        Ok(MaybeValue::Just(Expr::Unspecified))
     }
 
-    fn evaluate_when(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_when(&mut self, mut args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         if args.is_empty() {
             return Err("When needs at least one argument");
         }
         match self.evaluate(args[0])? {
             Expr::Bool(true) => self.evaluate_begin(args.split_off(1)),
-            Expr::Bool(false) => Ok(Expr::Unspecified),
+            Expr::Bool(false) => Ok(MaybeValue::Just(Expr::Unspecified)),
             _ => Err("First argument to when did not evaluate to a boolean"),
         }
     }
 
-    fn evaluate_unless(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_unless(&mut self, mut args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         if args.is_empty() {
             return Err("Unless needs at least one argument");
         }
         match self.evaluate(args[0])? {
-            Expr::Bool(true) => Ok(Expr::Unspecified),
+            Expr::Bool(true) => Ok(MaybeValue::Just(Expr::Unspecified)),
             Expr::Bool(false) => self.evaluate_begin(args.split_off(1)),
             _ => Err("First argument to unless did not evaluate to a boolean"),
         }
     }
 
-    fn evaluate_let(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
+    fn evaluate_let(&mut self, mut args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         if args.is_empty() {
             return Err("Let needs at least one argument");
         }
@@ -1066,34 +1100,23 @@ impl Environment {
                 _ => return Err("Not a 2-list"),
             }
         }
-        let mut out = Expr::Unspecified;
-        for expr in args.split_off(1).into_iter() {
-            out = child.evaluate(expr)?;
+        let mut out = MaybeValue::Just(Expr::Unspecified);
+        if let Some((last, rest)) = args.split_off(1).split_last() {
+            for expr in rest {
+                child.evaluate(expr)?;
+            }
+            out = child.maybe_evaluate(last)?;
         }
         Ok(out)
     }
 
-    fn evaluate_set(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
-        if args.len() != 2 {
-            return Err("Set! needs exactly two arguments");
-        }
-        match args[0] {
-            Expr::Symbol(s) => {
-                if self.get(s).is_none() {
-                    return Err("Symbol is not bound");
-                }
-                let value = self.evaluate(args[1])?;
-                self.set(s.clone(), value);
-                Ok(Expr::Unspecified)
+    fn evaluate_begin(&mut self, args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
+        let mut out = MaybeValue::Just(Expr::Unspecified);
+        if let Some((last, rest)) = args.split_last() {
+            for expr in rest {
+                self.evaluate(expr)?;
             }
-            _ => Err("First argument to set! must be a symbol"),
-        }
-    }
-
-    fn evaluate_begin(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
-        let mut out = Expr::Unspecified;
-        for expr in args.into_iter() {
-            out = self.evaluate(expr)?;
+            out = self.maybe_evaluate(last)?;
         }
         Ok(out)
     }
@@ -1122,7 +1145,7 @@ impl Environment {
 }
 
 trait Callable {
-    fn call(&self, args: Vec<Expr>) -> Result<Expr, &'static str>;
+    fn call(&self, args: Vec<Expr>) -> Result<MaybeValue, &'static str>;
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -1132,30 +1155,52 @@ pub struct UserDefinedProcedure {
     env: Environment,
 }
 
+fn call_user_defined(
+    proc: &UserDefinedProcedure,
+    env: &mut Environment,
+    args: Vec<Expr>,
+) -> Result<MaybeValue, &'static str> {
+    let params = &proc.params;
+    let body = &proc.body;
+    if args.len() != params.len() {
+        return Err("Incorrect number of arguments");
+    }
+    for (param, arg) in zip(params, args) {
+        env.set(param.to_string(), arg);
+    }
+    let mut out = MaybeValue::Just(Expr::Unspecified);
+    if let Some((last, rest)) = body.split_last() {
+        for expr in rest {
+            env.evaluate(expr)?;
+        }
+        out = env.maybe_evaluate(last)?;
+    }
+    Ok(out)
+}
+
 impl Callable for UserDefinedProcedure {
-    fn call(&self, args: Vec<Expr>) -> Result<Expr, &'static str> {
-        if args.len() != self.params.len() {
-            return Err("Incorrect number of arguments");
-        }
+    fn call(&self, args: Vec<Expr>) -> Result<MaybeValue, &'static str> {
         let mut local_env = self.env.child();
-        for (param, arg) in zip(&self.params, args) {
-            local_env.set(param.to_string(), arg);
+        let mut out = call_user_defined(self, &mut local_env, args);
+        loop {
+            match out? {
+                MaybeValue::Just(expr) => return Ok(MaybeValue::Just(expr)),
+                MaybeValue::TailCall(Procedure::BuiltIn(proc), args) => return proc.call(args),
+                MaybeValue::TailCall(Procedure::UserDefined(proc), args) => {
+                    out = call_user_defined(&proc, &mut local_env, args)
+                }
+            }
         }
-        let mut out = Expr::Unspecified;
-        for expr in self.body.iter() {
-            out = local_env.evaluate(expr)?;
-        }
-        Ok(out)
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BuiltInProcedure {
-    func: fn(Vec<Expr>) -> Result<Expr, &'static str>,
+    func: BuiltInFnType,
 }
 
 impl Callable for BuiltInProcedure {
-    fn call(&self, args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn call(&self, args: Vec<Expr>) -> Result<MaybeValue, &'static str> {
         (self.func)(args)
     }
 }
@@ -1167,7 +1212,7 @@ pub enum Procedure {
 }
 
 impl Callable for Procedure {
-    fn call(&self, args: Vec<Expr>) -> Result<Expr, &'static str> {
+    fn call(&self, args: Vec<Expr>) -> Result<MaybeValue, &'static str> {
         match self {
             Procedure::UserDefined(proc) => proc.call(args),
             Procedure::BuiltIn(proc) => proc.call(args),
@@ -1287,11 +1332,11 @@ mod tests {
     fn test_builtin_add() {
         let values = vec![Expr::Integer(10), Expr::Float(42.0)];
 
-        assert_eq!(builtin_add(values), Ok(Expr::Float(52.0)));
+        assert_eq!(builtin_add(values), Ok(MaybeValue::Just(Expr::Float(52.0))));
 
         let values = vec![Expr::Float(42.0), Expr::Integer(13)];
 
-        assert_eq!(builtin_add(values), Ok(Expr::Float(55.0)));
+        assert_eq!(builtin_add(values), Ok(MaybeValue::Just(Expr::Float(55.0))));
 
         let values = vec![
             Expr::Float(42.0),
