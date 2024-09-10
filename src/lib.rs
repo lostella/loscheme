@@ -765,9 +765,9 @@ impl EnvironmentNode {
         self.data.insert(key, value)
     }
 
-    pub fn get(&self, key: &str) -> Option<&Expr> {
+    pub fn get(&self, key: &str) -> Option<Expr> {
         match self.data.get(key) {
-            Some(value) => Some(value),
+            Some(value) => Some(value.clone()),
             None => match &self.parent {
                 Some(link) => link.borrow().get(key),
                 None => None,
@@ -860,7 +860,7 @@ impl Environment {
         self.head.borrow_mut().set(key, value)
     }
 
-    pub fn get(&self, key: &str) -> Option<&Expr> {
+    pub fn get(&self, key: &str) -> Option<Expr> {
         self.head.borrow().get(key)
     }
 
