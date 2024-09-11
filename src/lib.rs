@@ -1820,7 +1820,7 @@ mod tests {
                 Expr::from_vec(
                     vec![1, 2, 3, 5, 6, 7, 23, 32, 32, 34, 45, 62, 78, 99]
                         .into_iter()
-                        .map(|x| Expr::Integer(x))
+                        .map(Expr::Integer)
                         .collect(),
                 ),
             ),
