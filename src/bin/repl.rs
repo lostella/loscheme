@@ -13,8 +13,8 @@ fn main() {
         stdout.flush().unwrap();
 
         let mut input = String::new();
-
-        match stdin.lock().read_line(&mut input) {
+        let read_res = stdin.lock().read_line(&mut input);
+        match read_res {
             Ok(0) => {
                 continue;
             }
@@ -23,8 +23,8 @@ fn main() {
                 match parse_code(&input) {
                     Ok(exprs) => {
                         for expr in exprs {
-                            let res = env.evaluate(&expr);
-                            match res {
+                            let eval_res = env.evaluate(&expr);
+                            match eval_res {
                                 Ok(Expr::Unspecified) => (),
                                 Ok(v) => println!("{}", v),
                                 Err(err) => eprintln!("Error (eval): {}", err),

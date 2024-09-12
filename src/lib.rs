@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
+use std::io::{self, BufRead};
 use std::iter::{zip, Peekable};
 use std::mem::take;
 use std::rc::Rc;
@@ -750,6 +751,36 @@ fn builtin_filter(mut values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     }
 }
 
+fn builtin_read(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
+    if !values.is_empty() {
+        return Err("Read takes no arguments");
+    }
+    let mut input = String::new();
+    let _ = io::stdin().lock().read_line(&mut input);
+    loop {
+        if let Ok(expr) = Parser::new(Tokenizer::new(&input)).parse_expression() {
+            return Ok(MaybeValue::Just(expr));
+        }
+        let _ = io::stdin().lock().read_line(&mut input);
+    }
+}
+
+fn builtin_write(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
+    if values.len() != 1 {
+        return Err("Write needs exactly one argument");
+    }
+    println!("{}", values[0]);
+    Ok(MaybeValue::Just(Expr::Unspecified))
+}
+
+fn builtin_newline(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
+    if !values.is_empty() {
+        return Err("Write takes no arguments");
+    }
+    println!();
+    Ok(MaybeValue::Just(Expr::Unspecified))
+}
+
 #[derive(Debug, PartialEq, Clone)]
 enum MaybeValue {
     Just(Expr),
@@ -859,6 +890,9 @@ impl Environment {
             ("car", builtin_car as BuiltInFnType),
             ("cdr", builtin_cdr as BuiltInFnType),
             ("filter", builtin_filter as BuiltInFnType),
+            ("read", builtin_read as BuiltInFnType),
+            ("write", builtin_write as BuiltInFnType),
+            ("newline", builtin_newline as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(
