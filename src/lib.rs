@@ -178,95 +178,82 @@ pub enum Expr {
     Cons(Box<Cons>),
 }
 
-pub struct Parser<'a> {
-    tokens: Peekable<Tokenizer<'a>>,
+pub fn parse_tokens(tokens: &mut Peekable<Tokenizer>) -> Result<Vec<Expr>, &'static str> {
+    let mut expressions = Vec::new();
+    while tokens.peek().is_some() {
+        expressions.push(parse_expression(tokens)?);
+    }
+    Ok(expressions)
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(tokens: Tokenizer<'a>) -> Self {
-        Self {
-            tokens: tokens.peekable(),
-        }
+fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, &'static str> {
+    match tokens.next() {
+        Some(Token::LParen) => parse_list(tokens),
+        Some(Token::Quote) => parse_quote(tokens),
+        Some(Token::Atom(s)) => parse_atom(s),
+        Some(Token::Dot) => Err("Unexpected dot"),
+        Some(Token::RParen) => Err("Unexpected closing parenthesis"),
+        None => Err("Unexpected end of input"),
     }
+}
 
-    pub fn parse(&mut self) -> Result<Vec<Expr>, &'static str> {
-        let mut expressions = Vec::new();
-        while self.tokens.peek().is_some() {
-            expressions.push(self.parse_expression()?);
-        }
-        Ok(expressions)
-    }
-
-    fn parse_expression(&mut self) -> Result<Expr, &'static str> {
-        match self.tokens.next() {
-            Some(Token::LParen) => self.parse_list(),
-            Some(Token::Quote) => self.parse_quote(),
-            Some(Token::Atom(s)) => self.parse_atom(s),
-            Some(Token::Dot) => Err("Unexpected dot"),
-            Some(Token::RParen) => Err("Unexpected closing parenthesis"),
-            None => Err("Unexpected end of input"),
-        }
-    }
-
-    fn parse_list(&mut self) -> Result<Expr, &'static str> {
-        if let Some(token) = self.tokens.peek() {
-            match token {
-                Token::RParen => {
-                    self.tokens.next();
-                    return Ok(Expr::Null);
-                }
-                Token::Dot => {
-                    self.tokens.next();
-                    let res = self.parse_expression();
-                    match self.tokens.next() {
-                        Some(Token::RParen) => return res,
-                        _ => return Err("Expected closing parenthesis"),
-                    }
-                }
-                _ => {
-                    return Ok(Expr::Cons(Box::new(Cons {
-                        car: self.parse_expression()?,
-                        cdr: self.parse_list()?,
-                    })));
+fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, &'static str> {
+    if let Some(token) = tokens.peek() {
+        match token {
+            Token::RParen => {
+                tokens.next();
+                return Ok(Expr::Null);
+            }
+            Token::Dot => {
+                tokens.next();
+                let res = parse_expression(tokens);
+                match tokens.next() {
+                    Some(Token::RParen) => return res,
+                    _ => return Err("Expected closing parenthesis"),
                 }
             }
+            _ => {
+                return Ok(Expr::Cons(Box::new(Cons {
+                    car: parse_expression(tokens)?,
+                    cdr: parse_list(tokens)?,
+                })));
+            }
         }
-        Err("Unterminated list")
     }
+    Err("Unterminated list")
+}
 
-    fn parse_quote(&mut self) -> Result<Expr, &'static str> {
-        Ok(Expr::Cons(Box::new(Cons {
-            car: Expr::Keyword(Keyword::Quote),
-            cdr: Expr::Cons(Box::new(Cons {
-                car: self.parse_expression()?,
-                cdr: Expr::Null,
-            })),
-        })))
-    }
+fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, &'static str> {
+    Ok(Expr::Cons(Box::new(Cons {
+        car: Expr::Keyword(Keyword::Quote),
+        cdr: Expr::Cons(Box::new(Cons {
+            car: parse_expression(tokens)?,
+            cdr: Expr::Null,
+        })),
+    })))
+}
 
-    fn parse_atom(&self, s: String) -> Result<Expr, &'static str> {
-        if let Ok(int) = s.parse::<i64>() {
-            Ok(Expr::Integer(int))
-        } else if let Ok(float) = s.parse::<f64>() {
-            Ok(Expr::Float(float))
-        } else if s == "#t" {
-            Ok(Expr::Bool(true))
-        } else if s == "#f" {
-            Ok(Expr::Bool(false))
-        } else if s.starts_with('"') && s.ends_with('"') {
-            Ok(Expr::Str(s[1..s.len() - 1].to_string()))
-        } else if let Ok(keyword) = Keyword::from_str(&s) {
-            Ok(Expr::Keyword(keyword))
-        } else {
-            Ok(Expr::Symbol(s))
-        }
+fn parse_atom(s: String) -> Result<Expr, &'static str> {
+    if let Ok(int) = s.parse::<i64>() {
+        Ok(Expr::Integer(int))
+    } else if let Ok(float) = s.parse::<f64>() {
+        Ok(Expr::Float(float))
+    } else if s == "#t" {
+        Ok(Expr::Bool(true))
+    } else if s == "#f" {
+        Ok(Expr::Bool(false))
+    } else if s.starts_with('"') && s.ends_with('"') {
+        Ok(Expr::Str(s[1..s.len() - 1].to_string()))
+    } else if let Ok(keyword) = Keyword::from_str(&s) {
+        Ok(Expr::Keyword(keyword))
+    } else {
+        Ok(Expr::Symbol(s))
     }
 }
 
-pub fn parse_code(code: &str) -> Result<Vec<Expr>, &'static str> {
-    let tokenizer = Tokenizer::new(code);
-    let mut parser = Parser::new(tokenizer);
-    parser.parse()
+pub fn parse(code: &str) -> Result<Vec<Expr>, &'static str> {
+    let tokens = Tokenizer::new(code);
+    parse_tokens(&mut tokens.peekable())
 }
 
 impl fmt::Display for Expr {
@@ -758,7 +745,8 @@ fn builtin_read(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     let mut input = String::new();
     let _ = io::stdin().lock().read_line(&mut input);
     loop {
-        if let Ok(expr) = Parser::new(Tokenizer::new(&input)).parse_expression() {
+        let mut tokens = Tokenizer::new(&input).peekable();
+        if let Ok(expr) = parse_expression(&mut tokens) {
             return Ok(MaybeValue::Just(expr));
         }
         let _ = io::stdin().lock().read_line(&mut input);
@@ -1305,7 +1293,7 @@ mod tests {
                 Expr::Symbol("x".to_string()),
             ]),
         ])];
-        let expressions: Vec<Expr> = parse_code(code).unwrap();
+        let expressions: Vec<Expr> = parse(code).unwrap();
         assert_eq!(expressions, expected);
     }
 
@@ -1384,7 +1372,7 @@ mod tests {
     fn validate(cases: Vec<(&str, Expr)>) {
         let mut env = Environment::standard().child();
         for (code, val) in cases {
-            let expr = parse_code(code).unwrap().remove(0);
+            let expr = parse(code).unwrap().remove(0);
             assert_eq!(env.evaluate(&expr), Ok(val));
         }
     }

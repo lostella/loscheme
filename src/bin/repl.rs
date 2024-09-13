@@ -1,4 +1,4 @@
-use loscheme::{parse_code, Environment, Expr};
+use loscheme::{parse, Environment, Expr};
 use std::io::{self, BufRead, Write};
 
 const INPUT_PROMPT: &str = "λscm>";
@@ -20,7 +20,7 @@ fn main() {
             }
             Ok(_) => {
                 input = input.trim().to_string();
-                match parse_code(&input) {
+                match parse(&input) {
                     Ok(exprs) => {
                         for expr in exprs {
                             let eval_res = env.evaluate(&expr);

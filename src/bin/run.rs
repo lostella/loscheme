@@ -1,4 +1,4 @@
-use loscheme::{parse_code, Environment};
+use loscheme::{parse, Environment};
 use std::env;
 use std::fs::File;
 use std::io::{prelude::*, BufReader};
@@ -25,7 +25,7 @@ fn main() {
         code.push('\n');
     }
 
-    match parse_code(&code) {
+    match parse(&code) {
         Ok(exprs) => {
             for expr in exprs {
                 let res = env.evaluate(&expr);
