@@ -333,7 +333,6 @@ impl Expr {
         Ok(res)
     }
 
-    #[inline(always)]
     fn add(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a + b)),
@@ -344,7 +343,6 @@ impl Expr {
         }
     }
 
-    #[inline(always)]
     fn mul(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a * b)),
@@ -355,7 +353,6 @@ impl Expr {
         }
     }
 
-    #[inline(always)]
     fn sub(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a - b)),
@@ -366,7 +363,6 @@ impl Expr {
         }
     }
 
-    #[inline(always)]
     fn div(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Float(*a as f64 / *b as f64)),
@@ -377,7 +373,6 @@ impl Expr {
         }
     }
 
-    #[inline(always)]
     fn lt(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a < b)),
@@ -388,7 +383,6 @@ impl Expr {
         }
     }
 
-    #[inline(always)]
     fn gt(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a > b)),
@@ -399,7 +393,6 @@ impl Expr {
         }
     }
 
-    #[inline(always)]
     fn leq(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a <= b)),
@@ -410,7 +403,6 @@ impl Expr {
         }
     }
 
-    #[inline(always)]
     fn geq(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a >= b)),
@@ -421,7 +413,6 @@ impl Expr {
         }
     }
 
-    #[inline(always)]
     fn iseq(&self, other: &Expr) -> Result<Expr, &'static str> {
         match (self, other) {
             (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a == b)),
@@ -785,7 +776,6 @@ enum MaybeValue {
 }
 
 impl MaybeValue {
-    #[inline(always)]
     fn materialize(self) -> Result<Expr, &'static str> {
         match self {
             Self::Just(expr) => Ok(expr),
@@ -913,12 +903,10 @@ impl Environment {
         self.head.borrow().get(key)
     }
 
-    #[inline(always)]
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Expr, &'static str> {
         self.maybe_evaluate(expr)?.materialize()
     }
 
-    #[inline(always)]
     fn maybe_evaluate(&mut self, expr: &Expr) -> Result<MaybeValue, &'static str> {
         match expr {
             Expr::Integer(_) => Ok(MaybeValue::Just(expr.clone())),
@@ -934,7 +922,6 @@ impl Environment {
         }
     }
 
-    #[inline(always)]
     fn maybe_evaluate_pair(&mut self, pair: &Cons) -> Result<MaybeValue, &'static str> {
         let args = pair.cdr.borrow_vec()?;
 
@@ -964,7 +951,6 @@ impl Environment {
         }
     }
 
-    #[inline(always)]
     fn evaluate_quote(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.len() != 1 {
             return Err("Quote needs exactly one argument");
@@ -972,7 +958,6 @@ impl Environment {
         Ok(args[0].clone())
     }
 
-    #[inline(always)]
     fn evaluate_lambda(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.is_empty() {
             return Err("Lambda needs at least one argument");
@@ -1001,7 +986,6 @@ impl Environment {
         }
     }
 
-    #[inline(always)]
     fn evaluate_define(&mut self, mut args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.is_empty() {
             return Err("Define needs at least one argument");
@@ -1044,7 +1028,6 @@ impl Environment {
         }
     }
 
-    #[inline(always)]
     fn evaluate_set(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments");
@@ -1062,7 +1045,6 @@ impl Environment {
         }
     }
 
-    #[inline(always)]
     fn evaluate_if(&mut self, args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         if args.len() < 2 || args.len() > 3 {
             return Err("If accepts two or three arguments");
@@ -1080,7 +1062,6 @@ impl Environment {
         }
     }
 
-    #[inline(always)]
     fn evaluate_cond(&mut self, args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         for clause in args {
             match clause {
@@ -1103,7 +1084,6 @@ impl Environment {
         Ok(MaybeValue::Just(Expr::Unspecified))
     }
 
-    #[inline(always)]
     fn evaluate_when(&mut self, mut args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         if args.is_empty() {
             return Err("When needs at least one argument");
@@ -1115,7 +1095,6 @@ impl Environment {
         }
     }
 
-    #[inline(always)]
     fn evaluate_unless(&mut self, mut args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         if args.is_empty() {
             return Err("Unless needs at least one argument");
@@ -1127,7 +1106,6 @@ impl Environment {
         }
     }
 
-    #[inline(always)]
     fn evaluate_let(&mut self, mut args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         if args.is_empty() {
             return Err("Let needs at least one argument");
@@ -1158,7 +1136,6 @@ impl Environment {
         Ok(out)
     }
 
-    #[inline(always)]
     fn evaluate_begin(&mut self, args: Vec<&Expr>) -> Result<MaybeValue, &'static str> {
         let mut out = MaybeValue::Just(Expr::Unspecified);
         if let Some((last, rest)) = args.split_last() {
@@ -1170,7 +1147,6 @@ impl Environment {
         Ok(out)
     }
 
-    #[inline(always)]
     fn evaluate_and(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
         for expr in args {
             match self.evaluate(expr) {
@@ -1182,7 +1158,6 @@ impl Environment {
         Ok(Expr::Bool(true))
     }
 
-    #[inline(always)]
     fn evaluate_or(&mut self, args: Vec<&Expr>) -> Result<Expr, &'static str> {
         for expr in args {
             match self.evaluate(expr) {
