@@ -1,11 +1,12 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, BufRead};
 use std::iter::{zip, Peekable};
 use std::mem::take;
 use std::rc::Rc;
 use std::str::{Chars, FromStr};
+
+use rustc_hash::FxHashMap;
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
@@ -786,7 +787,7 @@ impl MaybeValue {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
-    data: HashMap<String, Expr>,
+    data: FxHashMap<String, Expr>,
     parent: Option<EnvironmentLink>,
 }
 
@@ -820,7 +821,7 @@ type BuiltInFnType = fn(Vec<Expr>) -> Result<MaybeValue, &'static str>;
 impl Environment {
     pub fn empty() -> Environment {
         let node = EnvironmentNode {
-            data: HashMap::new(),
+            data: FxHashMap::default(),
             parent: None,
         };
         Environment {
@@ -830,7 +831,7 @@ impl Environment {
 
     pub fn child(&self) -> Environment {
         let node = EnvironmentNode {
-            data: HashMap::new(),
+            data: FxHashMap::default(),
             parent: Some(self.head.clone()),
         };
         Environment {
@@ -840,7 +841,7 @@ impl Environment {
 
     pub fn standard() -> Environment {
         let node = EnvironmentNode {
-            data: HashMap::new(),
+            data: FxHashMap::default(),
             parent: None,
         };
         let mut env = Environment {
