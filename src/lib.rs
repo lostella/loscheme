@@ -758,7 +758,7 @@ fn builtin_write(values: Vec<Expr>) -> Result<MaybeValue, &'static str> {
     if values.len() != 1 {
         return Err("Write needs exactly one argument");
     }
-    println!("{}", values[0]);
+    print!("{}", values[0]);
     Ok(MaybeValue::Just(Expr::Unspecified))
 }
 
