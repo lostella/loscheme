@@ -1657,21 +1657,6 @@ mod tests {
     }
 
     #[test]
-    fn test_fib() {
-        let cases = vec![
-            (
-                "(define (fib n) (
-                    if (< n 2)
-                    n
-                    (+ (fib (- n 1)) (fib (- n 2)))))",
-                Expr::Unspecified,
-            ),
-            ("(fib 13)", Expr::Integer(233)),
-        ];
-        validate(cases);
-    }
-
-    #[test]
     fn test_sqrt_newton_1() {
         let cases = vec![
             (
@@ -1913,6 +1898,38 @@ mod tests {
                 Expr::Unspecified,
             ),
             ("(ackermann 3 4)", Expr::Integer(125)),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_fibonacci_naive() {
+        let cases = vec![
+            (
+                "(define (fib n)
+                  (if (< n 2)
+                      n
+                      (+ (fib (- n 1)) (fib (- n 2)))))",
+                Expr::Unspecified,
+            ),
+            ("(fib 13)", Expr::Integer(233)),
+        ];
+        validate(cases);
+    }
+
+    #[test]
+    fn test_fibonacci_tailcall() {
+        let cases = vec![
+            (
+                "(define (fib n)
+                  (define (fib-tail-rec n a b)
+                    (if (= n 0)
+                        a
+                        (fib-tail-rec (- n 1) b (+ a b))))
+                  (fib-tail-rec n 0 1))",
+                Expr::Unspecified,
+            ),
+            ("(fib 20)", Expr::Integer(6765)),
         ];
         validate(cases);
     }
