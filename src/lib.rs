@@ -6,6 +6,7 @@ use std::mem::take;
 use std::rc::Rc;
 use std::str::{Chars, FromStr};
 
+use internment::Intern;
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, PartialEq)]
@@ -174,7 +175,7 @@ pub enum Expr {
     Str(String),
     Bool(bool),
     Keyword(Keyword),
-    Symbol(String),
+    Symbol(Intern<String>),
     Procedure(Procedure),
     Cons(Box<Cons>),
 }
@@ -248,7 +249,7 @@ fn parse_atom(s: String) -> Result<Expr, &'static str> {
     } else if let Ok(keyword) = Keyword::from_str(&s) {
         Ok(Expr::Keyword(keyword))
     } else {
-        Ok(Expr::Symbol(s))
+        Ok(Expr::Symbol(Intern::new(s)))
     }
 }
 
@@ -787,7 +788,7 @@ impl MaybeValue {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
-    data: FxHashMap<String, Expr>,
+    data: FxHashMap<Intern<String>, Expr>,
     parent: Option<EnvironmentLink>,
 }
 
@@ -795,12 +796,12 @@ type EnvironmentLink = Rc<RefCell<EnvironmentNode>>;
 
 impl EnvironmentNode {
     #[inline(always)]
-    pub fn set(&mut self, key: String, value: Expr) -> Option<Expr> {
+    pub fn set(&mut self, key: Intern<String>, value: Expr) -> Option<Expr> {
         self.data.insert(key, value)
     }
 
     #[inline(always)]
-    pub fn get(&self, key: &str) -> Option<Expr> {
+    pub fn get(&self, key: &Intern<String>) -> Option<Expr> {
         match self.data.get(key) {
             Some(value) => Some(value.clone()),
             None => match &self.parent {
@@ -887,7 +888,7 @@ impl Environment {
         ];
         for (s, f) in to_set {
             env.set(
-                s.to_string(),
+                Intern::new(s.to_string()),
                 Expr::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: f })),
             );
         }
@@ -895,12 +896,12 @@ impl Environment {
     }
 
     #[inline(always)]
-    pub fn set(&mut self, key: String, value: Expr) -> Option<Expr> {
+    pub fn set(&mut self, key: Intern<String>, value: Expr) -> Option<Expr> {
         self.head.borrow_mut().set(key, value)
     }
 
     #[inline(always)]
-    pub fn get(&self, key: &str) -> Option<Expr> {
+    pub fn get(&self, key: &Intern<String>) -> Option<Expr> {
         self.head.borrow().get(key)
     }
 
@@ -968,7 +969,7 @@ impl Environment {
                 let mut params = Vec::new();
                 for expr in args[0].borrow_vec()? {
                     match expr {
-                        Expr::Symbol(s) => params.push(s.clone()),
+                        Expr::Symbol(s) => params.push(*s),
                         _ => return Err("Not a symbol"),
                     }
                 }
@@ -998,18 +999,18 @@ impl Environment {
                     2 => self.evaluate(args[1])?,
                     _ => return Err("Define with a symbol gets at most two arguments"),
                 };
-                self.set(key.clone(), value);
+                self.set(*key, value);
                 Ok(Expr::Unspecified)
             }
             Expr::Cons(pair) => {
                 let key = match &pair.car {
-                    Expr::Symbol(s) => Ok(s.clone()),
+                    Expr::Symbol(s) => Ok(s),
                     _ => Err("Not a symbol"),
                 }?;
                 let mut params = Vec::new();
                 for expr in pair.cdr.borrow_vec()? {
                     match expr {
-                        Expr::Symbol(s) => params.push(s.clone()),
+                        Expr::Symbol(s) => params.push(*s),
                         _ => return Err("Not a symbol"),
                     }
                 }
@@ -1022,7 +1023,7 @@ impl Environment {
                     body,
                     env: self.clone(),
                 };
-                self.set(key, Expr::Procedure(Procedure::UserDefined(proc)));
+                self.set(*key, Expr::Procedure(Procedure::UserDefined(proc)));
                 Ok(Expr::Unspecified)
             }
             _ => Err("Define needs a symbol or a list as first argument"),
@@ -1039,7 +1040,7 @@ impl Environment {
                     return Err("Symbol is not bound");
                 }
                 let value = self.evaluate(args[1])?;
-                self.set(s.clone(), value);
+                self.set(*s, value);
                 Ok(Expr::Unspecified)
             }
             _ => Err("First argument to set! must be a symbol"),
@@ -1069,7 +1070,7 @@ impl Environment {
                 Expr::Cons(p) => {
                     let seq = p.cdr.borrow_vec()?;
                     if let Expr::Symbol(s) = &p.car {
-                        if s == "else" {
+                        if **s == "else" {
                             return self.evaluate_begin(seq);
                         }
                     }
@@ -1120,7 +1121,7 @@ impl Environment {
                             return Err("Not a 2-list");
                         }
                         let value = child.evaluate(&cdr.car)?;
-                        child.set(s.clone(), value);
+                        child.set(*s, value);
                     }
                     _ => return Err("Not a symbol"),
                 },
@@ -1177,7 +1178,7 @@ trait Callable {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct UserDefinedProcedure {
-    params: Vec<String>,
+    params: Vec<Intern<String>>,
     body: Vec<Expr>,
     env: Environment,
 }
@@ -1194,7 +1195,7 @@ fn call_user_defined(
         return Err("Incorrect number of arguments");
     }
     for (param, arg) in zip(params, args) {
-        env.set(param.to_string(), arg);
+        env.set(*param, arg);
     }
     let mut out = MaybeValue::Just(Expr::Unspecified);
     if let Some((last, rest)) = body.split_last() {
@@ -1252,6 +1253,14 @@ impl Callable for Procedure {
 mod tests {
     use super::*;
 
+    fn intern_str(s: &str) -> Intern<String> {
+        Intern::new(s.to_string())
+    }
+
+    fn symbol_from_str(s: &str) -> Expr {
+        Expr::Symbol(intern_str(s))
+    }
+
     #[test]
     fn test_tokenizer() {
         let code = "(define (square x) (* x x)) 'expr (quote (1 2 3)) \"hello world\"";
@@ -1289,14 +1298,11 @@ mod tests {
         let code = "(define (square x) (* x x))";
         let expected = vec![Expr::from_vec(vec![
             Expr::Keyword(Keyword::Define),
+            Expr::from_vec(vec![symbol_from_str("square"), symbol_from_str("x")]),
             Expr::from_vec(vec![
-                Expr::Symbol("square".to_string()),
-                Expr::Symbol("x".to_string()),
-            ]),
-            Expr::from_vec(vec![
-                Expr::Symbol("*".to_string()),
-                Expr::Symbol("x".to_string()),
-                Expr::Symbol("x".to_string()),
+                symbol_from_str("*"),
+                symbol_from_str("x"),
+                symbol_from_str("x"),
             ]),
         ])];
         let expressions: Vec<Expr> = parse(code).unwrap();
@@ -1315,19 +1321,13 @@ mod tests {
     fn test_external_repr() {
         let expr = Expr::from_vec(vec![
             Expr::Keyword(Keyword::Define),
-            Expr::from_vec(vec![
-                Expr::Symbol("f".to_string()),
-                Expr::Symbol("x".to_string()),
-            ]),
+            Expr::from_vec(vec![symbol_from_str("f"), symbol_from_str("x")]),
             Expr::Str("hello, world!".to_string()),
+            Expr::from_vec(vec![Expr::Keyword(Keyword::Quote), symbol_from_str("a")]),
             Expr::from_vec(vec![
-                Expr::Keyword(Keyword::Quote),
-                Expr::Symbol("a".to_string()),
-            ]),
-            Expr::from_vec(vec![
-                Expr::Symbol("*".to_string()),
-                Expr::Symbol("x".to_string()),
-                Expr::Symbol("2".to_string()),
+                symbol_from_str("*"),
+                symbol_from_str("x"),
+                symbol_from_str("2"),
             ]),
             Expr::Cons(Box::new(Cons {
                 car: Expr::Integer(-1),
@@ -1343,17 +1343,23 @@ mod tests {
     #[test]
     fn test_environment() {
         let mut base = Environment::empty();
-        base.set("a".to_string(), Expr::Integer(42));
+        base.set(intern_str("a"), Expr::Integer(42));
 
         let mut child = base.child();
 
-        child.set("a".to_string(), Expr::Str("hello".to_string()));
-        child.set("b".to_string(), Expr::Str("world".to_string()));
+        child.set(intern_str("a"), Expr::Str("hello".to_string()));
+        child.set(intern_str("b"), Expr::Str("world".to_string()));
 
-        assert_eq!(base.get("a"), Some(Expr::Integer(42)));
-        assert_eq!(base.get("b"), None);
-        assert_eq!(child.get("a"), Some(Expr::Str("hello".to_string())));
-        assert_eq!(child.get("b"), Some(Expr::Str("world".to_string())));
+        assert_eq!(base.get(&intern_str("a")), Some(Expr::Integer(42)));
+        assert_eq!(base.get(&intern_str("b")), None);
+        assert_eq!(
+            child.get(&intern_str("a")),
+            Some(Expr::Str("hello".to_string()))
+        );
+        assert_eq!(
+            child.get(&intern_str("b")),
+            Some(Expr::Str("world".to_string()))
+        );
     }
 
     #[test]
@@ -1515,7 +1521,7 @@ mod tests {
             (
                 "(quote (* 3 4))",
                 Expr::from_vec(vec![
-                    Expr::Symbol("*".to_string()),
+                    symbol_from_str("*"),
                     Expr::Integer(3),
                     Expr::Integer(4),
                 ]),
@@ -1529,7 +1535,7 @@ mod tests {
             (
                 "'(* 3 4)",
                 Expr::from_vec(vec![
-                    Expr::Symbol("*".to_string()),
+                    symbol_from_str("*"),
                     Expr::Integer(3),
                     Expr::Integer(4),
                 ]),
@@ -1816,9 +1822,9 @@ mod tests {
                 "(define (f x) (cond ((< x 0) 'negative) ((> x 0) 'positive) (else 'zero)))",
                 Expr::Unspecified,
             ),
-            ("(f -1)", Expr::Symbol("negative".to_string())),
-            ("(f 0)", Expr::Symbol("zero".to_string())),
-            ("(f 1)", Expr::Symbol("positive".to_string())),
+            ("(f -1)", symbol_from_str("negative")),
+            ("(f 0)", symbol_from_str("zero")),
+            ("(f 1)", symbol_from_str("positive")),
         ];
         validate(cases);
     }
