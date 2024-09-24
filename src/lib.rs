@@ -1190,8 +1190,8 @@ impl UserDefinedProcedure {
         env: &mut Environment,
         args: Vec<Expr>,
     ) -> Result<MaybeValue, &'static str> {
-        let params = &proc.params;
-        let body = &proc.body;
+        let params = &self.params;
+        let body = &self.body;
         if args.len() != params.len() {
             return Err("Incorrect number of arguments");
         }
