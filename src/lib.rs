@@ -1183,7 +1183,7 @@ pub struct UserDefinedProcedure {
     env: Environment,
 }
 
-impl Callable for UserDefinedProcedure {
+impl UserDefinedProcedure {
     #[inline(always)]
     fn call_except_tail(
         &self,
@@ -1207,7 +1207,9 @@ impl Callable for UserDefinedProcedure {
         }
         Ok(out)
     }
+}
 
+impl Callable for UserDefinedProcedure {
     fn call(&self, args: Vec<Expr>) -> Result<MaybeValue, &'static str> {
         let mut local_env = self.env.child();
         let mut out = self.call_except_tail(&mut local_env, args);
