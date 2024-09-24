@@ -1183,40 +1183,42 @@ pub struct UserDefinedProcedure {
     env: Environment,
 }
 
-#[inline(always)]
-fn call_user_defined(
-    proc: &UserDefinedProcedure,
-    env: &mut Environment,
-    args: Vec<Expr>,
-) -> Result<MaybeValue, &'static str> {
-    let params = &proc.params;
-    let body = &proc.body;
-    if args.len() != params.len() {
-        return Err("Incorrect number of arguments");
-    }
-    for (param, arg) in zip(params, args) {
-        env.set(*param, arg);
-    }
-    let mut out = MaybeValue::Just(Expr::Unspecified);
-    if let Some((last, rest)) = body.split_last() {
-        for expr in rest {
-            env.evaluate(expr)?;
+impl UserDefinedProcedure {
+    #[inline(always)]
+    fn call_except_tail(
+        &self,
+        env: &mut Environment,
+        args: Vec<Expr>,
+    ) -> Result<MaybeValue, &'static str> {
+        let params = &self.params;
+        let body = &self.body;
+        if args.len() != params.len() {
+            return Err("Incorrect number of arguments");
         }
-        out = env.maybe_evaluate(last)?;
+        for (param, arg) in zip(params, args) {
+            env.set(*param, arg);
+        }
+        let mut out = MaybeValue::Just(Expr::Unspecified);
+        if let Some((last, rest)) = body.split_last() {
+            for expr in rest {
+                env.evaluate(expr)?;
+            }
+            out = env.maybe_evaluate(last)?;
+        }
+        Ok(out)
     }
-    Ok(out)
 }
 
 impl Callable for UserDefinedProcedure {
     fn call(&self, args: Vec<Expr>) -> Result<MaybeValue, &'static str> {
         let mut local_env = self.env.child();
-        let mut out = call_user_defined(self, &mut local_env, args);
+        let mut out = self.call_except_tail(&mut local_env, args);
         loop {
             match out? {
                 MaybeValue::Just(expr) => return Ok(MaybeValue::Just(expr)),
                 MaybeValue::TailCall(Procedure::BuiltIn(proc), args) => return proc.call(args),
                 MaybeValue::TailCall(Procedure::UserDefined(proc), args) => {
-                    out = call_user_defined(&proc, &mut local_env, args)
+                    out = proc.call_except_tail(&mut local_env, args)
                 }
             }
         }
