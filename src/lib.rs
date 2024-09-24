@@ -1181,7 +1181,7 @@ pub struct UserDefinedProcedure {
     params: Vec<Intern<String>>,
     body: Vec<Expr>,
     env: Environment,
-
+}
 
 impl Callable for UserDefinedProcedure {
     #[inline(always)]
