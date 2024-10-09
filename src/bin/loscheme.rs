@@ -1,4 +1,4 @@
-use loscheme::{parse, Environment, Expr};
+use loscheme::treewalk::{parse, Environment, Expr};
 use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
