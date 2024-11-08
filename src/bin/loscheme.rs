@@ -18,6 +18,7 @@ fn repl() {
         let read_res = stdin.lock().read_line(&mut input);
         match read_res {
             Ok(0) => {
+                println!();
                 continue;
             }
             Ok(_) => {
