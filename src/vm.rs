@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Instruction {
     PushConstant(usize),
     Return,
@@ -14,6 +14,13 @@ pub enum Instruction {
     Gt,
     Leq,
     Geq,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Function {
+    name: String,
+    arity: i32,
+    code: Vec<Instruction>,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
