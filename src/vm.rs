@@ -4,6 +4,7 @@ pub enum Instruction {
     Return,
     Jump(usize),
     JumpIfFalse(usize),
+    Call(usize),
     Add,
     Subtract,
     Multiply,
@@ -21,6 +22,7 @@ pub struct Function {
     name: String,
     arity: i32,
     code: Vec<Instruction>,
+    constants: Vec<Value>,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -131,31 +133,30 @@ impl Value {
 }
 
 #[derive(PartialEq)]
-enum StatusCode {
+enum Status {
     Continue,
-    Terminate(Value),
+    Return(Value),
 }
 
-pub struct VM {
+pub struct StackFrame {
     code: Vec<Instruction>,
     constants: Vec<Value>,
     stack: Vec<Value>,
     ip: usize,
 }
 
-impl VM {
-    pub fn new(code: Vec<Instruction>) -> Self {
-        VM {
+impl StackFrame {
+    pub fn new(code: Vec<Instruction>, constants: Vec<Value>) -> Self {
+        StackFrame {
             code,
-            constants: Vec::new(),
+            constants,
             stack: Vec::new(),
             ip: 0,
         }
     }
 
-    pub fn store_constant(&mut self, c: Value) -> usize {
-        self.constants.push(c);
-        self.constants.len() - 1
+    pub fn from_function(function: &Function) -> Self {
+        Self::new(function.code.clone(), function.constants.clone())
     }
 
     fn fetch_instruction(&mut self) -> Result<Instruction, &'static str> {
@@ -167,81 +168,90 @@ impl VM {
         Ok(res)
     }
 
-    fn step(&mut self) -> Result<StatusCode, &'static str> {
+    fn step(&mut self) -> Result<Status, &'static str> {
         match self.fetch_instruction()? {
             Instruction::PushConstant(offset) => {
                 self.stack.push(self.constants[offset]);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
-            Instruction::Return => Ok(StatusCode::Terminate(self.stack.pop().unwrap())),
+            Instruction::Return => Ok(Status::Return(self.stack.pop().unwrap())),
             Instruction::Jump(offset) => {
                 self.ip += offset;
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::JumpIfFalse(offset) => {
                 if let Value::Bool(false) = self.stack.pop().unwrap() {
                     self.ip += offset
                 }
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
+            }
+            Instruction::Call(_) => {
+                // pop N values from stack as arguments
+                // pop function object
+                // create new frame for function
+                // push arguments to new frame stack
+                // execute frame
+                // on return: push return value onto the caller (self) stack
+                todo!()
             }
             Instruction::Negate => {
                 let v = self.stack.pop().unwrap();
                 self.stack.push(v.neg()?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::Add => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
                 self.stack.push(a.add(&b)?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::Subtract => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
                 self.stack.push(a.sub(&b)?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::Multiply => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
                 self.stack.push(a.mul(&b)?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::Divide => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
                 self.stack.push(a.div(&b)?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::Eq => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
                 self.stack.push(a.iseq(&b)?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::Lt => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
                 self.stack.push(a.lt(&b)?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::Gt => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
                 self.stack.push(a.gt(&b)?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::Leq => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
                 self.stack.push(a.leq(&b)?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
             Instruction::Geq => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
                 self.stack.push(a.geq(&b)?);
-                Ok(StatusCode::Continue)
+                Ok(Status::Continue)
             }
         }
     }
@@ -249,7 +259,7 @@ impl VM {
     pub fn debug(&mut self) -> Result<Value, &'static str> {
         loop {
             println!("{:?}", self.stack);
-            if let StatusCode::Terminate(v) = self.step()? {
+            if let Status::Return(v) = self.step()? {
                 return Ok(v);
             }
         }
@@ -257,7 +267,7 @@ impl VM {
 
     pub fn run(&mut self) -> Result<Value, &'static str> {
         loop {
-            if let StatusCode::Terminate(v) = self.step()? {
+            if let Status::Return(v) = self.step()? {
                 return Ok(v);
             }
         }
@@ -270,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_arithmetics() {
-        let code = vec![
+        let code = [
             Instruction::PushConstant(0),
             Instruction::PushConstant(1),
             Instruction::Add,
@@ -279,16 +289,14 @@ mod tests {
             Instruction::Negate,
             Instruction::Return,
         ];
-        let mut vm = VM::new(code);
-        vm.store_constant(Value::Float(1.2));
-        vm.store_constant(Value::Float(3.4));
-        vm.store_constant(Value::Float(5.6));
-        assert_eq!(vm.run(), Ok(Value::Float(-0.8214285714285714)))
+        let constants = [Value::Float(1.2), Value::Float(3.4), Value::Float(5.6)];
+        let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
+        assert_eq!(frame.run(), Ok(Value::Float(-0.8214285714285714)))
     }
 
     #[test]
     fn test_jump_if() {
-        let code = vec![
+        let code = [
             Instruction::PushConstant(0),
             Instruction::PushConstant(1),
             Instruction::Leq,
@@ -298,16 +306,18 @@ mod tests {
             Instruction::PushConstant(3),
             Instruction::Return,
         ];
-        let mut vm = VM::new(code);
-        vm.store_constant(Value::Float(1.2));
-        vm.store_constant(Value::Float(3.4));
-        vm.store_constant(Value::Integer(42));
-        vm.store_constant(Value::Integer(13));
-        assert_eq!(vm.run(), Ok(Value::Integer(42)))
+        let constants = [
+            Value::Float(1.2),
+            Value::Float(3.4),
+            Value::Integer(42),
+            Value::Integer(13),
+        ];
+        let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
+        assert_eq!(frame.run(), Ok(Value::Integer(42)))
     }
     #[test]
     fn test_jump_else() {
-        let code = vec![
+        let code = [
             Instruction::PushConstant(0),
             Instruction::PushConstant(1),
             Instruction::Geq,
@@ -317,11 +327,13 @@ mod tests {
             Instruction::PushConstant(3),
             Instruction::Return,
         ];
-        let mut vm = VM::new(code);
-        vm.store_constant(Value::Float(1.2));
-        vm.store_constant(Value::Float(3.4));
-        vm.store_constant(Value::Integer(42));
-        vm.store_constant(Value::Integer(13));
-        assert_eq!(vm.run(), Ok(Value::Integer(13)))
+        let constants = [
+            Value::Float(1.2),
+            Value::Float(3.4),
+            Value::Integer(42),
+            Value::Integer(13),
+        ];
+        let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
+        assert_eq!(frame.run(), Ok(Value::Integer(13)))
     }
 }
