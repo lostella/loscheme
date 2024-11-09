@@ -185,13 +185,12 @@ impl StackFrame {
                 }
                 Ok(Status::Continue)
             }
-            Instruction::Call(_) => {
-                // pop N values from stack as arguments
+            Instruction::Call(n) => {
                 // pop function object
-                // create new frame for function
-                // push arguments to new frame stack
-                // execute frame
-                // on return: push return value onto the caller (self) stack
+                // create new frame (callee) for function
+                // pop n values from stack, push onto callee frame
+                // execute callee frame
+                // on return: push return value onto stack
                 todo!()
             }
             Instruction::Negate => {
