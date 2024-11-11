@@ -25,11 +25,12 @@ pub struct Function {
     constants: Vec<Value>,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Integer(i64),
     Float(f64),
     Bool(bool),
+    Function(Function),
 }
 
 impl Value {
@@ -171,7 +172,7 @@ impl StackFrame {
     fn step(&mut self) -> Result<Status, &'static str> {
         match self.fetch_instruction()? {
             Instruction::PushConstant(offset) => {
-                self.stack.push(self.constants[offset]);
+                self.stack.push(self.constants[offset].clone());
                 Ok(Status::Continue)
             }
             Instruction::Return => Ok(Status::Return(self.stack.pop().unwrap())),
@@ -186,12 +187,18 @@ impl StackFrame {
                 Ok(Status::Continue)
             }
             Instruction::Call(n) => {
-                // pop function object
-                // create new frame (callee) for function
-                // pop n values from stack, push onto callee frame
-                // execute callee frame
-                // on return: push return value onto stack
-                todo!()
+                if let Value::Function(function) = self.stack.pop().unwrap() {
+                    let mut callee_frame = Self::from_function(&function);
+                    for _ in 0..n {
+                        callee_frame
+                            .stack
+                            .push(self.stack.pop().ok_or("empty stack")?);
+                    }
+                    let ret = callee_frame.run();
+                    self.stack.push(ret?);
+                    return Ok(Status::Continue);
+                }
+                Err("expected function")
             }
             Instruction::Negate => {
                 let v = self.stack.pop().unwrap();
@@ -314,6 +321,7 @@ mod tests {
         let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
         assert_eq!(frame.run(), Ok(Value::Integer(42)))
     }
+
     #[test]
     fn test_jump_else() {
         let code = [
@@ -334,5 +342,35 @@ mod tests {
         ];
         let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
         assert_eq!(frame.run(), Ok(Value::Integer(13)))
+    }
+
+    #[test]
+    fn test_function_call() {
+        let function_2xpy = Function {
+            name: "2xpy".to_string(),
+            arity: 2,
+            code: [
+                Instruction::PushConstant(0),
+                Instruction::Multiply,
+                Instruction::Add,
+                Instruction::Return,
+            ]
+            .to_vec(),
+            constants: [Value::Integer(2)].to_vec(),
+        };
+        let constants = [
+            Value::Integer(7),
+            Value::Integer(3),
+            Value::Function(function_2xpy),
+        ];
+        let code = [
+            Instruction::PushConstant(0),
+            Instruction::PushConstant(1),
+            Instruction::PushConstant(2),
+            Instruction::Call(2),
+            Instruction::Return,
+        ];
+        let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
+        assert_eq!(frame.run(), Ok(Value::Integer(17)))
     }
 }
