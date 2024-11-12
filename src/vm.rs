@@ -23,19 +23,17 @@ pub enum Instruction {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Function {
     name: String,
-    arity: i32,
     code: Vec<Instruction>,
     constants: Vec<Value>,
 }
 
 impl Function {
-    pub fn new(name: String, arity: i32, code: Vec<Instruction>, constants: Vec<Value>) -> Self {
-        return Self {
+    pub fn new(name: String, code: Vec<Instruction>, constants: Vec<Value>) -> Self {
+        Self {
             name,
-            arity,
             code,
             constants,
-        };
+        }
     }
 }
 
@@ -163,7 +161,7 @@ pub struct StackFrame {
 
 impl StackFrame {
     pub fn new(code: Vec<Instruction>, constants: Vec<Value>) -> Self {
-        StackFrame {
+        Self {
             code,
             constants,
             locals: Vec::new(),
@@ -386,7 +384,6 @@ mod tests {
     fn test_function_call() {
         let function_2xpy = Function {
             name: "2xpy".to_string(),
-            arity: 2,
             code: [
                 Instruction::LoadLocal(1),
                 Instruction::LoadLocal(0),
@@ -418,7 +415,6 @@ mod tests {
     fn test_fibonacci() {
         let fibonacci = Function {
             name: "fibonacci".to_string(),
-            arity: 1,
             code: [
                 Instruction::LoadLocal(0),
                 Instruction::LoadConstant(1),
