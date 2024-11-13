@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Instruction {
     LoadConstant(usize),
     LoadLocal(usize),
@@ -6,7 +6,6 @@ pub enum Instruction {
     Return,
     Jump(usize),
     JumpIfFalse(usize),
-    Call(usize),
     CallClone(usize),
     Add,
     Subtract,
@@ -20,29 +19,11 @@ pub enum Instruction {
     Geq,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Function {
-    name: String,
-    code: Vec<Instruction>,
-    constants: Vec<Value>,
-}
-
-impl Function {
-    pub fn new(name: String, code: Vec<Instruction>, constants: Vec<Value>) -> Self {
-        Self {
-            name,
-            code,
-            constants,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Value {
     Integer(i64),
     Float(f64),
     Bool(bool),
-    Function(Function),
 }
 
 impl Value {
@@ -151,34 +132,30 @@ enum Status {
     Return(Value),
 }
 
-pub struct StackFrame {
-    code: Vec<Instruction>,
-    constants: Vec<Value>,
+pub struct StackFrame<'a> {
+    code: &'a Vec<Instruction>,
+    constants: &'a Vec<Value>,
     locals: Vec<Value>,
     stack: Vec<Value>,
     ip: usize,
 }
 
-impl StackFrame {
-    pub fn new(code: Vec<Instruction>, constants: Vec<Value>) -> Self {
+impl<'a> StackFrame<'a> {
+    pub fn new(code: &'a Vec<Instruction>, constants: &'a Vec<Value>, locals: Vec<Value>) -> Self {
         Self {
             code,
             constants,
-            locals: Vec::new(),
+            locals,
             stack: Vec::new(),
             ip: 0,
         }
-    }
-
-    pub fn from_function(function: &Function) -> Self {
-        Self::new(function.code.clone(), function.constants.clone())
     }
 
     fn fetch_instruction(&mut self) -> Result<Instruction, &'static str> {
         if self.ip >= self.code.len() {
             return Err("end of code");
         }
-        let res = self.code[self.ip].clone();
+        let res = self.code[self.ip];
         self.ip += 1;
         Ok(res)
     }
@@ -186,11 +163,11 @@ impl StackFrame {
     fn execute(&mut self, instruction: Instruction) -> Result<Status, &'static str> {
         match instruction {
             Instruction::LoadConstant(offset) => {
-                self.stack.push(self.constants[offset].clone());
+                self.stack.push(self.constants[offset]);
                 Ok(Status::Continue)
             }
             Instruction::LoadLocal(offset) => {
-                self.stack.push(self.locals[offset].clone());
+                self.stack.push(self.locals[offset]);
                 Ok(Status::Continue)
             }
             Instruction::StoreLocal(offset) => {
@@ -208,27 +185,12 @@ impl StackFrame {
                 }
                 Ok(Status::Continue)
             }
-            Instruction::Call(n) => {
-                if let Value::Function(function) = self.stack.pop().unwrap() {
-                    let mut callee_frame = Self::from_function(&function);
-                    for _ in 0..n {
-                        callee_frame
-                            .locals
-                            .push(self.stack.pop().ok_or("empty stack")?);
-                    }
-                    let ret = callee_frame.run();
-                    self.stack.push(ret?);
-                    return Ok(Status::Continue);
-                }
-                Err("expected function")
-            }
             Instruction::CallClone(n) => {
-                let mut callee_frame = StackFrame::new(self.code.clone(), self.constants.clone());
+                let mut locals = vec![];
                 for _ in 0..n {
-                    callee_frame
-                        .locals
-                        .push(self.stack.pop().ok_or("empty stack")?);
+                    locals.push(self.stack.pop().ok_or("empty stack")?);
                 }
+                let mut callee_frame = StackFrame::new(self.code, self.constants, locals);
                 let ret = callee_frame.run();
                 self.stack.push(ret?);
                 Ok(Status::Continue)
@@ -322,7 +284,7 @@ mod tests {
 
     #[test]
     fn test_arithmetics() {
-        let code = [
+        let code = vec![
             Instruction::LoadConstant(0),
             Instruction::LoadConstant(1),
             Instruction::Add,
@@ -331,14 +293,14 @@ mod tests {
             Instruction::Negate,
             Instruction::Return,
         ];
-        let constants = [Value::Float(1.2), Value::Float(3.4), Value::Float(5.6)];
-        let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
+        let constants = vec![Value::Float(1.2), Value::Float(3.4), Value::Float(5.6)];
+        let mut frame = StackFrame::new(&code, &constants, vec![]);
         assert_eq!(frame.run(), Ok(Value::Float(-0.8214285714285714)))
     }
 
     #[test]
     fn test_jump_if() {
-        let code = [
+        let code = vec![
             Instruction::LoadConstant(0),
             Instruction::LoadConstant(1),
             Instruction::Leq,
@@ -348,19 +310,19 @@ mod tests {
             Instruction::LoadConstant(3),
             Instruction::Return,
         ];
-        let constants = [
+        let constants = vec![
             Value::Float(1.2),
             Value::Float(3.4),
             Value::Integer(42),
             Value::Integer(13),
         ];
-        let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
+        let mut frame = StackFrame::new(&code, &constants, vec![]);
         assert_eq!(frame.run(), Ok(Value::Integer(42)))
     }
 
     #[test]
     fn test_jump_else() {
-        let code = [
+        let code = vec![
             Instruction::LoadConstant(0),
             Instruction::LoadConstant(1),
             Instruction::Geq,
@@ -370,80 +332,39 @@ mod tests {
             Instruction::LoadConstant(3),
             Instruction::Return,
         ];
-        let constants = [
+        let constants = vec![
             Value::Float(1.2),
             Value::Float(3.4),
             Value::Integer(42),
             Value::Integer(13),
         ];
-        let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
+        let mut frame = StackFrame::new(&code, &constants, vec![]);
         assert_eq!(frame.run(), Ok(Value::Integer(13)))
     }
 
     #[test]
-    fn test_function_call() {
-        let function_2xpy = Function {
-            name: "2xpy".to_string(),
-            code: [
-                Instruction::LoadLocal(1),
-                Instruction::LoadLocal(0),
-                Instruction::LoadConstant(0),
-                Instruction::Multiply,
-                Instruction::Add,
-                Instruction::Return,
-            ]
-            .to_vec(),
-            constants: [Value::Integer(2)].to_vec(),
-        };
-        let constants = [
-            Value::Integer(7),
-            Value::Integer(3),
-            Value::Function(function_2xpy),
-        ];
-        let code = [
-            Instruction::LoadConstant(1),
-            Instruction::LoadConstant(0),
-            Instruction::LoadConstant(2),
-            Instruction::Call(2),
-            Instruction::Return,
-        ];
-        let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
-        assert_eq!(frame.run(), Ok(Value::Integer(17)))
-    }
-
-    #[test]
     fn test_fibonacci() {
-        let fibonacci = Function {
-            name: "fibonacci".to_string(),
-            code: [
-                Instruction::LoadLocal(0),
-                Instruction::LoadConstant(1),
-                Instruction::Lt,
-                Instruction::JumpIfFalse(2),
-                Instruction::LoadLocal(0),
-                Instruction::Return,
-                Instruction::LoadLocal(0),
-                Instruction::LoadConstant(0),
-                Instruction::Subtract,
-                Instruction::CallClone(1),
-                Instruction::LoadLocal(0),
-                Instruction::LoadConstant(1),
-                Instruction::Subtract,
-                Instruction::CallClone(1),
-                Instruction::Add,
-                Instruction::Return,
-            ]
-            .to_vec(),
-            constants: [Value::Integer(1), Value::Integer(2)].to_vec(),
-        };
-        let constants = [Value::Integer(9), Value::Function(fibonacci)];
-        let code = [
-            Instruction::LoadConstant(0),
+        let code = vec![
+            Instruction::LoadLocal(0),
             Instruction::LoadConstant(1),
-            Instruction::Call(1),
+            Instruction::Lt,
+            Instruction::JumpIfFalse(2),
+            Instruction::LoadLocal(0),
+            Instruction::Return,
+            Instruction::LoadLocal(0),
+            Instruction::LoadConstant(0),
+            Instruction::Subtract,
+            Instruction::CallClone(1),
+            Instruction::LoadLocal(0),
+            Instruction::LoadConstant(1),
+            Instruction::Subtract,
+            Instruction::CallClone(1),
+            Instruction::Add,
             Instruction::Return,
         ];
-        let mut frame = StackFrame::new(code.to_vec(), constants.to_vec());
+        let constants = vec![Value::Integer(1), Value::Integer(2)];
+        let locals = vec![Value::Integer(9)];
+        let mut frame = StackFrame::new(&code, &constants, locals);
         assert_eq!(frame.run(), Ok(Value::Integer(34)))
     }
 }
