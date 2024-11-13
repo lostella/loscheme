@@ -6,11 +6,12 @@ pub enum Instruction {
     Return,
     Jump(usize),
     JumpIfFalse(usize),
+    JumpIfTrue(usize),
     CallClone(usize),
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
+    Add(usize),
+    Subtract(usize),
+    Multiply(usize),
+    Divide(usize),
     Negate,
     Eq,
     Lt,
@@ -160,6 +161,10 @@ impl<'a> StackFrame<'a> {
         Ok(res)
     }
 
+    fn try_pop(&mut self) -> Result<Value, &'static str> {
+        self.stack.pop().ok_or("stack is empty")
+    }
+
     fn execute(&mut self, instruction: Instruction) -> Result<Status, &'static str> {
         match instruction {
             Instruction::LoadConstant(offset) => {
@@ -171,24 +176,30 @@ impl<'a> StackFrame<'a> {
                 Ok(Status::Continue)
             }
             Instruction::StoreLocal(offset) => {
-                self.locals[offset] = self.stack.pop().unwrap();
+                self.locals[offset] = self.try_pop()?;
                 Ok(Status::Continue)
             }
-            Instruction::Return => Ok(Status::Return(self.stack.pop().unwrap())),
+            Instruction::Return => Ok(Status::Return(self.try_pop()?)),
             Instruction::Jump(offset) => {
                 self.ip += offset;
                 Ok(Status::Continue)
             }
             Instruction::JumpIfFalse(offset) => {
-                if let Value::Bool(false) = self.stack.pop().unwrap() {
+                if let Value::Bool(false) = self.try_pop()? {
+                    self.ip += offset
+                }
+                Ok(Status::Continue)
+            }
+            Instruction::JumpIfTrue(offset) => {
+                if let Value::Bool(true) = self.try_pop()? {
                     self.ip += offset
                 }
                 Ok(Status::Continue)
             }
             Instruction::CallClone(n) => {
-                let mut locals = vec![];
+                let mut locals = Vec::with_capacity(n);
                 for _ in 0..n {
-                    locals.push(self.stack.pop().ok_or("empty stack")?);
+                    locals.push(self.try_pop()?);
                 }
                 let mut callee_frame = StackFrame::new(self.code, self.constants, locals);
                 let ret = callee_frame.run();
@@ -196,61 +207,69 @@ impl<'a> StackFrame<'a> {
                 Ok(Status::Continue)
             }
             Instruction::Negate => {
-                let v = self.stack.pop().unwrap();
+                let v = self.try_pop()?;
                 self.stack.push(v.neg()?);
                 Ok(Status::Continue)
             }
-            Instruction::Add => {
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
-                self.stack.push(a.add(&b)?);
+            Instruction::Add(n) => {
+                let mut res = self.try_pop()?;
+                for _ in 0..n - 1 {
+                    res = res.add(&self.try_pop()?)?;
+                }
+                self.stack.push(res);
                 Ok(Status::Continue)
             }
-            Instruction::Subtract => {
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
-                self.stack.push(a.sub(&b)?);
+            Instruction::Subtract(n) => {
+                let mut res = self.try_pop()?;
+                for _ in 0..n - 1 {
+                    res = res.sub(&self.try_pop()?)?;
+                }
+                self.stack.push(res);
                 Ok(Status::Continue)
             }
-            Instruction::Multiply => {
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
-                self.stack.push(a.mul(&b)?);
+            Instruction::Multiply(n) => {
+                let mut res = self.try_pop()?;
+                for _ in 0..n - 1 {
+                    res = res.mul(&self.try_pop()?)?;
+                }
+                self.stack.push(res);
                 Ok(Status::Continue)
             }
-            Instruction::Divide => {
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
-                self.stack.push(a.div(&b)?);
+            Instruction::Divide(n) => {
+                let mut res = self.try_pop()?;
+                for _ in 0..n - 1 {
+                    res = res.div(&self.try_pop()?)?;
+                }
+                self.stack.push(res);
                 Ok(Status::Continue)
             }
             Instruction::Eq => {
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
+                let b = self.try_pop()?;
+                let a = self.try_pop()?;
                 self.stack.push(a.iseq(&b)?);
                 Ok(Status::Continue)
             }
             Instruction::Lt => {
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
+                let b = self.try_pop()?;
+                let a = self.try_pop()?;
                 self.stack.push(a.lt(&b)?);
                 Ok(Status::Continue)
             }
             Instruction::Gt => {
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
+                let b = self.try_pop()?;
+                let a = self.try_pop()?;
                 self.stack.push(a.gt(&b)?);
                 Ok(Status::Continue)
             }
             Instruction::Leq => {
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
+                let b = self.try_pop()?;
+                let a = self.try_pop()?;
                 self.stack.push(a.leq(&b)?);
                 Ok(Status::Continue)
             }
             Instruction::Geq => {
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
+                let b = self.try_pop()?;
+                let a = self.try_pop()?;
                 self.stack.push(a.geq(&b)?);
                 Ok(Status::Continue)
             }
@@ -285,11 +304,11 @@ mod tests {
     #[test]
     fn test_arithmetics() {
         let code = vec![
+            Instruction::LoadConstant(2),
             Instruction::LoadConstant(0),
             Instruction::LoadConstant(1),
-            Instruction::Add,
-            Instruction::LoadConstant(2),
-            Instruction::Divide,
+            Instruction::Add(2),
+            Instruction::Divide(2),
             Instruction::Negate,
             Instruction::Return,
         ];
@@ -351,15 +370,15 @@ mod tests {
             Instruction::JumpIfFalse(2),
             Instruction::LoadLocal(0),
             Instruction::Return,
-            Instruction::LoadLocal(0),
             Instruction::LoadConstant(0),
-            Instruction::Subtract,
-            Instruction::CallClone(1),
             Instruction::LoadLocal(0),
-            Instruction::LoadConstant(1),
-            Instruction::Subtract,
+            Instruction::Subtract(2),
             Instruction::CallClone(1),
-            Instruction::Add,
+            Instruction::LoadConstant(1),
+            Instruction::LoadLocal(0),
+            Instruction::Subtract(2),
+            Instruction::CallClone(1),
+            Instruction::Add(2),
             Instruction::Return,
         ];
         let constants = vec![Value::Integer(1), Value::Integer(2)];
