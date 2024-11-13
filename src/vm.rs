@@ -8,6 +8,8 @@ pub enum Instruction {
     JumpIfFalse(usize),
     JumpIfTrue(usize),
     CallClone(usize),
+    Increment(usize),
+    Decrement(usize),
     Add(usize),
     Subtract(usize),
     Multiply(usize),
@@ -28,6 +30,20 @@ pub enum Value {
 }
 
 impl Value {
+    fn inc(&self, by: usize) -> Result<Value, &'static str> {
+        if let Value::Integer(a) = self {
+            return Ok(Value::Integer(a + by as i64));
+        }
+        Err("Cannot increment type")
+    }
+
+    fn dec(&self, by: usize) -> Result<Value, &'static str> {
+        if let Value::Integer(a) = self {
+            return Ok(Value::Integer(a - by as i64));
+        }
+        Err("Cannot increment type")
+    }
+
     fn add(&self, other: &Value) -> Result<Value, &'static str> {
         match (self, other) {
             (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
@@ -211,6 +227,16 @@ impl<'a> StackFrame<'a> {
                 self.stack.push(v.neg()?);
                 Ok(Status::Continue)
             }
+            Instruction::Increment(n) => {
+                let a = self.try_pop()?;
+                self.stack.push(a.inc(n)?);
+                Ok(Status::Continue)
+            }
+            Instruction::Decrement(n) => {
+                let a = self.try_pop()?;
+                self.stack.push(a.dec(n)?);
+                Ok(Status::Continue)
+            }
             Instruction::Add(n) => {
                 let mut res = self.try_pop()?;
                 for _ in 0..n - 1 {
@@ -370,13 +396,11 @@ mod tests {
             Instruction::JumpIfFalse(2),
             Instruction::LoadLocal(0),
             Instruction::Return,
-            Instruction::LoadConstant(0),
             Instruction::LoadLocal(0),
-            Instruction::Subtract(2),
+            Instruction::Decrement(1),
             Instruction::CallClone(1),
-            Instruction::LoadConstant(1),
             Instruction::LoadLocal(0),
-            Instruction::Subtract(2),
+            Instruction::Decrement(2),
             Instruction::CallClone(1),
             Instruction::Add(2),
             Instruction::Return,
