@@ -1,3 +1,4 @@
+use loscheme::run::run;
 use loscheme::treewalk::{parse, Environment, Expr};
 use std::env;
 use std::fs::File;
@@ -44,9 +45,7 @@ fn repl() {
     }
 }
 
-fn run(filename: &str) {
-    let mut env = Environment::standard().child();
-
+fn run_file(filename: &str) {
     let file = File::open(filename).expect("Unable to open file");
     let reader = BufReader::new(file);
     let mut code = String::new();
@@ -60,17 +59,7 @@ fn run(filename: &str) {
         code.push('\n');
     }
 
-    match parse(&code) {
-        Ok(exprs) => {
-            for expr in exprs {
-                let res = env.evaluate(&expr);
-                if let Err(err) = res {
-                    eprintln!("Error (eval): {}", err)
-                }
-            }
-        }
-        Err(err) => eprintln!("Error (parsing): {}", err),
-    }
+    run(&code)
 }
 
 fn main() {
@@ -78,7 +67,7 @@ fn main() {
 
     match args.len() - 1 {
         0 => repl(),
-        1 => run(&args[1]),
+        1 => run_file(&args[1]),
         x => eprintln!("Error: need one argument at most, got {}", x),
     }
 }
