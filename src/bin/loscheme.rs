@@ -1,3 +1,4 @@
+use loscheme::errors::MyError;
 use loscheme::run::run;
 use loscheme::treewalk::{parse, Environment, Expr};
 use std::env;
@@ -31,15 +32,15 @@ fn repl() {
                             match eval_res {
                                 Ok(Expr::Unspecified) => (),
                                 Ok(v) => println!("{}", v),
-                                Err(err) => eprintln!("Error (eval): {}", err),
+                                Err(err) => eprintln!("{}", MyError::RuntimeError(err.to_string())),
                             };
                         }
                     }
-                    Err(err) => eprintln!("Error (parsing): {}", err),
+                    Err(err) => eprintln!("{}", MyError::RuntimeError(err.to_string())),
                 }
             }
             Err(err) => {
-                eprintln!("Error (I/O): {}", err);
+                eprintln!("{}", MyError::IOError(err.to_string()));
             }
         }
     }
@@ -59,7 +60,11 @@ fn run_file(filename: &str) {
         code.push('\n');
     }
 
-    run(&code)
+    let output = run(&code);
+
+    if let Err(err) = output {
+        eprintln!("{}", err)
+    }
 }
 
 fn main() {
