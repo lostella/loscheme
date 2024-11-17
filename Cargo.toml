@@ -3,11 +3,17 @@ name = "loscheme"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["lib", "cdylib"]
 
 [dependencies]
 internment = "0.8.5"
 rustc-hash = "2.0.0"
+wasm-bindgen = { version = "0.2", optional = true }
+
+[features]
+default = []
+web = ["wasm-bindgen"]
 
 [profile.release]
 opt-level = 3

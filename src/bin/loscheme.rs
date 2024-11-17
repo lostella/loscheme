@@ -1,13 +1,12 @@
-use loscheme::errors::MyError;
-use loscheme::run::run;
-use loscheme::treewalk::{parse, Environment, Expr};
+use loscheme::run::{run, run_standard};
+use loscheme::treewalk::Environment;
 use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 
 const REPL_PROMPT: &str = "λscm>";
 
-fn repl() {
+fn repl_loop() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut env = Environment::standard().child();
@@ -23,30 +22,18 @@ fn repl() {
                 println!();
                 continue;
             }
-            Ok(_) => {
-                input = input.trim().to_string();
-                match parse(&input) {
-                    Ok(exprs) => {
-                        for expr in exprs {
-                            let eval_res = env.evaluate(&expr);
-                            match eval_res {
-                                Ok(Expr::Unspecified) => (),
-                                Ok(v) => println!("{}", v),
-                                Err(err) => eprintln!("{}", MyError::RuntimeError(err.to_string())),
-                            };
-                        }
-                    }
-                    Err(err) => eprintln!("{}", MyError::RuntimeError(err.to_string())),
-                }
-            }
+            Ok(_) => match run(&input, &mut env) {
+                Ok(v) => println!("{}", v),
+                Err(err) => eprintln!("{}", err),
+            },
             Err(err) => {
-                eprintln!("{}", MyError::IOError(err.to_string()));
+                eprintln!("{}", err);
             }
         }
     }
 }
 
-fn run_file(filename: &str) {
+fn script_loop(filename: &str) {
     let file = File::open(filename).expect("Unable to open file");
     let reader = BufReader::new(file);
     let mut code = String::new();
@@ -60,7 +47,7 @@ fn run_file(filename: &str) {
         code.push('\n');
     }
 
-    let output = run(&code);
+    let output = run_standard(&code);
 
     if let Err(err) = output {
         eprintln!("{}", err)
@@ -71,8 +58,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     match args.len() - 1 {
-        0 => repl(),
-        1 => run_file(&args[1]),
+        0 => repl_loop(),
+        1 => script_loop(&args[1]),
         x => eprintln!("Error: need one argument at most, got {}", x),
     }
 }

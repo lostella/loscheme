@@ -1,8 +1,7 @@
 use crate::errors::MyError;
 use crate::treewalk::{parse, Environment, Expr};
 
-pub fn run(code: &str) -> Result<Expr, MyError> {
-    let mut env = Environment::standard().child();
+pub fn run(code: &str, env: &mut Environment) -> Result<Expr, MyError> {
     let mut val: Expr = Expr::Unspecified;
 
     match parse(code) {
@@ -17,6 +16,11 @@ pub fn run(code: &str) -> Result<Expr, MyError> {
         }
         Err(err) => Err(MyError::ParseError(err.to_string())),
     }
+}
+
+pub fn run_standard(code: &str) -> Result<Expr, MyError> {
+    let mut env = Environment::standard().child();
+    run(code, &mut env)
 }
 
 #[cfg(test)]
@@ -34,7 +38,7 @@ mod tests {
 
             (fact 12)
         "#;
-        assert_eq!(run(code), Ok(Expr::Integer(479_001_600)));
+        assert_eq!(run_standard(code), Ok(Expr::Integer(479_001_600)));
     }
 
     #[test]
@@ -49,7 +53,7 @@ mod tests {
 
             (fib 50)
         "#;
-        assert_eq!(run(code), Ok(Expr::Integer(12_586_269_025)));
+        assert_eq!(run_standard(code), Ok(Expr::Integer(12_586_269_025)));
     }
 
     #[test]
@@ -63,7 +67,7 @@ mod tests {
 
             (ackermann 2 3)
         "#;
-        assert_eq!(run(code), Ok(Expr::Integer(9)));
+        assert_eq!(run_standard(code), Ok(Expr::Integer(9)));
     }
 
     #[test]
@@ -82,7 +86,7 @@ mod tests {
             (quicksort '(34 7 23 32 5 62 32 2 1 6 45 78 99 3))
         "#;
         assert_eq!(
-            format!("{}", run(code).unwrap()),
+            format!("{}", run_standard(code).unwrap()),
             "(1 2 3 5 6 7 23 32 32 34 45 62 78 99)"
         );
     }

@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Rust REPL</title>
+        <style>
+            body {
+                font-family: system-ui, sans-serif;
+                max-width: 800px;
+                margin: 2rem auto;
+                padding: 0 1rem;
+            }
+            #output {
+                background: #f5f5f5;
+                padding: 1rem;
+                border-radius: 4px;
+                margin-bottom: 1rem;
+                min-height: 200px;
+                white-space: pre-wrap;
+            }
+            #input {
+                width: 100%;
+                padding: 0.5rem;
+                margin-bottom: 0.5rem;
+                font-family: monospace;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="output"></div>
+        <input type="text" id="input" placeholder="Enter your command..." />
+        <script type="module">
+            import init, { WebRepl } from "./loscheme.js";
+
+            async function main() {
+                try {
+                    await init();
+                    const repl = new WebRepl();
+                    const input = document.getElementById("input");
+                    const output = document.getElementById("output");
+
+                    input.addEventListener("keypress", (e) => {
+                        if (e.key === "Enter") {
+                            const result = repl.evaluate(input.value);
+                            output.textContent += `> ${input.value}\n${result}\n`;
+                            input.value = "";
+                            output.scrollTop = output.scrollHeight;
+                        }
+                    });
+                } catch (e) {
+                    console.error("Failed to initialize:", e);
+                    document.getElementById("output").textContent =
+                        `Error initializing REPL: ${e.message}\n\n${e.stack}`;
+                }
+            }
+
+            main().catch((e) => {
+                console.error(e);
+                document.getElementById("output").textContent =
+                    `Failed to start REPL: ${e.message}\n\n${e.stack}`;
+            });
+        </script>
+    </body>
+</html>
