@@ -108,6 +108,7 @@
                     background: #2d2d2d;
                     border-color: #404040;
                     color: #e5e5e5;
+                    text-transform: none;
                 }
 
                 #input:focus {
@@ -124,7 +125,7 @@
     </head>
     <body>
         <div id="output"></div>
-        <input type="text" id="input" placeholder="Enter your command..." />
+        <input type="text" autocapitalize="none" autocorrect="off" spellcheck="false" id="input" placeholder="Enter code"/>
         <script type="module">
             import init, { WebRepl } from "./loscheme.js";
 
