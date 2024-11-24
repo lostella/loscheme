@@ -2,27 +2,123 @@
 <html>
     <head>
         <title>loscheme</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <style>
-            body {
-                font-family: system-ui, sans-serif;
-                max-width: 800px;
-                margin: 2rem auto;
-                padding: 0 1rem;
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
             }
+
+            body {
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    sans-serif;
+                line-height: 1.5;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 1rem;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+            }
+
+            h1 {
+                font-size: 1.75rem;
+                margin-bottom: 1rem;
+                color: #1a1a1a;
+            }
+
             #output {
-                font-family: monospace;
                 background: #f5f5f5;
                 padding: 1rem;
-                border-radius: 4px;
+                border-radius: 8px;
                 margin-bottom: 1rem;
-                min-height: 200px;
+                min-height: 60vh;
+                max-height: 60vh;
+                overflow-y: auto;
                 white-space: pre-wrap;
+                font-family: "Menlo", "Monaco", "Courier New", monospace;
+                font-size: 0.9rem;
+                border: 1px solid #ddd;
+                box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
             }
+
             #input {
-                font-family: monospace;
                 width: 100%;
-                padding: 0.5rem;
+                padding: 0.75rem;
                 margin-bottom: 0.5rem;
+                font-family: "Menlo", "Monaco", "Courier New", monospace;
+                font-size: 0.9rem;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                transition: border-color 0.2s ease;
+            }
+
+            #input:focus {
+                outline: none;
+                border-color: #4a9eff;
+                box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.1);
+            }
+
+            @media (max-width: 600px) {
+                body {
+                    padding: 0.75rem;
+                }
+
+                h1 {
+                    font-size: 1.5rem;
+                    margin-bottom: 0.75rem;
+                }
+
+                #output {
+                    min-height: 70vh;
+                    max-height: 70vh;
+                    padding: 0.75rem;
+                    font-size: 0.85rem;
+                    margin-bottom: 0.75rem;
+                }
+
+                #input {
+                    padding: 0.5rem;
+                    font-size: 0.85rem;
+                    /* Prevent zoom on focus in iOS */
+                    font-size: 16px;
+                }
+            }
+
+            @media (prefers-color-scheme: dark) {
+                body {
+                    background-color: #1a1a1a;
+                    color: #e5e5e5;
+                }
+
+                h1 {
+                    color: #e5e5e5;
+                }
+
+                #output {
+                    background: #2d2d2d;
+                    border-color: #404040;
+                    color: #e5e5e5;
+                }
+
+                #input {
+                    background: #2d2d2d;
+                    border-color: #404040;
+                    color: #e5e5e5;
+                }
+
+                #input:focus {
+                    border-color: #4a9eff;
+                }
+            }
+
+            @media (hover: none) {
+                #input {
+                    -webkit-tap-highlight-color: transparent;
+                }
             }
         </style>
     </head>
