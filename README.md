@@ -11,3 +11,5 @@ Execute a script:
 ```bash
 cargo run --release path/to/script.scm
 ```
+
+Or [run in the browser](https://lostella.github.io/loscheme/).
