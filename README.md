@@ -1,6 +1,13 @@
 # loscheme
 
+Run in REPL mode:
+
 ```bash
-cargo build --release
-./target/release/loscheme
+cargo run --release
+```
+
+Execute a script:
+
+```bash
+cargo run --release path/to/script.scm
 ```
