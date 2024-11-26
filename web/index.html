@@ -1,192 +1,120 @@
 <!doctype html>
-<html>
+<html lang="en">
     <head>
-        <title>loscheme</title>
+        <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Scheme Code Editor</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/scheme/scheme.min.js"></script>
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css"
+        />
         <style>
-            * {
-                box-sizing: border-box;
+            html,
+            body {
+                height: 100%;
                 margin: 0;
                 padding: 0;
-            }
-
-            html {
-                height: -webkit-fill-available;
-            }
-
-            body {
-                font-family: system-ui, sans-serif;
-                line-height: 1.5;
-                max-width: 800px;
-                margin: 0 auto;
-                padding: 1rem;
-                min-height: -webkit-fill-available;
                 display: flex;
                 flex-direction: column;
+                box-sizing: border-box;
+                background-color: #fff;
+                color: #000;
             }
-
-            h1 {
-                font-size: 1.75rem;
-                margin-bottom: 1rem;
-                color: #1a1a1a;
+            body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+                gap: 10px;
             }
-
-            #output {
-                background: #f5f5f5;
-                padding: 1rem;
-                border-radius: 8px;
-                margin-bottom: 1rem;
-                min-height: 60vh;
-                max-height: 60vh;
-                overflow-y: auto;
-                white-space: pre-wrap;
-                font-family: "Menlo", "Monaco", "Courier New", monospace;
-                font-size: 0.9rem;
-                border: 1px solid #ddd;
-                box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
-            }
-
-            #input {
+            .CodeMirror {
+                border: 1px solid #ccc;
+                height: 50vh;
+                border-radius: 5px;
                 width: 100%;
-                padding: 0.75rem;
-                margin-bottom: 0.5rem;
-                font-family: "Menlo", "Monaco", "Courier New", monospace;
-                font-size: 0.9rem;
-                border: 2px solid #ddd;
-                border-radius: 8px;
-                transition: border-color 0.2s ease;
             }
-
-            #input:focus {
-                outline: none;
-                border-color: #4a9eff;
-                box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.1);
+            #runButton {
+                padding: 10px 20px;
+                background-color: #4caf50;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                width: 100%;
+                font-size: 1rem;
             }
-
+            #output {
+                height: 25vh;
+                padding: 10px;
+                background-color: #f4f4f4;
+                border: 1px solid #ddd;
+                overflow-y: auto;
+                width: 100%;
+                box-sizing: border-box;
+                border-radius: 5px;
+                font-size: 1rem;
+            }
             @media (max-width: 600px) {
                 body {
-                    padding: 0.75rem;
+                    padding: 10px;
+                    gap: 15px;
                 }
-
-                h1 {
-                    font-size: 1.5rem;
-                    margin-bottom: 0.75rem;
+                #runButton {
+                    font-size: 0.9rem;
                 }
-
                 #output {
-                    min-height: 70vh;
-                    max-height: 70vh;
-                    padding: 0.75rem;
                     font-size: 0.85rem;
-                    margin-bottom: 0.75rem;
-                }
-
-                #input {
-                    padding: 0.5rem;
-                    font-size: 0.85rem;
-                    /* Prevent zoom on focus in iOS */
-                    font-size: 16px;
-                }
-            }
-
-            @media (prefers-color-scheme: dark) {
-                body {
-                    background-color: #1a1a1a;
-                    color: #e5e5e5;
-                }
-
-                h1 {
-                    color: #e5e5e5;
-                }
-
-                #output {
-                    background: #2d2d2d;
-                    border-color: #404040;
-                    color: #e5e5e5;
-                }
-
-                #input {
-                    background: #2d2d2d;
-                    border-color: #404040;
-                    color: #e5e5e5;
-                    text-transform: none;
-                }
-
-                #input:focus {
-                    border-color: #4a9eff;
-                }
-            }
-
-            @media (hover: none) {
-                #input {
-                    -webkit-tap-highlight-color: transparent;
-                }
-            }
-
-            .github-link {
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-                text-decoration: none;
-                color: #666;
-                font-size: 0.9rem;
-                margin-top: 0.5rem;
-            }
-
-            .github-link:hover {
-                color: #4a9eff;
-            }
-
-            @media (prefers-color-scheme: dark) {
-                .github-link {
-                    color: #999;
-                }
-    
-                .github-link:hover {
-                    color: #4a9eff;
                 }
             }
         </style>
     </head>
     <body>
+        <textarea id="editor"></textarea>
+        <button id="runButton" disabled>Run Code</button>
         <div id="output"></div>
-        <input type="text" autocapitalize="none" autocorrect="off" spellcheck="false" id="input" placeholder="Enter code"/>
-        <a href="https://github.com/lostella/loscheme" class="github-link" target="_blank" rel="noopener noreferrer">
-            <svg height="20" width="20" viewBox="0 0 16 16" version="1.1">
-                <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
-            </svg>
-            View source
-        </a>
         <script type="module">
-            import init, { WebRepl } from "./loscheme.js";
-
-            async function main() {
+            import init, { run_standard } from "./loscheme.js";
+            const runButton = document.getElementById("runButton");
+            const outputDiv = document.getElementById("output");
+            // Initialize CodeMirror
+            const editor = CodeMirror.fromTextArea(
+                document.getElementById("editor"),
+                {
+                    mode: "scheme",
+                    lineNumbers: true,
+                    theme: "default",
+                },
+            );
+            // Initialization function
+            async function initializeScheme() {
                 try {
+                    // Call the init function to load WASM module
                     await init();
-                    const repl = new WebRepl();
-                    const input = document.getElementById("input");
-                    const output = document.getElementById("output");
-
-                    input.addEventListener("keypress", (e) => {
-                        if (e.key === "Enter") {
-                            const result = repl.evaluate(input.value);
-                            output.textContent += `> ${input.value}\n${result}\n`;
-                            input.value = "";
-                            output.scrollTop = output.scrollHeight;
-                        }
-                    });
-                } catch (e) {
-                    console.error("Failed to initialize:", e);
-                    document.getElementById("output").textContent =
-                        `Error initializing REPL: ${e.message}\n\n${e.stack}`;
+                    outputDiv.textContent = "Initialized successfully!";
+                    runButton.disabled = false;
+                } catch (error) {
+                    outputDiv.textContent =
+                        "Initialization Error: " + error.message;
+                    console.error(error);
                 }
             }
-
-            main().catch((e) => {
-                console.error(e);
-                document.getElementById("output").textContent =
-                    `Failed to start REPL: ${e.message}\n\n${e.stack}`;
+            // Run button event listener
+            runButton.addEventListener("click", async () => {
+                try {
+                    // Get code from editor
+                    const code = editor.getValue();
+                    // Run the code using run_standard function
+                    const result = await run_standard(code);
+                    // Display result in output div
+                    outputDiv.textContent = result;
+                } catch (error) {
+                    // Handle any errors
+                    outputDiv.textContent = "Execution Error: " + error.message;
+                    console.error(error);
+                }
             });
+            // Call initialization on page load
+            initializeScheme();
         </script>
     </body>
 </html>
