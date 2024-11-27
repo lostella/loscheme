@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Scheme Code Editor</title>
+        <title>loscheme</title>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/scheme/scheme.min.js"></script>
         <link
@@ -23,7 +23,7 @@
                 color: #000;
             }
             body {
-                font-family: Arial, sans-serif;
+                font-family: system-ui, sans-serif;
                 padding: 20px;
                 gap: 10px;
             }
@@ -32,6 +32,8 @@
                 height: 50vh;
                 border-radius: 5px;
                 width: 100%;
+                font-size: 1rem;
+                font-family: monospace;
             }
             #button-container {
                 display: flex;
@@ -73,6 +75,7 @@
                 box-sizing: border-box;
                 border-radius: 5px;
                 font-size: 1rem;
+                font-family: monospace;
             }
             @media (max-width: 600px) {
                 body {
@@ -128,7 +131,6 @@
                 try {
                     // Call the init function to load WASM module
                     await init();
-                    outputDiv.textContent = "Initialized successfully!";
                     runButton.disabled = false;
                 } catch (error) {
                     outputDiv.textContent =
@@ -149,6 +151,19 @@
                     // Handle any errors
                     outputDiv.textContent = "Execution Error: " + error.message;
                     console.error(error);
+                }
+            });
+            // Detect the operating system
+            const isMac = navigator.platform.toUpperCase().includes("MAC");
+
+            // Keyboard shortcut: Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
+            document.addEventListener("keydown", (event) => {
+                const isCmdOrCtrl = isMac ? event.metaKey : event.ctrlKey; // Meta for Mac, Ctrl for others
+                if (isCmdOrCtrl && event.key === "Enter") {
+                    event.preventDefault(); // Prevent any default behavior (e.g., form submission)
+                    if (!runButton.disabled) {
+                        runButton.click(); // Trigger the Run button's click event
+                    }
                 }
             });
             // Call initialization on page load
