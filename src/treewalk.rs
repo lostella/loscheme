@@ -1274,7 +1274,7 @@ mod tests {
 
     #[test]
     fn test_tokenizer() {
-        let code = "(define (square x) (* x x)) 'expr (quote (1 2 3)) \"hello world\"";
+        let code = "(define (square x) (* x x)) 'expr (quote ; comment\n(1 2 3)) \"hello world\"";
         let expected: Vec<Token> = vec![
             Token::LParen,
             Token::Atom("define".to_string()),
@@ -1306,7 +1306,7 @@ mod tests {
 
     #[test]
     fn test_parser() {
-        let code = "(define (square x) (* x x))";
+        let code = "; comment\n(define (square x) ; comment\n\t(* x x))";
         let expected = vec![Expr::from_vec(vec![
             Expr::Keyword(Keyword::Define),
             Expr::from_vec(vec![symbol_from_str("square"), symbol_from_str("x")]),
