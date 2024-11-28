@@ -41,7 +41,7 @@
                 padding: 20px;
                 box-sizing: border-box;
             }
-            .CodeMirror {
+            #editor {
                 flex-grow: 1;
                 border: 1px solid #ccc;
                 border-radius: 5px;
@@ -114,7 +114,7 @@
     </head>
     <body>
         <div class="container">
-            <textarea id="editor"></textarea>
+            <div id="editor"></div>
             <div id="button-container">
                 <button id="runButton" disabled>Run Code</button>
                 <a
@@ -134,58 +134,68 @@
             <div id="output"></div>
         </div>
         <script type="module">
+            import {
+                EditorView,
+                basicSetup,
+            } from "https://unpkg.com/@codemirror/view?module";
+            import { EditorState } from "https://unpkg.com/@codemirror/state?module";
             import init, { run_standard } from "./loscheme.js";
+
+            // Initialize the editor view and attach it to the container
+            const editor = new EditorView({
+                state: EditorState.create({
+                    doc: "; Write your Scheme code here",
+                    extensions: [basicSetup],
+                }),
+                parent: document.getElementById("editor"),
+            });
+
             const runButton = document.getElementById("runButton");
             const outputDiv = document.getElementById("output");
-            // Initialize CodeMirror
-            const editor = CodeMirror.fromTextArea(
-                document.getElementById("editor"),
-                {
-                    mode: "scheme",
-                    lineNumbers: true,
-                    theme: "default",
-                },
-            );
+
             // Initialization function
             async function initializeScheme() {
                 try {
                     // Call the init function to load WASM module
                     await init();
                     runButton.disabled = false;
+                    outputDiv.textContent = "Initialized!";
                 } catch (error) {
                     outputDiv.textContent =
                         "Initialization Error: " + error.message;
                     console.error(error);
                 }
             }
-            // Run button event listener
+
+            // Run button functionality
             runButton.addEventListener("click", async () => {
                 try {
-                    // Get code from editor
-                    const code = editor.getValue();
-                    // Run the code using run_standard function
-                    const result = await run_standard(code);
-                    // Display result in output div
+                    // Get the current editor content
+                    const code = editor.state.doc.toString();
+                    const result = await run_standard(code); // Call your WASM function
                     outputDiv.textContent = result;
                 } catch (error) {
-                    // Handle any errors
                     outputDiv.textContent = "Execution Error: " + error.message;
                     console.error(error);
                 }
             });
-            // Detect the operating system
+
+            // Detect the operating system for keyboard shortcuts
             const isMac = navigator.platform.toUpperCase().includes("MAC");
 
-            // Keyboard shortcut: Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
+            // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) to run code
             document.addEventListener("keydown", (event) => {
-                const isCmdOrCtrl = isMac ? event.metaKey : event.ctrlKey; // Meta for Mac, Ctrl for others
+                const isCmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
                 if (isCmdOrCtrl && event.key === "Enter") {
-                    event.preventDefault(); // Prevent any default behavior (e.g., form submission)
+                    event.preventDefault();
                     if (!runButton.disabled) {
-                        runButton.click(); // Trigger the Run button's click event
+                        runButton.click();
                     }
                 }
             });
+
+            outputDiv.textContent = "Initializing...";
+
             // Call initialization on page load
             initializeScheme();
         </script>
