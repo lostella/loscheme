@@ -110,6 +110,38 @@
                     font-size: 0.85rem;
                 }
             }
+
+            @media (prefers-color-scheme: dark) {
+                html, body {
+                    background-color: #121212;
+                    color: #ffffff;
+                }
+
+                .CodeMirror {
+                    background-color: #1e1e1e;
+                    color: #d4d4d4;
+                    border: 1px solid #444;
+                }
+
+                #output {
+                    background-color: #1e1e1e;
+                    color: #ffffff;
+                    border: 1px solid #444;
+                }
+
+                #runButton {
+                    background-color: #4caf50;
+                    color: white;
+                }
+
+                #githubLink {
+                    color: #4caf50;
+                }
+
+                #githubLink svg {
+                    fill: #4caf50;
+                }
+            }
         </style>
     </head>
     <body>
