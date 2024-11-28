@@ -48,6 +48,7 @@ mod tests {
               (define (fib-tail-rec n a b)
                 (if (= n 0)
                     a
+                    ; the following call is in tail position
                     (fib-tail-rec (- n 1) b (+ a b))))
               (fib-tail-rec n 0 1))
 
@@ -65,7 +66,7 @@ mod tests {
                 ((= n 0) (ackermann (- m 1) 1))
                 (else (ackermann (- m 1) (ackermann m (- n 1))))))
 
-            (ackermann 2 3)
+            (ackermann 2 3) ; keep the arguments small!
         "#;
         assert_eq!(run_standard(code), Ok(Expr::Integer(9)));
     }
@@ -74,7 +75,7 @@ mod tests {
     fn test_quicksort() {
         let code = r#"
             (define (quicksort lst)
-              (if (null? lst)
+              (if (null? lst) ; the first commandment
                   '()
                   (let ((pivot (car lst))
                         (rest (cdr lst)))
