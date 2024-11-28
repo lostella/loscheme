@@ -73,6 +73,15 @@ impl Iterator for Tokenizer<'_> {
                     self.input.next();
                     continue;
                 }
+                ';' => {
+                    self.input.next();
+                    while let Some(&cc) = self.input.peek() {
+                        if cc == '\n' {
+                            break;
+                        }
+                        self.input.next();
+                    }
+                }
                 '(' => {
                     self.input.next();
                     return Some(Token::LParen);
