@@ -1395,9 +1395,9 @@ mod tests {
         assert_eq!(builtin_add(values), Err("Cannot add types".to_string()));
     }
 
-    fn validate(cases: Vec<(&str, Expr)>) {
+    fn validate(steps: Vec<(&str, Expr)>) {
         let mut env = Environment::standard().child();
-        for (code, val) in cases {
+        for (code, val) in steps {
             let expr = parse(code).unwrap().remove(0);
             assert_eq!(env.evaluate(&expr), Ok(val));
         }
@@ -1405,7 +1405,7 @@ mod tests {
 
     #[test]
     fn test_evaluate() {
-        let cases = vec![
+        let steps = vec![
             ("(define a 42)", Expr::Unspecified),
             ("42.42", Expr::Float(42.42)),
             ("#t", Expr::Bool(true)),
@@ -1501,12 +1501,12 @@ mod tests {
             ("(set! a -1)", Expr::Unspecified),
             ("a", Expr::Integer(-1)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_and_or_not() {
-        let cases = vec![
+        let steps = vec![
             ("(and)", Expr::Bool(true)),
             ("(and #t #t #f)", Expr::Bool(false)),
             ("(and #t #t #t)", Expr::Bool(true)),
@@ -1520,12 +1520,12 @@ mod tests {
             ("(not '())", Expr::Bool(false)),
             ("(not 'nil)", Expr::Bool(false)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_quote() {
-        let cases = vec![
+        let steps = vec![
             ("(quote ())", Expr::from_vec(vec![])),
             (
                 "(quote (#t #f))",
@@ -1555,12 +1555,12 @@ mod tests {
                 ]),
             ),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_predicates() {
-        let cases = vec![
+        let steps = vec![
             ("(list? '())", Expr::Bool(true)),
             ("(list? '(1 2 3))", Expr::Bool(true)),
             ("(list? (list 1 2 3))", Expr::Bool(true)),
@@ -1627,42 +1627,42 @@ mod tests {
             ("(zero? -1)", Expr::Bool(false)),
             ("(zero? -0.0001)", Expr::Bool(false)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_apply() {
-        let cases = vec![
+        let steps = vec![
             ("(apply + '(3 4))", Expr::Integer(7)),
             ("(apply * (list -5 4))", Expr::Integer(-20)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_multistep_function_1() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define f (lambda (x) (define a 3) (* a x)))",
                 Expr::Unspecified,
             ),
             ("(f 4)", Expr::Integer(12)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_multistep_function_2() {
-        let cases = vec![
+        let steps = vec![
             ("(define (f x) (define a 3) (* a x))", Expr::Unspecified),
             ("(f 4)", Expr::Integer(12)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_factorial() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define fact
                     (lambda (n) (
@@ -1673,12 +1673,12 @@ mod tests {
             ),
             ("(fact 11)", Expr::Integer(39916800)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_sqrt_newton_1() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define (sqrt x)
                     (define (square x) (* x x))
@@ -1696,12 +1696,12 @@ mod tests {
             ),
             ("(sqrt 2)", Expr::Float(1.4142156862745097)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_sqrt_newton_2() {
-        let cases = vec![
+        let steps = vec![
             ("(define (square x) (* x x))", Expr::Unspecified),
             ("(define (average x y) (/ (+ x y) 2))", Expr::Unspecified),
             (
@@ -1728,12 +1728,12 @@ mod tests {
             ),
             ("(sqrt 2)", Expr::Float(1.4142156862745097)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_define_let_lambda() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define f (let ((a 3)) (lambda (x) (* a x))))",
                 Expr::Unspecified,
@@ -1744,70 +1744,88 @@ mod tests {
             ("(f 5)", Expr::Integer(15)),
             ("(f -4)", Expr::Integer(-12)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_define_with_unbound() {
-        let cases = vec![
+        let steps = vec![
             ("(define (f x) (+ a x))", Expr::Unspecified),
             ("(define a 3)", Expr::Unspecified),
             ("(f 5)", Expr::Integer(8)),
             ("(define a -17)", Expr::Unspecified),
             ("(f 3)", Expr::Integer(-14)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_define_unspecified() {
-        let cases = vec![
+        let steps = vec![
             ("(define (g) (define h))", Expr::Unspecified),
             ("(define a (g))", Expr::Unspecified),
             ("a", Expr::Unspecified),
         ];
-        validate(cases);
+        validate(steps);
+    }
+
+    #[test]
+    fn test_define_function_using_closure() {
+        let steps = vec![
+            ("(define (f a) (lambda (b) (+ a b)))", Expr::Unspecified),
+            ("(define g1 (f 2))", Expr::Unspecified),
+            ("(g1 3)", Expr::Integer(5)),
+            ("(define (g2 c) (g1 c))", Expr::Unspecified),
+            ("(g2 4)", Expr::Integer(6)),
+            ("(define (g3 c) ((f 2) c))", Expr::Unspecified),
+            ("(g3 5)", Expr::Integer(7)),
+            ("(define g4 (lambda (c) (g1 c)))", Expr::Unspecified),
+            ("(g4 6)", Expr::Integer(8)),
+            ("(define g5 (lambda (c) ((f 2) c)))", Expr::Unspecified),
+            ("(g5 7)", Expr::Integer(9)),
+        ];
+        validate(steps);
     }
 
     #[test]
     fn test_higher_order() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define (make-adder n) (lambda (x) (+ x n)))",
                 Expr::Unspecified,
             ),
             ("((make-adder 3) 7)", Expr::Integer(10)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_nested_function() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define (outer-func x) (define (inner-func y) (+ x y)) (inner-func 10))",
                 Expr::Unspecified,
             ),
             ("(outer-func 5)", Expr::Integer(15)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_function_scope() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define (outer x) (define y (+ x 1)) (lambda (z) (+ y z)))",
                 Expr::Unspecified,
             ),
             ("((outer 3) 2)", Expr::Integer(6)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_cons_car_cdr() {
-        let cases = vec![
+        let steps = vec![
             ("(cons 1 '())", Expr::from_vec(vec![Expr::Integer(1)])),
             (
                 "(cons 1 '(2 3))",
@@ -1826,12 +1844,12 @@ mod tests {
                 })),
             ),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_cond() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define (f x) (cond ((< x 0) 'negative) ((> x 0) 'positive) (else 'zero)))",
                 Expr::Unspecified,
@@ -1840,12 +1858,12 @@ mod tests {
             ("(f 0)", symbol_from_str("zero")),
             ("(f 1)", symbol_from_str("positive")),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_when_unless() {
-        let cases = vec![
+        let steps = vec![
             ("(define a 42)", Expr::Unspecified),
             ("(when (> 0 1) (set! a 43))", Expr::Unspecified),
             ("a", Expr::Integer(42)),
@@ -1856,12 +1874,12 @@ mod tests {
             ("(unless (> 1 0) (set! a 42))", Expr::Unspecified),
             ("a", Expr::Integer(43)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_filter() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(filter (lambda (x) (< x 3)) '(5 4 3 2 1))",
                 Expr::from_vec(vec![Expr::Integer(2), Expr::Integer(1)]),
@@ -1875,12 +1893,12 @@ mod tests {
                 ]),
             ),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_quicksort() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define (quicksort lst)
                   (if (null? lst)
@@ -1903,12 +1921,12 @@ mod tests {
                 ),
             ),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_ackermann() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define (ackermann m n)
                   (cond
@@ -1919,12 +1937,12 @@ mod tests {
             ),
             ("(ackermann 3 4)", Expr::Integer(125)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_fibonacci_naive() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define (fib n)
                   (if (< n 2)
@@ -1934,12 +1952,12 @@ mod tests {
             ),
             ("(fib 13)", Expr::Integer(233)),
         ];
-        validate(cases);
+        validate(steps);
     }
 
     #[test]
     fn test_fibonacci_tailcall() {
-        let cases = vec![
+        let steps = vec![
             (
                 "(define (fib n)
                   (define (fib-tail-rec n a b)
@@ -1951,6 +1969,6 @@ mod tests {
             ),
             ("(fib 20)", Expr::Integer(6765)),
         ];
-        validate(cases);
+        validate(steps);
     }
 }
