@@ -1199,11 +1199,11 @@ impl UserDefinedProcedure {
     #[inline(always)]
     fn call_except_tail(
         &self,
-        env: &mut Environment,
         args: Vec<Expr>,
     ) -> Result<MaybeValue, String> {
         let params = &self.params;
         let body = &self.body;
+        let mut env = self.env.child();
         if args.len() != params.len() {
             return Err("Incorrect number of arguments".to_string());
         }
@@ -1223,14 +1223,13 @@ impl UserDefinedProcedure {
 
 impl Callable for UserDefinedProcedure {
     fn call(&self, args: Vec<Expr>) -> Result<MaybeValue, String> {
-        let mut local_env = self.env.child();
-        let mut out = self.call_except_tail(&mut local_env, args);
+        let mut out = self.call_except_tail(args);
         loop {
             match out? {
                 MaybeValue::Just(expr) => return Ok(MaybeValue::Just(expr)),
                 MaybeValue::TailCall(Procedure::BuiltIn(proc), args) => return proc.call(args),
                 MaybeValue::TailCall(Procedure::UserDefined(proc), args) => {
-                    out = proc.call_except_tail(&mut local_env, args)
+                    out = proc.call_except_tail(args)
                 }
             }
         }
