@@ -1197,10 +1197,7 @@ pub struct UserDefinedProcedure {
 
 impl UserDefinedProcedure {
     #[inline(always)]
-    fn call_except_tail(
-        &self,
-        args: Vec<Expr>,
-    ) -> Result<MaybeValue, String> {
+    fn call_except_tail(&self, args: Vec<Expr>) -> Result<MaybeValue, String> {
         let params = &self.params;
         let body = &self.body;
         let mut env = self.env.child();
