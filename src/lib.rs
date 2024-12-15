@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod rationals;
 pub mod run;
 pub mod treewalk;
 pub mod vm;

@@ -9,6 +9,8 @@ use std::str::{Chars, FromStr};
 use internment::Intern;
 use rustc_hash::FxHashMap;
 
+use crate::rationals::simplify;
+
 #[derive(Debug, PartialEq)]
 pub enum Token {
     LParen,
@@ -181,6 +183,7 @@ pub enum Expr {
     Null,
     Integer(i64),
     Float(f64),
+    Rational(i64, i64),
     Str(String),
     Bool(bool),
     Keyword(Keyword),
@@ -244,11 +247,34 @@ fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     })))
 }
 
+fn parse_rational(input: &str) -> Result<(i64, i64), ()> {
+    let parts: Vec<&str> = input.split('/').collect();
+    if parts.len() != 2 {
+        return Err(());
+    }
+    let num = parts[0].parse().map_err(|_| ())?;
+    if parts[1].starts_with('+') || parts[1].starts_with('-') {
+        return Err(());
+    }
+    let denom: i64 = parts[1].parse().map_err(|_| ())?;
+    if denom <= 0 {
+        return Err(());
+    }
+    Ok((num, denom))
+}
+
 fn parse_atom(s: String) -> Result<Expr, String> {
     if let Ok(int) = s.parse::<i64>() {
         Ok(Expr::Integer(int))
     } else if let Ok(float) = s.parse::<f64>() {
         Ok(Expr::Float(float))
+    } else if let Ok((num, denom)) = parse_rational(&s) {
+        let (num1, denom1) = simplify(num, denom);
+        if denom1 == 1 {
+            Ok(Expr::Integer(num1))
+        } else {
+            Ok(Expr::Rational(num1, denom1))
+        }
     } else if s == "#t" {
         Ok(Expr::Bool(true))
     } else if s == "#f" {
@@ -275,6 +301,7 @@ impl fmt::Display for Expr {
             Expr::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
             Expr::Integer(v) => write!(f, "{}", v),
             Expr::Float(v) => write!(f, "{}", v),
+            Expr::Rational(n, d) => write!(f, "{}/{}", n, d),
             Expr::Str(v) => write!(f, "\"{}\"", v),
             Expr::Keyword(k) => write!(f, "{}", k),
             Expr::Symbol(s) => write!(f, "{}", s),
@@ -922,6 +949,7 @@ impl Environment {
         match expr {
             Expr::Integer(_) => Ok(MaybeValue::Just(expr.clone())),
             Expr::Float(_) => Ok(MaybeValue::Just(expr.clone())),
+            Expr::Rational(_, _) => Ok(MaybeValue::Just(expr.clone())),
             Expr::Str(_) => Ok(MaybeValue::Just(expr.clone())),
             Expr::Bool(_) => Ok(MaybeValue::Just(expr.clone())),
             Expr::Cons(p) => self.maybe_evaluate_pair(p),
@@ -1402,11 +1430,20 @@ mod tests {
     #[test]
     fn test_evaluate() {
         let steps = vec![
-            ("(define a 42)", Expr::Unspecified),
+            ("13", Expr::Integer(13)),
+            ("-25", Expr::Integer(-25)),
             ("42.42", Expr::Float(42.42)),
+            ("-12.34", Expr::Float(-12.34)),
+            ("5/4", Expr::Rational(5, 4)),
+            ("-7/3", Expr::Rational(-7, 3)),
+            ("6/4", Expr::Rational(3, 2)),
+            ("-6/4", Expr::Rational(-3, 2)),
+            ("15/3", Expr::Integer(5)),
+            ("-15/3", Expr::Integer(-5)),
             ("#t", Expr::Bool(true)),
             ("#f", Expr::Bool(false)),
             ("\"hello, world!\"", Expr::Str("hello, world!".to_string())),
+            ("(define a 42)", Expr::Unspecified),
             ("a", Expr::Integer(42)),
             ("(+ 3 2)", Expr::Integer(5)),
             ("(* 3 2)", Expr::Integer(6)),
