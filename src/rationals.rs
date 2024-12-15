@@ -1,10 +1,14 @@
-fn gcd(mut a: i64, mut b: i64) -> i64 {
+pub fn gcd(mut a: i64, mut b: i64) -> i64 {
     while b != 0 {
         let t = b;
         b = (a.abs() % b.abs()) * b.signum();
         a = t;
     }
     a
+}
+
+pub fn lcm(a: i64, b: i64) -> i64 {
+    (a * b).abs() / gcd(a, b)
 }
 
 pub fn simplify(numerator: i64, denominator: i64) -> (i64, i64) {
@@ -34,6 +38,14 @@ mod tests {
         ];
         for (a, b, c) in cases {
             assert_eq!(gcd(a, b), c)
+        }
+    }
+
+    #[test]
+    fn test_lcm() {
+        let cases = vec![(5, 3, 15), (4, 3, 12)];
+        for (a, b, c) in cases {
+            assert_eq!(lcm(a, b), c)
         }
     }
 

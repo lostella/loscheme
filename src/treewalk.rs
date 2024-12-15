@@ -9,7 +9,7 @@ use std::str::{Chars, FromStr};
 use internment::Intern;
 use rustc_hash::FxHashMap;
 
-use crate::rationals::simplify;
+use crate::rationals::{lcm, simplify};
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
@@ -263,18 +263,22 @@ fn parse_rational(input: &str) -> Result<(i64, i64), ()> {
     Ok((num, denom))
 }
 
+fn make_rational(num: i64, denom: i64) -> Expr {
+    let (num1, denom1) = simplify(num, denom);
+    if denom1 == 1 {
+        Expr::Integer(num1)
+    } else {
+        Expr::Rational(num1, denom1)
+    }
+}
+
 fn parse_atom(s: String) -> Result<Expr, String> {
     if let Ok(int) = s.parse::<i64>() {
         Ok(Expr::Integer(int))
     } else if let Ok(float) = s.parse::<f64>() {
         Ok(Expr::Float(float))
     } else if let Ok((num, denom)) = parse_rational(&s) {
-        let (num1, denom1) = simplify(num, denom);
-        if denom1 == 1 {
-            Ok(Expr::Integer(num1))
-        } else {
-            Ok(Expr::Rational(num1, denom1))
-        }
+        Ok(make_rational(num, denom))
     } else if s == "#t" {
         Ok(Expr::Bool(true))
     } else if s == "#f" {
@@ -377,6 +381,25 @@ impl Expr {
             (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 + b)),
             (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a + b)),
             (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a + *b as f64)),
+            (Expr::Rational(num, denom), Expr::Float(b)) => {
+                Ok(Expr::Float((*num as f64) / (*denom as f64) + b))
+            }
+            (Expr::Float(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Float(a + (*num as f64) / (*denom as f64)))
+            }
+            (Expr::Rational(num, denom), Expr::Integer(b)) => {
+                Ok(make_rational(num + (b * denom), *denom))
+            }
+            (Expr::Integer(a), Expr::Rational(num, denom)) => {
+                Ok(make_rational((a * denom) + num, *denom))
+            }
+            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
+                let denom = lcm(*denom1, *denom2);
+                Ok(make_rational(
+                    num1 * denom / denom1 + num2 * denom / denom2,
+                    denom,
+                ))
+            }
             _ => Err("Cannot add types".to_string()),
         }
     }
@@ -387,6 +410,17 @@ impl Expr {
             (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 * b)),
             (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a * b)),
             (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a * *b as f64)),
+            (Expr::Rational(num, denom), Expr::Float(b)) => {
+                Ok(Expr::Float((*num as f64) / (*denom as f64) * b))
+            }
+            (Expr::Float(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Float(a * (*num as f64) / (*denom as f64)))
+            }
+            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(make_rational(*num * *b, *denom)),
+            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(make_rational(*a * *num, *denom)),
+            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
+                Ok(make_rational(num1 * num2, denom1 * denom2))
+            }
             _ => Err("Cannot multiply types".to_string()),
         }
     }
@@ -397,6 +431,25 @@ impl Expr {
             (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 - b)),
             (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a - b)),
             (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a - *b as f64)),
+            (Expr::Rational(num, denom), Expr::Float(b)) => {
+                Ok(Expr::Float((*num as f64) / (*denom as f64) - b))
+            }
+            (Expr::Float(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Float(a - (*num as f64) / (*denom as f64)))
+            }
+            (Expr::Rational(num, denom), Expr::Integer(b)) => {
+                Ok(make_rational(num - (b * denom), *denom))
+            }
+            (Expr::Integer(a), Expr::Rational(num, denom)) => {
+                Ok(make_rational((a * denom) - num, *denom))
+            }
+            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
+                let denom = lcm(*denom1, *denom2);
+                Ok(make_rational(
+                    num1 * denom / denom1 - num2 * denom / denom2,
+                    denom,
+                ))
+            }
             _ => Err("Cannot subtract types".to_string()),
         }
     }
@@ -407,6 +460,17 @@ impl Expr {
             (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 / b)),
             (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a / b)),
             (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a / *b as f64)),
+            (Expr::Rational(num, denom), Expr::Float(b)) => {
+                Ok(Expr::Float((*num as f64) / (*denom as f64) / b))
+            }
+            (Expr::Float(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Float(a / (*num as f64) / (*denom as f64)))
+            }
+            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(make_rational(*num, *denom * *b)),
+            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(make_rational(*num, *a * *denom)),
+            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
+                Ok(make_rational(num1 * denom2, denom1 * num2))
+            }
             _ => Err("Cannot divide types".to_string()),
         }
     }
@@ -417,6 +481,17 @@ impl Expr {
             (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) < *b)),
             (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a < b)),
             (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a < (*b as f64))),
+            (Expr::Rational(num, denom), Expr::Float(b)) => {
+                Ok(Expr::Bool((*num as f64) / (*denom as f64) < *b))
+            }
+            (Expr::Float(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Bool(*a < (*num as f64) / (*denom as f64)))
+            }
+            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(Expr::Bool(*num < denom * b)),
+            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(Expr::Bool(*num < denom * a)),
+            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
+                Ok(Expr::Bool(num1 * denom2 < num2 * denom1))
+            }
             _ => Err("Cannot compare types".to_string()),
         }
     }
@@ -427,6 +502,17 @@ impl Expr {
             (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) > *b)),
             (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a > b)),
             (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a > (*b as f64))),
+            (Expr::Rational(num, denom), Expr::Float(b)) => {
+                Ok(Expr::Bool((*num as f64) / (*denom as f64) > *b))
+            }
+            (Expr::Float(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Bool(*a > (*num as f64) / (*denom as f64)))
+            }
+            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(Expr::Bool(*num > denom * b)),
+            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(Expr::Bool(*num > denom * a)),
+            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
+                Ok(Expr::Bool(num1 * denom2 > num2 * denom1))
+            }
             _ => Err("Cannot compare types".to_string()),
         }
     }
@@ -437,6 +523,17 @@ impl Expr {
             (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) <= *b)),
             (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a <= b)),
             (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a <= (*b as f64))),
+            (Expr::Rational(num, denom), Expr::Float(b)) => {
+                Ok(Expr::Bool((*num as f64) / (*denom as f64) <= *b))
+            }
+            (Expr::Float(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Bool(*a <= (*num as f64) / (*denom as f64)))
+            }
+            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(Expr::Bool(*num <= denom * b)),
+            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(Expr::Bool(*num <= denom * a)),
+            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
+                Ok(Expr::Bool(num1 * denom2 <= num2 * denom1))
+            }
             _ => Err("Cannot compare types".to_string()),
         }
     }
@@ -447,6 +544,17 @@ impl Expr {
             (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) >= *b)),
             (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a >= b)),
             (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a >= (*b as f64))),
+            (Expr::Rational(num, denom), Expr::Float(b)) => {
+                Ok(Expr::Bool((*num as f64) / (*denom as f64) >= *b))
+            }
+            (Expr::Float(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Bool(*a >= (*num as f64) / (*denom as f64)))
+            }
+            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(Expr::Bool(*num >= denom * b)),
+            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(Expr::Bool(*num >= denom * a)),
+            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
+                Ok(Expr::Bool(num1 * denom2 >= num2 * denom1))
+            }
             _ => Err("Cannot compare types".to_string()),
         }
     }
@@ -457,6 +565,21 @@ impl Expr {
             (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool(*a as f64 == *b)),
             (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a == b)),
             (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a == *b as f64)),
+            (Expr::Rational(num, denom), Expr::Float(b)) => {
+                Ok(Expr::Bool((*num as f64) / (*denom as f64) == *b))
+            }
+            (Expr::Float(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Bool(*a == (*num as f64) / (*denom as f64)))
+            }
+            (Expr::Rational(num, denom), Expr::Integer(b)) => {
+                Ok(Expr::Bool(num == b && *denom == 1))
+            }
+            (Expr::Integer(a), Expr::Rational(num, denom)) => {
+                Ok(Expr::Bool(num == a && *denom == 1))
+            }
+            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
+                Ok(Expr::Bool(num1 == num2 && denom1 == denom2))
+            }
             _ => Err("Cannot compare types".to_string()),
         }
     }
@@ -1423,7 +1546,13 @@ mod tests {
         let mut env = Environment::standard().child();
         for (code, val) in steps {
             let expr = parse(code).unwrap().remove(0);
-            assert_eq!(env.evaluate(&expr), Ok(val));
+            assert_eq!(
+                env.evaluate(&expr),
+                Ok(val.clone()),
+                "we are testing that {} gives {}",
+                code,
+                val
+            );
         }
     }
 
@@ -1451,6 +1580,32 @@ mod tests {
             ("(* 3.0 2)", Expr::Float(6.0)),
             ("(- 10 2 3)", Expr::Integer(5)),
             ("(/ 24 3 2)", Expr::Float(4.0)),
+            ("(+ 3/4 7/3)", Expr::Rational(37, 12)),
+            ("(- 3/4 7/3)", Expr::Rational(-19, 12)),
+            ("(* 3/4 7/3)", Expr::Rational(7, 4)),
+            ("(/ 3/4 7/3)", Expr::Rational(9, 28)),
+            ("(< 3/4 3/2)", Expr::Bool(true)),
+            ("(> 9/2 9/3)", Expr::Bool(true)),
+            ("(< 5/4 5/6)", Expr::Bool(false)),
+            ("(> 9/19 9/18)", Expr::Bool(false)),
+            ("(= 3/5 6/10)", Expr::Bool(true)),
+            ("(= 16/5 33/10)", Expr::Bool(false)),
+            ("(+ 3/4 2)", Expr::Rational(11, 4)),
+            ("(- 3/4 2)", Expr::Rational(-5, 4)),
+            ("(* 3/4 2)", Expr::Rational(3, 2)),
+            ("(/ 3/4 2)", Expr::Rational(3, 8)),
+            ("(< 3/4 1)", Expr::Bool(true)),
+            ("(> 9/2 4)", Expr::Bool(true)),
+            ("(< 5/4 1)", Expr::Bool(false)),
+            ("(> 9/19 4)", Expr::Bool(false)),
+            ("(= 16/4 4)", Expr::Bool(true)),
+            ("(= 16/5 4)", Expr::Bool(false)),
+            ("(< 3/4 0.8)", Expr::Bool(true)),
+            ("(> 9/2 3.4)", Expr::Bool(true)),
+            ("(< 5/4 1.2)", Expr::Bool(false)),
+            ("(> 9/19 0.5)", Expr::Bool(false)),
+            ("(= 16/4 4.0)", Expr::Bool(true)),
+            ("(= 16/5 3.9)", Expr::Bool(false)),
             ("(abs -5)", Expr::Integer(5)),
             ("(abs 5)", Expr::Integer(5)),
             ("(abs -5.0)", Expr::Float(5.0)),
