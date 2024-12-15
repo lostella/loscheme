@@ -681,7 +681,7 @@ fn builtin_list(values: Vec<Expr>) -> Result<MaybeValue, String> {
 
 fn builtin_apply(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
-        return Err("Apply needs exactly two argument".to_string());
+        return Err("Apply needs exactly two arguments".to_string());
     }
     let first = take(&mut values[0]);
     let second = take(&mut values[1]);
@@ -852,7 +852,7 @@ fn builtin_iszero(values: Vec<Expr>) -> Result<MaybeValue, String> {
 
 fn builtin_cons(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
-        return Err("Cons needs exactly two argument".to_string());
+        return Err("Cons needs exactly two arguments".to_string());
     }
     let car = take(&mut values[0]);
     let cdr = take(&mut values[1]);
@@ -881,7 +881,7 @@ fn builtin_cdr(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
 
 fn builtin_filter(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
-        return Err("Filter needs exactly two argument".to_string());
+        return Err("Filter needs exactly two arguments".to_string());
     }
     let pred = take(&mut values[0]);
     let orig = take(&mut values[1]).into_vec()?;
