@@ -56,7 +56,7 @@ jobs:
   deploy:
     name: Deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [check, test, fmt, clippy]
+    needs: [test, fmt, clippy]
     permissions:
       pages: write
       id-token: write
