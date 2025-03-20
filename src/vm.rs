@@ -1,324 +1,187 @@
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Instruction {
-    LoadConstant(usize),
-    LoadLocal(usize),
-    StoreLocal(usize),
-    Return,
-    Jump(usize),
-    JumpIfFalse(usize),
-    JumpIfTrue(usize),
-    CallClone(usize),
-    Increment(usize),
-    Decrement(usize),
-    Add(usize),
-    Subtract(usize),
-    Multiply(usize),
-    Divide(usize),
-    Negate,
-    Eq,
-    Lt,
-    Gt,
-    Leq,
-    Geq,
+// TODO
+// - writing to zero is a no-op
+// - add stack and stack pointer
+// - add memory
+// - implement instructions: lw, sw, ...
+// - implement assembler
+// - implement register aliases
+// - handle error situations (which ones?)
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Op {
+    // R-TYPE (rd, rs1, rs2)
+    Add(usize, usize, usize),
+    // I-TYPE (rd, rs1, imm)
+    Addi(usize, usize, i32),
+    Jalr(usize, usize, usize),
+    // B-TYPE (rs1, rs2, imm)
+    Beq(usize, usize, usize),
+    Bge(usize, usize, usize),
+    Blt(usize, usize, usize),
+    // J-TYPE (rd, imm)
+    Jal(usize, usize),
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Value {
-    Integer(i64),
-    Float(f64),
-    Bool(bool),
+fn get_bits(word: u32, start_index: u8, num_bits: u8) -> u32 {
+    (!(0xFFFFFFFFu32 << num_bits)) & (word >> start_index)
 }
 
-impl Value {
-    fn inc(&self, by: usize) -> Result<Value, &'static str> {
-        if let Value::Integer(a) = self {
-            return Ok(Value::Integer(a + by as i64));
-        }
-        Err("Cannot increment type")
-    }
+const R_TYPE: u32 = 0b0110011;
+const I_TYPE: u32 = 0b0010011;
+const I_TYPE_LOAD: u32 = 0b0000011;
+const I_TYPE_JALR: u32 = 0b1100111;
+const B_TYPE: u32 = 0b1100011;
+const J_TYPE: u32 = 0b1101111;
 
-    fn dec(&self, by: usize) -> Result<Value, &'static str> {
-        if let Value::Integer(a) = self {
-            return Ok(Value::Integer(a - by as i64));
-        }
-        Err("Cannot increment type")
+fn decode_r_type(word: u32) -> Op {
+    let rd = get_bits(word, 7, 5) as usize;
+    let funct3 = get_bits(word, 12, 3);
+    let rs1 = get_bits(word, 15, 5) as usize;
+    let rs2 = get_bits(word, 20, 5) as usize;
+    let funct7 = get_bits(word, 25, 7);
+    match (funct3, funct7) {
+        (0b000, 0b0000000) => Op::Add(rd, rs1, rs2),
+        _ => todo!(),
     }
+}
 
-    fn add(&self, other: &Value) -> Result<Value, &'static str> {
-        match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 + b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a + *b as f64)),
-            _ => Err("Cannot add types"),
-        }
+fn decode_i_type(word: u32) -> Op {
+    let opcode = get_bits(word, 0, 7);
+    let rd = get_bits(word, 7, 5) as usize;
+    let funct3 = get_bits(word, 12, 3);
+    let rs1 = get_bits(word, 15, 5) as usize;
+    let imm = get_bits(word, 20, 12);
+    match (opcode, funct3) {
+        (I_TYPE, 0x000) => Op::Addi(rd, rs1, imm as i32),
+        (I_TYPE_JALR, 0x000) => Op::Jalr(rd, rs1, imm as usize),
+        _ => todo!(),
     }
+}
 
-    fn mul(&self, other: &Value) -> Result<Value, &'static str> {
-        match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a * b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 * b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a * *b as f64)),
-            _ => Err("Cannot multiply types"),
-        }
+fn decode_b_type_imm(word: u32) -> u32 {
+    let imm_4_1_11 = get_bits(word, 7, 5);
+    let imm_12_10_5 = get_bits(word, 25, 7);
+    ((imm_4_1_11 >> 1) << 1)
+        | (imm_12_10_5 << 5)
+        | ((imm_4_1_11 & 1) << 11)
+        | ((imm_12_10_5 & 128) << 12)
+}
+
+fn decode_b_type(word: u32) -> Op {
+    let funct3 = get_bits(word, 12, 3);
+    let rs1 = get_bits(word, 15, 5) as usize;
+    let rs2 = get_bits(word, 20, 5) as usize;
+    let imm = decode_b_type_imm(word);
+    match funct3 {
+        0b000 => Op::Beq(rs1, rs2, imm as usize),
+        0b101 => Op::Bge(rs1, rs2, imm as usize),
+        0b100 => Op::Blt(rs1, rs2, imm as usize),
+        _ => todo!("funct3 = 0b{:b}", funct3),
     }
+}
 
-    fn sub(&self, other: &Value) -> Result<Value, &'static str> {
-        match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a - b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 - b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a - *b as f64)),
-            _ => Err("Cannot subtract types"),
-        }
-    }
+fn decode_j_type_imm(word: u32) -> u32 {
+    let imm = get_bits(word, 12, 20);
+    ((0xFF & imm) << 12)
+        | (((1 << 8) & imm) << 3)
+        | (((0b11_1111_1111 << 9) & imm) >> 8)
+        | (((1 << 19) & imm) << 1)
+}
 
-    fn div(&self, other: &Value) -> Result<Value, &'static str> {
-        match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Float(*a as f64 / *b as f64)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 / b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a / *b as f64)),
-            _ => Err("Cannot divide types"),
-        }
-    }
+fn decode_j_type(word: u32) -> Op {
+    let rd = get_bits(word, 7, 5) as usize;
+    let imm = decode_j_type_imm(word) as usize;
+    Op::Jal(rd, imm)
+}
 
-    fn lt(&self, other: &Value) -> Result<Value, &'static str> {
-        match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a < b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) < *b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a < b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a < (*b as f64))),
-            _ => Err("Cannot compare types"),
-        }
-    }
-
-    fn gt(&self, other: &Value) -> Result<Value, &'static str> {
-        match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a > b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) > *b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a > b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a > (*b as f64))),
-            _ => Err("Cannot compare types"),
-        }
-    }
-
-    fn leq(&self, other: &Value) -> Result<Value, &'static str> {
-        match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a <= b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) <= *b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a <= b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a <= (*b as f64))),
-            _ => Err("Cannot compare types"),
-        }
-    }
-
-    fn geq(&self, other: &Value) -> Result<Value, &'static str> {
-        match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a >= b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool((*a as f64) >= *b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a >= b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a >= (*b as f64))),
-            _ => Err("Cannot compare types"),
-        }
-    }
-
-    fn iseq(&self, other: &Value) -> Result<Value, &'static str> {
-        match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Bool(a == b)),
-            (Value::Integer(a), Value::Float(b)) => Ok(Value::Bool(*a as f64 == *b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Bool(a == b)),
-            (Value::Float(a), Value::Integer(b)) => Ok(Value::Bool(*a == *b as f64)),
-            _ => Err("Cannot compare types"),
-        }
-    }
-
-    fn neg(&self) -> Result<Value, &'static str> {
-        match self {
-            Value::Integer(a) => Ok(Value::Integer(-a)),
-            Value::Float(a) => Ok(Value::Float(-a)),
-            _ => Err("Cannot negate type"),
+impl From<u32> for Op {
+    fn from(word: u32) -> Self {
+        let opcode = get_bits(word, 0, 7);
+        match opcode {
+            R_TYPE => decode_r_type(word),
+            I_TYPE | I_TYPE_LOAD | I_TYPE_JALR => decode_i_type(word),
+            B_TYPE => decode_b_type(word),
+            J_TYPE => decode_j_type(word),
+            _ => todo!(),
         }
     }
 }
 
-#[derive(PartialEq)]
-enum Status {
-    Continue,
-    Return(Value),
-}
-
-pub struct StackFrame<'a> {
-    code: &'a Vec<Instruction>,
-    constants: &'a Vec<Value>,
-    locals: Vec<Value>,
-    stack: Vec<Value>,
+#[derive(Debug)]
+pub struct VM {
+    regs: [u32; 32],
+    code: Vec<Op>,
     ip: usize,
 }
 
-impl<'a> StackFrame<'a> {
-    pub fn new(code: &'a Vec<Instruction>, constants: &'a Vec<Value>, locals: Vec<Value>) -> Self {
+impl VM {
+    pub fn new(code: Vec<Op>) -> Self {
         Self {
+            regs: [0; 32],
             code,
-            constants,
-            locals,
-            stack: Vec::new(),
             ip: 0,
         }
     }
 
-    fn fetch_instruction(&mut self) -> Result<Instruction, &'static str> {
-        if self.ip >= self.code.len() {
-            return Err("end of code");
+    pub fn write_register(&mut self, idx: usize, value: u32) {
+        self.regs[idx] = value
+    }
+
+    pub fn read_register(&mut self, idx: usize) -> u32 {
+        self.regs[idx]
+    }
+
+    fn step(&mut self) {
+        if self.ip % 4 != 0 {
+            panic!("instruction pointer is not word-aligned")
         }
-        let res = self.code[self.ip];
-        self.ip += 1;
-        Ok(res)
-    }
-
-    fn try_pop(&mut self) -> Result<Value, &'static str> {
-        self.stack.pop().ok_or("stack is empty")
-    }
-
-    fn execute(&mut self, instruction: Instruction) -> Result<Status, &'static str> {
-        match instruction {
-            Instruction::LoadConstant(offset) => {
-                self.stack.push(self.constants[offset]);
-                Ok(Status::Continue)
+        match self.code[self.ip / 4] {
+            Op::Add(rd, rs1, rs2) => {
+                self.regs[rd] = (self.regs[rs1] as i32 + self.regs[rs2] as i32) as u32;
+                self.ip += 4;
             }
-            Instruction::LoadLocal(offset) => {
-                self.stack.push(self.locals[offset]);
-                Ok(Status::Continue)
+            Op::Addi(rd, rs1, val) => {
+                self.regs[rd] = (self.regs[rs1] as i32 + val) as u32;
+                self.ip += 4;
             }
-            Instruction::StoreLocal(offset) => {
-                self.locals[offset] = self.try_pop()?;
-                Ok(Status::Continue)
-            }
-            Instruction::Return => Ok(Status::Return(self.try_pop()?)),
-            Instruction::Jump(offset) => {
-                self.ip += offset;
-                Ok(Status::Continue)
-            }
-            Instruction::JumpIfFalse(offset) => {
-                if let Value::Bool(false) = self.try_pop()? {
-                    self.ip += offset
+            Op::Beq(rs1, rs2, ip) => {
+                if self.regs[rs1] == self.regs[rs2] {
+                    self.ip = ip;
+                } else {
+                    self.ip += 4;
                 }
-                Ok(Status::Continue)
             }
-            Instruction::JumpIfTrue(offset) => {
-                if let Value::Bool(true) = self.try_pop()? {
-                    self.ip += offset
+            Op::Bge(rs1, rs2, ip) => {
+                if self.regs[rs1] >= self.regs[rs2] {
+                    self.ip = ip;
+                } else {
+                    self.ip += 4;
                 }
-                Ok(Status::Continue)
             }
-            Instruction::CallClone(n) => {
-                let mut locals = Vec::with_capacity(n);
-                for _ in 0..n {
-                    locals.push(self.try_pop()?);
+            Op::Blt(rs1, rs2, ip) => {
+                if self.regs[rs1] < self.regs[rs2] {
+                    self.ip = ip;
+                } else {
+                    self.ip += 4;
                 }
-                let mut callee_frame = StackFrame::new(self.code, self.constants, locals);
-                let ret = callee_frame.run();
-                self.stack.push(ret?);
-                Ok(Status::Continue)
             }
-            Instruction::Negate => {
-                let v = self.try_pop()?;
-                self.stack.push(v.neg()?);
-                Ok(Status::Continue)
+            Op::Jal(rd, ip) => {
+                self.regs[rd] = self.ip as u32 + 4;
+                self.ip = ip;
             }
-            Instruction::Increment(n) => {
-                let a = self.try_pop()?;
-                self.stack.push(a.inc(n)?);
-                Ok(Status::Continue)
-            }
-            Instruction::Decrement(n) => {
-                let a = self.try_pop()?;
-                self.stack.push(a.dec(n)?);
-                Ok(Status::Continue)
-            }
-            Instruction::Add(n) => {
-                let mut res = self.try_pop()?;
-                for _ in 0..n - 1 {
-                    res = res.add(&self.try_pop()?)?;
-                }
-                self.stack.push(res);
-                Ok(Status::Continue)
-            }
-            Instruction::Subtract(n) => {
-                let mut res = self.try_pop()?;
-                for _ in 0..n - 1 {
-                    res = res.sub(&self.try_pop()?)?;
-                }
-                self.stack.push(res);
-                Ok(Status::Continue)
-            }
-            Instruction::Multiply(n) => {
-                let mut res = self.try_pop()?;
-                for _ in 0..n - 1 {
-                    res = res.mul(&self.try_pop()?)?;
-                }
-                self.stack.push(res);
-                Ok(Status::Continue)
-            }
-            Instruction::Divide(n) => {
-                let mut res = self.try_pop()?;
-                for _ in 0..n - 1 {
-                    res = res.div(&self.try_pop()?)?;
-                }
-                self.stack.push(res);
-                Ok(Status::Continue)
-            }
-            Instruction::Eq => {
-                let b = self.try_pop()?;
-                let a = self.try_pop()?;
-                self.stack.push(a.iseq(&b)?);
-                Ok(Status::Continue)
-            }
-            Instruction::Lt => {
-                let b = self.try_pop()?;
-                let a = self.try_pop()?;
-                self.stack.push(a.lt(&b)?);
-                Ok(Status::Continue)
-            }
-            Instruction::Gt => {
-                let b = self.try_pop()?;
-                let a = self.try_pop()?;
-                self.stack.push(a.gt(&b)?);
-                Ok(Status::Continue)
-            }
-            Instruction::Leq => {
-                let b = self.try_pop()?;
-                let a = self.try_pop()?;
-                self.stack.push(a.leq(&b)?);
-                Ok(Status::Continue)
-            }
-            Instruction::Geq => {
-                let b = self.try_pop()?;
-                let a = self.try_pop()?;
-                self.stack.push(a.geq(&b)?);
-                Ok(Status::Continue)
+            Op::Jalr(rd, rs1, offset) => {
+                self.regs[rd] = (self.ip as u32) + 4;
+                self.ip = self.regs[rs1] as usize + offset;
             }
         }
     }
 
-    pub fn debug(&mut self) -> Result<Value, &'static str> {
+    pub fn run(&mut self) {
         loop {
-            println!("{:?}", self.stack);
-            let instruction = self.fetch_instruction()?;
-            println!("{}, {:?}", self.ip - 1, instruction);
-            if let Status::Return(v) = self.execute(instruction)? {
-                return Ok(v);
+            if self.ip >= 4 * self.code.len() {
+                break;
             }
-        }
-    }
-
-    pub fn run(&mut self) -> Result<Value, &'static str> {
-        loop {
-            let instruction = self.fetch_instruction()?;
-            if let Status::Return(v) = self.execute(instruction)? {
-                return Ok(v);
-            }
+            self.step()
         }
     }
 }
@@ -327,87 +190,65 @@ impl<'a> StackFrame<'a> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_arithmetics() {
-        let code = vec![
-            Instruction::LoadConstant(2),
-            Instruction::LoadConstant(0),
-            Instruction::LoadConstant(1),
-            Instruction::Add(2),
-            Instruction::Divide(2),
-            Instruction::Negate,
-            Instruction::Return,
-        ];
-        let constants = vec![Value::Float(1.2), Value::Float(3.4), Value::Float(5.6)];
-        let mut frame = StackFrame::new(&code, &constants, vec![]);
-        assert_eq!(frame.run(), Ok(Value::Float(-0.8214285714285714)))
-    }
+    // # Compute Fibonacci(n) where n is passed in x10, result will be stored in x10
+    //
+    //     addi x5, x0, 0   # x5 = Fib(0) = 0
+    //     addi x6, x0, 1   # x6 = Fib(1) = 1
+    //     addi x7, x0, 1   # x7 = Loop counter i = 1
+    //     bge x10, x7, fib_loop  # If n >= 1, enter loop
+    //     add x10, x0, x5      # Return Fib(0) for n=0
+    //     jal x1, end
+    // fib_loop:
+    //     add x28, x5, x6   # x28 = Fib(i) = Fib(i-1) + Fib(i-2)
+    //     add x5, x0, x6 # x5 = Fib(i-2) = Fib(i-1)
+    //     add x6, x0, x28 # x6 = Fib(i-1) = Fib(i)
+    //     addi x7, x7, 1   # i++
+    //     blt x7, x10, fib_loop  # If i < n, continue loop
+    //     add x10, x0, x28  # Store result in x10
+    // end:
+
+    const FIB_BIN: [u32; 12] = [
+        0b00000000000000000000_00101_0010011,
+        0b00000000000100000000_00110_0010011,
+        0b00000000000100000000_00111_0010011,
+        0b00000000011101010101_11000_1100011,
+        0b00000000010100000000_01010_0110011,
+        0b00000011000000000000_00001_1101111,
+        0b00000000011000101000_11100_0110011,
+        0b00000000011000000000_00101_0110011,
+        0b00000001110000000000_00110_0110011,
+        0b00000000000100111000_00111_0010011,
+        0b00000000101000111100_11000_1100011,
+        0b00000001110000000000_01010_0110011,
+    ];
+
+    const FIB_OPS: [Op; 12] = [
+        Op::Addi(5, 0, 0),
+        Op::Addi(6, 0, 1),
+        Op::Addi(7, 0, 1),
+        Op::Bge(10, 7, 24),
+        Op::Add(10, 0, 5),
+        Op::Jal(1, 48),
+        Op::Add(28, 5, 6),
+        Op::Add(5, 0, 6),
+        Op::Add(6, 0, 28),
+        Op::Addi(7, 7, 1),
+        Op::Blt(7, 10, 24),
+        Op::Add(10, 0, 28),
+    ];
 
     #[test]
-    fn test_jump_if() {
-        let code = vec![
-            Instruction::LoadConstant(0),
-            Instruction::LoadConstant(1),
-            Instruction::Leq,
-            Instruction::JumpIfFalse(2),
-            Instruction::LoadConstant(2),
-            Instruction::Jump(1),
-            Instruction::LoadConstant(3),
-            Instruction::Return,
-        ];
-        let constants = vec![
-            Value::Float(1.2),
-            Value::Float(3.4),
-            Value::Integer(42),
-            Value::Integer(13),
-        ];
-        let mut frame = StackFrame::new(&code, &constants, vec![]);
-        assert_eq!(frame.run(), Ok(Value::Integer(42)))
-    }
-
-    #[test]
-    fn test_jump_else() {
-        let code = vec![
-            Instruction::LoadConstant(0),
-            Instruction::LoadConstant(1),
-            Instruction::Geq,
-            Instruction::JumpIfFalse(2),
-            Instruction::LoadConstant(2),
-            Instruction::Jump(1),
-            Instruction::LoadConstant(3),
-            Instruction::Return,
-        ];
-        let constants = vec![
-            Value::Float(1.2),
-            Value::Float(3.4),
-            Value::Integer(42),
-            Value::Integer(13),
-        ];
-        let mut frame = StackFrame::new(&code, &constants, vec![]);
-        assert_eq!(frame.run(), Ok(Value::Integer(13)))
+    fn test_decode() {
+        for (word, op) in FIB_BIN.iter().zip(FIB_OPS) {
+            assert_eq!(Op::from(*word), op)
+        }
     }
 
     #[test]
     fn test_fibonacci() {
-        let code = vec![
-            Instruction::LoadLocal(0),
-            Instruction::LoadConstant(1),
-            Instruction::Lt,
-            Instruction::JumpIfFalse(2),
-            Instruction::LoadLocal(0),
-            Instruction::Return,
-            Instruction::LoadLocal(0),
-            Instruction::Decrement(1),
-            Instruction::CallClone(1),
-            Instruction::LoadLocal(0),
-            Instruction::Decrement(2),
-            Instruction::CallClone(1),
-            Instruction::Add(2),
-            Instruction::Return,
-        ];
-        let constants = vec![Value::Integer(1), Value::Integer(2)];
-        let locals = vec![Value::Integer(9)];
-        let mut frame = StackFrame::new(&code, &constants, locals);
-        assert_eq!(frame.run(), Ok(Value::Integer(34)))
+        let mut vm = VM::new(FIB_BIN.map(Op::from).to_vec());
+        vm.write_register(10, 17);
+        vm.run();
+        assert_eq!(vm.read_register(10), 1597)
     }
 }
