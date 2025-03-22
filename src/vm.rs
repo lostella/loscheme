@@ -1,11 +1,10 @@
 // TODO
-// - writing to zero is a no-op
-// - add stack and stack pointer
-// - add memory
-// - implement instructions: lw, sw, ...
+// - implement more instructions
 // - implement assembler
-// - implement register aliases
-// - handle error situations (which ones?)
+// - add register aliases
+// - add pseudo-instructions (e.g. li)
+// - handle error situations
+// - make panic-free
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Op {
@@ -14,6 +13,13 @@ pub enum Op {
     // I-TYPE (rd, rs1, imm)
     Addi(usize, usize, i32),
     Jalr(usize, usize, usize),
+    Lb(usize, usize, i32),
+    Lh(usize, usize, i32),
+    Lw(usize, usize, i32),
+    // S-TYPE (rs1, rs2, imm)
+    Sb(usize, usize, i32),
+    Sh(usize, usize, i32),
+    Sw(usize, usize, i32),
     // B-TYPE (rs1, rs2, imm)
     Beq(usize, usize, usize),
     Bge(usize, usize, usize),
@@ -30,6 +36,7 @@ const R_TYPE: u32 = 0b0110011;
 const I_TYPE: u32 = 0b0010011;
 const I_TYPE_LOAD: u32 = 0b0000011;
 const I_TYPE_JALR: u32 = 0b1100111;
+const S_TYPE: u32 = 0b0100011;
 const B_TYPE: u32 = 0b1100011;
 const J_TYPE: u32 = 0b1101111;
 
@@ -54,7 +61,23 @@ fn decode_i_type(word: u32) -> Op {
     match (opcode, funct3) {
         (I_TYPE, 0x000) => Op::Addi(rd, rs1, imm as i32),
         (I_TYPE_JALR, 0x000) => Op::Jalr(rd, rs1, imm as usize),
+        (I_TYPE_LOAD, 0x000) => Op::Lb(rd, rs1, imm as i32),
+        (I_TYPE_LOAD, 0x001) => Op::Lh(rd, rs1, imm as i32),
+        (I_TYPE_LOAD, 0x010) => Op::Lw(rd, rs1, imm as i32),
         _ => todo!(),
+    }
+}
+
+fn decode_s_type(word: u32) -> Op {
+    let funct3 = get_bits(word, 12, 3);
+    let rs1 = get_bits(word, 15, 5) as usize;
+    let rs2 = get_bits(word, 20, 5) as usize;
+    let imm = get_bits(word, 7, 5) | (get_bits(word, 25, 6) << 5);
+    match funct3 {
+        0b000 => Op::Sb(rs1, rs2, imm as i32),
+        0b001 => Op::Sh(rs1, rs2, imm as i32),
+        0b010 => Op::Sw(rs1, rs2, imm as i32),
+        _ => todo!("funct3 = 0b{:b}", funct3),
     }
 }
 
@@ -100,6 +123,7 @@ impl From<u32> for Op {
         match opcode {
             R_TYPE => decode_r_type(word),
             I_TYPE | I_TYPE_LOAD | I_TYPE_JALR => decode_i_type(word),
+            S_TYPE => decode_s_type(word),
             B_TYPE => decode_b_type(word),
             J_TYPE => decode_j_type(word),
             _ => todo!(),
@@ -112,23 +136,78 @@ pub struct VM {
     regs: [u32; 32],
     code: Vec<Op>,
     ip: usize,
+    memory: Vec<u8>,
 }
 
 impl VM {
-    pub fn new(code: Vec<Op>) -> Self {
+    pub fn new(code: Vec<Op>, memory_size: usize) -> Self {
         Self {
             regs: [0; 32],
             code,
             ip: 0,
+            memory: vec![0; memory_size],
         }
     }
 
     pub fn write_register(&mut self, idx: usize, value: u32) {
-        self.regs[idx] = value
+        if idx > 0 {
+            self.regs[idx] = value
+        }
     }
 
-    pub fn read_register(&mut self, idx: usize) -> u32 {
-        self.regs[idx]
+    pub fn read_register(&self, idx: usize) -> u32 {
+        if idx > 0 {
+            self.regs[idx]
+        } else {
+            0
+        }
+    }
+
+    pub fn load_byte(&self, address: usize) -> u32 {
+        let value = self.memory[address] as u32;
+        // sign extension
+        if value > 0x80 {
+            0xFFFFFF00 | value
+        } else {
+            value
+        }
+    }
+
+    pub fn load_half(&self, address: usize) -> u32 {
+        // little-endian layout
+        let value = self.memory[address] as u32 | (self.memory[address + 1] as u32) << 8;
+        // sign extension
+        if value > 0x8000 {
+            0xFFFF0000 | value
+        } else {
+            value
+        }
+    }
+
+    pub fn load_word(&self, address: usize) -> u32 {
+        // little-endian layout
+        self.memory[address] as u32
+            | (self.memory[address + 1] as u32) << 8
+            | (self.memory[address + 2] as u32) << 16
+            | (self.memory[address + 3] as u32) << 24
+    }
+
+    pub fn store_byte(&mut self, address: usize, value: u32) {
+        self.memory[address] = (value & 0xFF) as u8;
+    }
+
+    pub fn store_half(&mut self, address: usize, value: u32) {
+        // little-endian layout
+        self.memory[address] = (value & 0x00FF) as u8;
+        self.memory[address + 1] = ((value & 0xFF00) >> 8) as u8;
+    }
+
+    pub fn store_word(&mut self, address: usize, value: u32) {
+        // little-endian layout
+        self.memory[address] = (value & 0x000000FF) as u8;
+        self.memory[address + 1] = ((value & 0x0000FF00) >> 8) as u8;
+        self.memory[address + 2] = ((value & 0x00FF0000) >> 16) as u8;
+        self.memory[address + 3] = ((value & 0xFF000000) >> 24) as u8;
     }
 
     fn step(&mut self) {
@@ -173,11 +252,38 @@ impl VM {
                 self.regs[rd] = (self.ip as u32) + 4;
                 self.ip = self.regs[rs1] as usize + offset;
             }
+            Op::Lb(rd, rs1, offset) => {
+                let address = (self.regs[rs1] as i32 + offset) as usize;
+                self.regs[rd] = self.load_byte(address);
+            }
+            Op::Lh(rd, rs1, offset) => {
+                let address = (self.regs[rs1] as i32 + offset) as usize;
+                self.regs[rd] = self.load_half(address);
+            }
+            Op::Lw(rd, rs1, offset) => {
+                let address = (self.regs[rs1] as i32 + offset) as usize;
+                self.regs[rd] = self.load_word(address);
+            }
+            Op::Sb(rs1, rs2, offset) => {
+                let address = (self.regs[rs2] as i32 + offset) as usize;
+                self.store_byte(address, self.regs[rs1]);
+            }
+            Op::Sh(rs1, rs2, offset) => {
+                let address = (self.regs[rs2] as i32 + offset) as usize;
+                self.store_half(address, self.regs[rs1]);
+            }
+            Op::Sw(rs1, rs2, offset) => {
+                let address = (self.regs[rs2] as i32 + offset) as usize;
+                self.store_word(address, self.regs[rs1]);
+            }
         }
     }
 
     pub fn run(&mut self) {
         loop {
+            // NOTE: the following is to "hard-wire" the register
+            // NOTE: arguably the register should just not be there
+            self.regs[0] = 0;
             if self.ip >= 4 * self.code.len() {
                 break;
             }
@@ -189,6 +295,59 @@ impl VM {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_write_to_zero() {
+        let mut vm = VM::new(vec![Op::Addi(0, 0, 1)], 0);
+        vm.run();
+        assert_eq!(vm.regs[0], 0)
+    }
+
+    #[test]
+    fn test_store_word_load_word() {
+        let mut vm = VM::new(vec![], 1024);
+        vm.store_word(512, 0x12345678);
+        assert_eq!(vm.load_word(512), 0x12345678)
+    }
+
+    #[test]
+    fn test_store_half_load_half() {
+        let mut vm = VM::new(vec![], 1024);
+        vm.store_half(256, 0x7654);
+        assert_eq!(vm.load_half(256), 0x7654);
+        vm.store_half(256, 0x8654);
+        assert_eq!(vm.load_half(256), 0xFFFF8654);
+    }
+
+    #[test]
+    fn test_store_byte_load_byte() {
+        let mut vm = VM::new(vec![], 1024);
+        vm.store_byte(256, 0x7F);
+        assert_eq!(vm.load_byte(256), 0x7F);
+        vm.store_byte(256, 0x8F);
+        assert_eq!(vm.load_byte(256), 0xFFFFFF8F);
+    }
+
+    #[test]
+    fn test_store_byte_load_half() {
+        let mut vm = VM::new(vec![], 1024);
+
+        vm.store_byte(256, 0x12);
+        vm.store_byte(257, 0x34);
+        assert_eq!(vm.load_half(256), 0x3412);
+
+        vm.store_byte(257, 0x84);
+        assert_eq!(vm.load_half(256), 0xFFFF8412)
+    }
+
+    #[test]
+    fn test_store_half_load_word() {
+        let mut vm = VM::new(vec![], 1024);
+
+        vm.store_half(256, 0x1234);
+        vm.store_half(258, 0x5678);
+        assert_eq!(vm.load_word(256), 0x56781234)
+    }
 
     // # Compute Fibonacci(n) where n is passed in x10, result will be stored in x10
     //
@@ -207,7 +366,7 @@ mod tests {
     //     add x10, x0, x28  # Store result in x10
     // end:
 
-    const FIB_BIN: [u32; 12] = [
+    const FIB_ITER_BIN: [u32; 12] = [
         0b00000000000000000000_00101_0010011,
         0b00000000000100000000_00110_0010011,
         0b00000000000100000000_00111_0010011,
@@ -222,7 +381,7 @@ mod tests {
         0b00000001110000000000_01010_0110011,
     ];
 
-    const FIB_OPS: [Op; 12] = [
+    const FIB_ITER_OPS: [Op; 12] = [
         Op::Addi(5, 0, 0),
         Op::Addi(6, 0, 1),
         Op::Addi(7, 0, 1),
@@ -238,15 +397,15 @@ mod tests {
     ];
 
     #[test]
-    fn test_decode() {
-        for (word, op) in FIB_BIN.iter().zip(FIB_OPS) {
+    fn test_fibonacci_decode() {
+        for (word, op) in FIB_ITER_BIN.iter().zip(FIB_ITER_OPS) {
             assert_eq!(Op::from(*word), op)
         }
     }
 
     #[test]
-    fn test_fibonacci() {
-        let mut vm = VM::new(FIB_BIN.map(Op::from).to_vec());
+    fn test_fibonacci_run() {
+        let mut vm = VM::new(FIB_ITER_BIN.map(Op::from).to_vec(), 0);
         vm.write_register(10, 17);
         vm.run();
         assert_eq!(vm.read_register(10), 1597)
