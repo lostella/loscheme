@@ -142,7 +142,7 @@ pub struct VM {
 impl VM {
     pub fn new(code: Vec<Op>, memory_size: usize) -> Self {
         let mut regs = [0; 32];
-        regs[1] = code.len() as u32;  // initialize return address
+        regs[1] = code.len() as u32; // initialize return address
         regs[2] = memory_size as u32; // initialize stack pointer
         Self {
             regs,
