@@ -175,7 +175,7 @@ impl VM {
 
     pub fn load_half(&self, address: usize) -> u32 {
         // little-endian layout
-        let value = self.memory[address] as u32 | (self.memory[address + 1] as u32) << 8;
+        let value = self.memory[address] as u32 | ((self.memory[address + 1] as u32) << 8);
         // sign extension
         if value > 0x8000 {
             0xFFFF0000 | value
@@ -187,9 +187,9 @@ impl VM {
     pub fn load_word(&self, address: usize) -> u32 {
         // little-endian layout
         self.memory[address] as u32
-            | (self.memory[address + 1] as u32) << 8
-            | (self.memory[address + 2] as u32) << 16
-            | (self.memory[address + 3] as u32) << 24
+            | ((self.memory[address + 1] as u32) << 8)
+            | ((self.memory[address + 2] as u32) << 16)
+            | ((self.memory[address + 3] as u32) << 24)
     }
 
     pub fn store_byte(&mut self, address: usize, value: u32) {
