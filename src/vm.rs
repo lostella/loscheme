@@ -141,8 +141,10 @@ pub struct VM {
 
 impl VM {
     pub fn new(code: Vec<Op>, memory_size: usize) -> Self {
+        let mut regs = [0; 32];
+        regs[2] = memory_size as u32; // initialize stack pointer
         Self {
-            regs: [0; 32],
+            regs,
             code,
             ip: 0,
             memory: vec![0; memory_size],
@@ -255,26 +257,32 @@ impl VM {
             Op::Lb(rd, rs1, offset) => {
                 let address = (self.regs[rs1] as i32 + offset) as usize;
                 self.regs[rd] = self.load_byte(address);
+                self.ip += 4;
             }
             Op::Lh(rd, rs1, offset) => {
                 let address = (self.regs[rs1] as i32 + offset) as usize;
                 self.regs[rd] = self.load_half(address);
+                self.ip += 4;
             }
             Op::Lw(rd, rs1, offset) => {
                 let address = (self.regs[rs1] as i32 + offset) as usize;
                 self.regs[rd] = self.load_word(address);
+                self.ip += 4;
             }
             Op::Sb(rs1, rs2, offset) => {
                 let address = (self.regs[rs2] as i32 + offset) as usize;
                 self.store_byte(address, self.regs[rs1]);
+                self.ip += 4;
             }
             Op::Sh(rs1, rs2, offset) => {
                 let address = (self.regs[rs2] as i32 + offset) as usize;
                 self.store_half(address, self.regs[rs1]);
+                self.ip += 4;
             }
             Op::Sw(rs1, rs2, offset) => {
                 let address = (self.regs[rs2] as i32 + offset) as usize;
                 self.store_word(address, self.regs[rs1]);
+                self.ip += 4;
             }
         }
     }
@@ -288,6 +296,20 @@ impl VM {
                 break;
             }
             self.step()
+        }
+    }
+
+    pub fn debug(&mut self, steps: u32) {
+        for _ in 0..steps {
+            // NOTE: the following is to "hard-wire" the register
+            // NOTE: arguably the register should just not be there
+            self.regs[0] = 0;
+            println!("regs: {:?}", self.regs);
+            if self.ip >= 4 * self.code.len() {
+                break;
+            }
+            println!(">>> {:?}", self.code[self.ip / 4]);
+            self.step();
         }
     }
 }
@@ -349,37 +371,27 @@ mod tests {
         assert_eq!(vm.load_word(256), 0x56781234)
     }
 
-    // # Compute Fibonacci(n) where n is passed in x10, result will be stored in x10
-    //
-    //     addi x5, x0, 0   # x5 = Fib(0) = 0
-    //     addi x6, x0, 1   # x6 = Fib(1) = 1
-    //     addi x7, x0, 1   # x7 = Loop counter i = 1
-    //     bge x10, x7, fib_loop  # If n >= 1, enter loop
-    //     add x10, x0, x5      # Return Fib(0) for n=0
-    //     jal x1, end
-    // fib_loop:
-    //     add x28, x5, x6   # x28 = Fib(i) = Fib(i-1) + Fib(i-2)
-    //     add x5, x0, x6 # x5 = Fib(i-2) = Fib(i-1)
-    //     add x6, x0, x28 # x6 = Fib(i-1) = Fib(i)
-    //     addi x7, x7, 1   # i++
-    //     blt x7, x10, fib_loop  # If i < n, continue loop
-    //     add x10, x0, x28  # Store result in x10
-    // end:
+    const FIB_ITER_ASM: &str = r#"
+# Compute Fib(n) iteratively
+# Input n is passed in x10, output will be stored in x10
 
-    const FIB_ITER_BIN: [u32; 12] = [
-        0b00000000000000000000_00101_0010011,
-        0b00000000000100000000_00110_0010011,
-        0b00000000000100000000_00111_0010011,
-        0b00000000011101010101_11000_1100011,
-        0b00000000010100000000_01010_0110011,
-        0b00000011000000000000_00001_1101111,
-        0b00000000011000101000_11100_0110011,
-        0b00000000011000000000_00101_0110011,
-        0b00000001110000000000_00110_0110011,
-        0b00000000000100111000_00111_0010011,
-        0b00000000101000111100_11000_1100011,
-        0b00000001110000000000_01010_0110011,
-    ];
+    addi x5, x0, 0          # x5 = Fib(0) = 0
+    addi x6, x0, 1          # x6 = Fib(1) = 1
+    addi x7, x0, 1          # x7 = Loop counter i = 1
+    bge x10, x7, fib_loop   # If n >= 1, enter loop
+    add x10, x0, x5         # Return Fib(0) for n=0
+    jal x1, end
+
+fib_loop:
+    add x28, x5, x6         # x28 = Fib(i) = Fib(i-1) + Fib(i-2)
+    add x5, x0, x6          # x5 = Fib(i-1)
+    add x6, x0, x28         # x6 = Fib(i)
+    addi x7, x7, 1          # i++
+    blt x7, x10, fib_loop   # If i < n, continue loop
+    add x10, x0, x28        # Store result in x10
+
+end:
+"#;
 
     const FIB_ITER_OPS: [Op; 12] = [
         Op::Addi(5, 0, 0),
@@ -396,18 +408,100 @@ mod tests {
         Op::Add(10, 0, 28),
     ];
 
+    const FIB_ITER_BIN: [u32; 12] = [
+        0b00000000000000000000_00101_0010011,
+        0b00000000000100000000_00110_0010011,
+        0b00000000000100000000_00111_0010011,
+        0b00000000011101010101_11000_1100011,
+        0b00000000010100000000_01010_0110011,
+        0b00000011000000000000_00001_1101111,
+        0b00000000011000101000_11100_0110011,
+        0b00000000011000000000_00101_0110011,
+        0b00000001110000000000_00110_0110011,
+        0b00000000000100111000_00111_0010011,
+        0b00000000101000111100_11000_1100011,
+        0b00000001110000000000_01010_0110011,
+    ];
+
     #[test]
-    fn test_fibonacci_decode() {
+    fn test_fib_iter_decode() {
         for (word, op) in FIB_ITER_BIN.iter().zip(FIB_ITER_OPS) {
             assert_eq!(Op::from(*word), op)
         }
     }
 
     #[test]
-    fn test_fibonacci_run() {
+    fn test_fib_iter_run() {
         let mut vm = VM::new(FIB_ITER_BIN.map(Op::from).to_vec(), 0);
         vm.write_register(10, 17);
         vm.run();
         assert_eq!(vm.read_register(10), 1597)
     }
+
+    const FIB_RECUR_ASM: &str = r#"
+# Compute Fib(n) recursively
+# Input n is passed in x10, output will be stored in x10
+
+    addi x1, x0, 64
+
+fib:
+    addi x5, x0, 1          # x5 = 1
+    bge x5, x10, ret        # If 1 >= n (meaning n <= 1), go to base case
+
+    addi x2, x2, -12        # Allocate space on stack
+    sw x1, 0(x2)            # Save return address
+    sw x8, 4(x2)            # Save x8
+    sw x9, 8(x2)            # Save x9
+
+    add x8, x0, x10         # x8 = n
+
+    addi x10, x8, -1        # x10 = n-1
+    jal x1, fib             # Call Fib(n-1)
+    add x9, x0, x10         # x9 = result of Fib(n-1)
+
+    addi x10, x8, -2        # x10 = n-2
+    jal x1, fib             # Call Fib(n-2)
+
+    add x10, x10, x9        # x10 = Fib(n-2) + Fib(n-1)
+
+    lw x1, 0(x2)            # Restore return address
+    lw x8, 4(x2)            # Restore x8
+    lw x9, 8(x2)            # Restore x9
+    addi x2, x2, 12         # Deallocate stack space
+
+ret:
+    jalr x0, 0(x1)          # Return to caller
+
+end:
+"#;
+
+    const FIB_RECUR_OPS: [Op; 19] = [
+        Op::Addi(1, 0, 64),
+        Op::Addi(5, 0, 1),
+        Op::Bge(5, 10, 60),
+        Op::Addi(2, 2, -12),
+        Op::Sw(1, 2, 0),
+        Op::Sw(8, 2, 4),
+        Op::Sw(9, 2, 8),
+        Op::Add(8, 0, 10),
+        Op::Addi(10, 8, -1),
+        Op::Jal(1, 4),
+        Op::Add(9, 0, 10),
+        Op::Addi(10, 8, -2),
+        Op::Jal(1, 4),
+        Op::Add(10, 10, 9),
+        Op::Lw(1, 2, 0),
+        Op::Lw(8, 2, 4),
+        Op::Lw(9, 2, 8),
+        Op::Addi(2, 2, 12),
+        Op::Jalr(0, 1, 0),
+    ];
+
+    // #[test]
+    // fn test_fib_recur_run() {
+    //     let mut vm = VM::new(FIB_RECUR_OPS.to_vec(), 1024);
+    //     vm.write_register(10, 17);
+    //     vm.run();
+    //     assert_eq!(vm.read_register(10), 1597)
+    // }
 }
