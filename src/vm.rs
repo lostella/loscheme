@@ -431,7 +431,7 @@ fib_loop:
 
     #[test]
     fn test_fib_iter_run() {
-        let mut vm = VM::new(FIB_ITER_BIN.map(Op::from).to_vec(), 0);
+        let mut vm = VM::new(FIB_ITER_OPS.to_vec(), 0);
         vm.write_register(10, 17);
         vm.run();
         assert_eq!(vm.read_register(10), 1597)
