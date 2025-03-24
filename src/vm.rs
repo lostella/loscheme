@@ -441,66 +441,58 @@ fib_loop:
 # Compute Fib(n) recursively
 # Input n is passed in x10, output will be stored in x10
 
-    addi x1, x0, 64
+begin:
+    addi x5, x0, 1        # x5 = 1
+    blt x5, x10, recurse  # if 1 < n, recurse
+    jalr x0, x1, 0
 
-fib:
-    addi x5, x0, 1          # x5 = 1
-    bge x5, x10, ret        # If 1 >= n (meaning n <= 1), go to base case
+recurse:
+    addi x2, x2, -12      # Allocate only 12 bytes
+    sw x1, 8(x2)          # Save return address
+    sw x10, 4(x2)         # Save n
 
-    addi x2, x2, -12        # Allocate space on stack
-    sw x1, 0(x2)            # Save return address
-    sw x8, 4(x2)            # Save x8
-    sw x9, 8(x2)            # Save x9
+    addi x10, x10, -1     # n = n - 1
+    jal x1, begin         # Recursive call
+    sw x10, 0(x2)         # Save fib(n-1)
 
-    add x8, x0, x10         # x8 = n
+    lw x10, 4(x2)         # Restore original n
+    addi x10, x10, -2     # n = n - 2
+    jal x1, begin         # Recursive call
 
-    addi x10, x8, -1        # x10 = n-1
-    jal x1, fib             # Call Fib(n-1)
-    add x9, x0, x10         # x9 = result of Fib(n-1)
+    lw x5, 0(x2)          # Load fib(n-1)
+    add x10, x10, x5      # fib(n) = fib(n-1) + fib(n-2)
 
-    addi x10, x8, -2        # x10 = n-2
-    jal x1, fib             # Call Fib(n-2)
+    lw x1, 8(x2)          # Restore return address
+    addi x2, x2, 12       # Deallocate stack space
 
-    add x10, x10, x9        # x10 = Fib(n-2) + Fib(n-1)
-
-    lw x1, 0(x2)            # Restore return address
-    lw x8, 4(x2)            # Restore x8
-    lw x9, 8(x2)            # Restore x9
-    addi x2, x2, 12         # Deallocate stack space
-
-ret:
-    jalr x0, 0(x1)          # Return to caller
-
-end:
+    jalr x0, x1, 0        # Return
 "#;
 
-    const FIB_RECUR_OPS: [Op; 19] = [
-        Op::Addi(1, 0, 64),
+    const FIB_RECUR_OPS: [Op; 17] = [
         Op::Addi(5, 0, 1),
-        Op::Bge(5, 10, 60),
+        Op::Blt(5, 10, 12),
+        Op::Jalr(0, 1, 0),
         Op::Addi(2, 2, -12),
-        Op::Sw(1, 2, 0),
-        Op::Sw(8, 2, 4),
-        Op::Sw(9, 2, 8),
-        Op::Add(8, 0, 10),
-        Op::Addi(10, 8, -1),
-        Op::Jal(1, 4),
-        Op::Add(9, 0, 10),
-        Op::Addi(10, 8, -2),
-        Op::Jal(1, 4),
-        Op::Add(10, 10, 9),
-        Op::Lw(1, 2, 0),
-        Op::Lw(8, 2, 4),
-        Op::Lw(9, 2, 8),
+        Op::Sw(1, 2, 8),
+        Op::Sw(10, 2, 4),
+        Op::Addi(10, 10, -1),
+        Op::Jal(1, 0),
+        Op::Sw(10, 2, 0),
+        Op::Lw(10, 2, 4),
+        Op::Addi(10, 10, -2),
+        Op::Jal(1, 0),
+        Op::Lw(5, 2, 0),
+        Op::Add(10, 10, 5),
+        Op::Lw(1, 2, 8),
         Op::Addi(2, 2, 12),
         Op::Jalr(0, 1, 0),
     ];
 
-    // #[test]
-    // fn test_fib_recur_run() {
-    //     let mut vm = VM::new(FIB_RECUR_OPS.to_vec(), 1024);
-    //     vm.write_register(10, 17);
-    //     vm.run();
-    //     assert_eq!(vm.read_register(10), 1597)
-    // }
+    #[test]
+    fn test_fib_recur_run() {
+        let mut vm = VM::new(FIB_RECUR_OPS.to_vec(), 1024);
+        vm.write_register(10, 13);
+        vm.run();
+        assert_eq!(vm.read_register(10), 233)
+    }
 }
