@@ -142,7 +142,7 @@ pub struct VM {
 impl VM {
     pub fn new(code: Vec<Op>, memory_size: usize) -> Self {
         let mut regs = [0; 32];
-        regs[1] = code.len() as u32; // initialize return address
+        regs[1] = 4 * (code.len() as u32); // initialize return address
         regs[2] = memory_size as u32; // initialize stack pointer
         Self {
             regs,
@@ -381,7 +381,7 @@ mod tests {
     addi x7, x0, 1          # x7 = Loop counter i = 1
     bge x10, x7, fib_loop   # If n >= 1, enter loop
     add x10, x0, x5         # Return Fib(0) for n=0
-    jal x1, end
+    jalr x0, 0(x1)
 
 fib_loop:
     add x28, x5, x6         # x28 = Fib(i) = Fib(i-1) + Fib(i-2)
@@ -390,8 +390,6 @@ fib_loop:
     addi x7, x7, 1          # i++
     blt x7, x10, fib_loop   # If i < n, continue loop
     add x10, x0, x28        # Store result in x10
-
-end:
 "#;
 
     const FIB_ITER_OPS: [Op; 12] = [
@@ -400,7 +398,7 @@ end:
         Op::Addi(7, 0, 1),
         Op::Bge(10, 7, 24),
         Op::Add(10, 0, 5),
-        Op::Jal(1, 48),
+        Op::Jalr(0, 1, 0),
         Op::Add(28, 5, 6),
         Op::Add(5, 0, 6),
         Op::Add(6, 0, 28),
@@ -415,7 +413,7 @@ end:
         0b00000000000100000000_00111_0010011,
         0b00000000011101010101_11000_1100011,
         0b00000000010100000000_01010_0110011,
-        0b00000011000000000000_00001_1101111,
+        0b00000000000100000000_00000_1100111,
         0b00000000011000101000_11100_0110011,
         0b00000000011000000000_00101_0110011,
         0b00000001110000000000_00110_0110011,
