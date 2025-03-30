@@ -1,6 +1,7 @@
 // TODO
 // - implement more instructions
 // - add pseudo-instructions (e.g. li)
+// - implement default instruction args (zeros?)
 // - handle error situations
 // - make panic-free
 
@@ -12,7 +13,7 @@ pub enum Instr {
     Add(usize, usize, usize),
     // I-TYPE (rd, rs1, imm)
     Addi(usize, usize, i16),
-    Jalr(usize, usize, usize),
+    Jalr(usize, usize, i16),
     Lb(usize, usize, i16),
     Lh(usize, usize, i16),
     Lw(usize, usize, i16),
@@ -32,12 +33,14 @@ fn get_bits_32(word: u32, start_index: u8, num_bits: u8) -> u32 {
     (!(0xFFFFFFFFu32 << num_bits)) & (word >> start_index)
 }
 
-fn sign_extend_16(half: u16, sign_index: u8) -> u16 {
-    if half & (1 << sign_index) > 0 {
-        (0xFFFF << sign_index) | half
-    } else {
-        (0xFFFF >> (16 - sign_index)) & half
-    }
+fn sign_extend_16(half: u16, sign_index: u8) -> i16 {
+    ((half & (0xFFFF >> (15 - sign_index))) ^ (1 << sign_index)).wrapping_sub(1 << sign_index)
+        as i16
+}
+
+fn sign_extend_32(word: u32, sign_index: u8) -> i32 {
+    ((word & (0xFFFFFFFF >> (31 - sign_index))) ^ (1 << sign_index)).wrapping_sub(1 << sign_index)
+        as i32
 }
 
 const R_TYPE: u32 = 0b0110011;
@@ -65,14 +68,14 @@ fn decode_i_type(word: u32) -> Instr {
     let rd = get_bits_32(word, 7, 5) as usize;
     let funct3 = get_bits_32(word, 12, 3);
     let rs1 = get_bits_32(word, 15, 5) as usize;
-    let imm = get_bits_32(word, 20, 12);
+    let imm = sign_extend_16(get_bits_32(word, 20, 12) as u16, 11);
     match (opcode, funct3) {
-        (I_TYPE, 0x000) => Instr::Addi(rd, rs1, imm as i16),
-        (I_TYPE_JALR, 0x000) => Instr::Jalr(rd, rs1, imm as usize),
-        (I_TYPE_LOAD, 0x000) => Instr::Lb(rd, rs1, imm as i16),
-        (I_TYPE_LOAD, 0x001) => Instr::Lh(rd, rs1, imm as i16),
-        (I_TYPE_LOAD, 0x010) => Instr::Lw(rd, rs1, imm as i16),
-        _ => todo!(),
+        (I_TYPE, 0b000) => Instr::Addi(rd, rs1, imm),
+        (I_TYPE_JALR, 0b000) => Instr::Jalr(rd, rs1, imm),
+        (I_TYPE_LOAD, 0b000) => Instr::Lb(rd, rs1, imm),
+        (I_TYPE_LOAD, 0b001) => Instr::Lh(rd, rs1, imm),
+        (I_TYPE_LOAD, 0b010) => Instr::Lw(rd, rs1, imm),
+        _ => todo!("opcode = 0b{:07b}, funct3 = 0b{:03b}", opcode, funct3),
     }
 }
 
@@ -80,23 +83,26 @@ fn decode_s_type(word: u32) -> Instr {
     let funct3 = get_bits_32(word, 12, 3);
     let rs1 = get_bits_32(word, 15, 5) as usize;
     let rs2 = get_bits_32(word, 20, 5) as usize;
-    let imm = get_bits_32(word, 7, 5) | (get_bits_32(word, 25, 6) << 5);
+    let imm = sign_extend_16(
+        (get_bits_32(word, 7, 5) | (get_bits_32(word, 25, 7) << 5)) as u16,
+        11,
+    );
     match funct3 {
         0b000 => Instr::Sb(rs1, rs2, imm as i16),
         0b001 => Instr::Sh(rs1, rs2, imm as i16),
         0b010 => Instr::Sw(rs1, rs2, imm as i16),
-        _ => todo!("funct3 = 0b{:b}", funct3),
+        _ => todo!("funct3 = 0b{:3b}", funct3),
     }
 }
 
 fn decode_b_type_imm(word: u32) -> i16 {
-    let imm_4_1_11 = get_bits_32(word, 7, 5);
-    let imm_12_10_5 = get_bits_32(word, 25, 7);
-    let pre = ((imm_4_1_11 >> 1) << 1)
-        | (imm_12_10_5 << 5)
-        | ((imm_4_1_11 & 1) << 11)
-        | ((imm_12_10_5 & 128) << 12);
-    sign_extend_16(pre as u16, 11) as i16
+    let bits_4_1_11 = get_bits_32(word, 7, 5);
+    let bits_12_10_5 = get_bits_32(word, 25, 7);
+    let pre = ((bits_4_1_11 >> 1) << 1)
+        | (bits_12_10_5 << 5)
+        | ((bits_4_1_11 & 1) << 11)
+        | ((bits_12_10_5 & 128) << 12);
+    sign_extend_16(pre as u16, 11)
 }
 
 fn decode_b_type(word: u32) -> Instr {
@@ -113,11 +119,12 @@ fn decode_b_type(word: u32) -> Instr {
 }
 
 fn decode_j_type_imm(word: u32) -> i32 {
-    let imm = get_bits_32(word, 12, 20);
-    (((0xFF & imm) << 12)
-        | (((1 << 8) & imm) << 3)
-        | (((0b11_1111_1111 << 9) & imm) >> 8)
-        | (((1 << 19) & imm) << 1)) as i32
+    let bits = get_bits_32(word, 12, 20);
+    let pre = ((0xFF & bits) << 12)
+        | (((1 << 8) & bits) << 3)
+        | (((0b11_1111_1111 << 9) & bits) >> 8)
+        | (((1 << 19) & bits) << 1);
+    sign_extend_32(pre, 20)
 }
 
 fn decode_j_type(word: u32) -> Instr {
@@ -197,7 +204,7 @@ fn assemble_instruction(
             parse_register_index(split_args[0])?,
             parse_register_index(split_args[1])?,
             split_args[2]
-                .parse::<usize>()
+                .parse::<i16>()
                 .ok()
                 .ok_or("Cannot parse immediate")?,
         ))
@@ -386,7 +393,7 @@ impl VM {
     pub fn load_byte(&self, address: u32) -> u32 {
         let value = self.memory[address as usize] as u32;
         // sign extension
-        if value > 0x80 {
+        if value >= 0x80 {
             0xFFFFFF00 | value
         } else {
             value
@@ -398,7 +405,7 @@ impl VM {
         let value = self.memory[address as usize] as u32
             | ((self.memory[address as usize + 1] as u32) << 8);
         // sign extension
-        if value > 0x8000 {
+        if value >= 0x8000 {
             0xFFFF0000 | value
         } else {
             value
@@ -545,22 +552,19 @@ mod tests {
 
     #[test]
     fn test_sign_extend() {
-        assert_eq!(
-            sign_extend_16(0b0000_0100_1010_1100, 10),
-            0b1111_1100_1010_1100
-        );
-        assert_eq!(
-            sign_extend_16(0b0000_0100_1010_1100, 11),
-            0b0000_0100_1010_1100
-        );
-        assert_eq!(
-            sign_extend_16(0b0000_0100_1010_1100, 7),
-            0b1111_1111_1010_1100
-        );
-        assert_eq!(
-            sign_extend_16(0b0000_0100_1010_1100, 6),
-            0b0000_0000_0010_1100
-        );
+        let cases = vec![
+            (0b0000_0100_1010_1111, 0, 0b1111_1111_1111_1111u16 as i16),
+            (0b0000_0100_1010_1110, 0, 0b0000_0000_0000_0000),
+            (0b0000_0100_1010_1110, 1, 0b1111_1111_1111_1110u16 as i16),
+            (0b0000_0100_1010_1100, 10, 0b1111_1100_1010_1100u16 as i16),
+            (0b0000_0100_1010_1100, 11, 0b0000_0100_1010_1100),
+            (0b0000_0100_1010_1100, 7, 0b1111_1111_1010_1100u16 as i16),
+            (0b0000_0100_1010_1100, 6, 0b0000_0000_0010_1100),
+        ];
+
+        for (unsigned, bit_idx, expected) in cases {
+            assert_eq!(sign_extend_16(unsigned, bit_idx), expected)
+        }
     }
 
     #[test]
@@ -569,6 +573,61 @@ mod tests {
             decode_b_type_imm(0b0000_0000_0111_0101_0101_0110_0110_0011),
             12
         )
+    }
+
+    #[test]
+    fn test_decode() {
+        let cases = vec![
+            (
+                0b0000_0001_0000_0000_0000_0000_0110_0111,
+                Instr::Jalr(0, 0, 16),
+            ),
+            (
+                0b1111_1100_1100_0000_0000_0000_0110_0111,
+                Instr::Jalr(0, 0, -52),
+            ),
+            (
+                0b0000_0100_0101_0000_0000_0000_0001_0011,
+                Instr::Addi(0, 0, 69),
+            ),
+            (
+                0b1111_0111_0001_0000_0000_0000_0001_0011,
+                Instr::Addi(0, 0, -143),
+            ),
+            (
+                0b0000_0011_1100_0000_0010_0000_0000_0011,
+                Instr::Lw(0, 0, 60),
+            ),
+            (
+                0b1111_1011_1000_0000_0010_0000_0000_0011,
+                Instr::Lw(0, 0, -72),
+            ),
+            (
+                0b0000_0100_0000_0000_0010_0000_0010_0011,
+                Instr::Sw(0, 0, 64),
+            ),
+            (
+                0b1111_1010_0000_0000_0010_1110_0010_0011,
+                Instr::Sw(0, 0, -68),
+            ),
+            (
+                0b0000_1110_0000_0000_0100_1000_0110_0011,
+                Instr::Blt(0, 0, 240),
+            ),
+            (
+                0b1111_0000_0000_0000_0100_0000_1110_0011,
+                Instr::Blt(0, 0, -256),
+            ),
+            (0b0000_0011_0000_0000_0000_0000_0110_1111, Instr::Jal(0, 48)),
+            (
+                0b1111_1110_1001_1111_1111_0000_0110_1111,
+                Instr::Jal(0, -24), // TODO fix
+            ),
+        ];
+
+        for (enc, dec) in cases.iter() {
+            assert_eq!(&Instr::from(*enc), dec)
+        }
     }
 
     #[test]
