@@ -1,5 +1,6 @@
 // TODO
 // - implement more instructions
+// - simplify `assemble_instruction`
 // - add pseudo-instructions (e.g. li)
 // - implement default instruction args (zeros?)
 // - handle error situations
@@ -11,6 +12,10 @@ use std::collections::HashMap;
 pub enum Instr {
     // R-TYPE (rd, rs1, rs2)
     Add(u8, u8, u8),
+    Sub(u8, u8, u8),
+    Xor(u8, u8, u8),
+    Or(u8, u8, u8),
+    And(u8, u8, u8),
     // I-TYPE (rd, rs1, imm)
     Addi(u8, u8, i16),
     Jalr(u8, u8, i16),
@@ -23,6 +28,7 @@ pub enum Instr {
     Sw(u8, u8, i16),
     // B-TYPE (rs1, rs2, imm)
     Beq(u8, u8, i16),
+    Bne(u8, u8, i16),
     Bge(u8, u8, i16),
     Blt(u8, u8, i16),
     // J-TYPE (rd, imm)
@@ -59,6 +65,10 @@ fn decode_r_type(word: u32) -> Instr {
     let funct7 = get_bits_32(word, 25, 7);
     match (funct3, funct7) {
         (0b000, 0b0000000) => Instr::Add(rd, rs1, rs2),
+        (0b000, 0b0100000) => Instr::Sub(rd, rs1, rs2),
+        (0b100, 0b0000000) => Instr::Xor(rd, rs1, rs2),
+        (0b110, 0b0000000) => Instr::Or(rd, rs1, rs2),
+        (0b111, 0b0000000) => Instr::And(rd, rs1, rs2),
         _ => todo!(),
     }
 }
@@ -112,6 +122,7 @@ fn decode_b_type(word: u32) -> Instr {
     let imm = decode_b_type_imm(word);
     match funct3 {
         0b000 => Instr::Beq(rs1, rs2, imm),
+        0b001 => Instr::Bne(rs1, rs2, imm),
         0b101 => Instr::Bge(rs1, rs2, imm),
         0b100 => Instr::Blt(rs1, rs2, imm),
         _ => todo!("funct3 = 0b{:b}", funct3),
@@ -186,6 +197,30 @@ fn assemble_instruction(
     let split_args = args.split(",").map(|s| s.trim()).collect::<Vec<&str>>();
     if opcode.to_lowercase() == "add" {
         Ok(Instr::Add(
+            parse_register_index(split_args[0])?,
+            parse_register_index(split_args[1])?,
+            parse_register_index(split_args[2])?,
+        ))
+    } else if opcode.to_lowercase() == "sub" {
+        Ok(Instr::Sub(
+            parse_register_index(split_args[0])?,
+            parse_register_index(split_args[1])?,
+            parse_register_index(split_args[2])?,
+        ))
+    } else if opcode.to_lowercase() == "xor" {
+        Ok(Instr::Xor(
+            parse_register_index(split_args[0])?,
+            parse_register_index(split_args[1])?,
+            parse_register_index(split_args[2])?,
+        ))
+    } else if opcode.to_lowercase() == "or" {
+        Ok(Instr::Or(
+            parse_register_index(split_args[0])?,
+            parse_register_index(split_args[1])?,
+            parse_register_index(split_args[2])?,
+        ))
+    } else if opcode.to_lowercase() == "and" {
+        Ok(Instr::And(
             parse_register_index(split_args[0])?,
             parse_register_index(split_args[1])?,
             parse_register_index(split_args[2])?,
@@ -294,6 +329,14 @@ fn assemble_instruction(
             parse_register_index(split_args[1])?,
             offset,
         ))
+    } else if opcode.to_lowercase() == "bne" {
+        let dest = *labels.get(split_args[2]).ok_or("Label not found")?;
+        let offset = dest.wrapping_sub(ip) as i16;
+        Ok(Instr::Bne(
+            parse_register_index(split_args[0])?,
+            parse_register_index(split_args[1])?,
+            offset,
+        ))
     } else if opcode.to_lowercase() == "bge" {
         let dest = *labels.get(split_args[2]).ok_or("Label not found")?;
         let offset = dest.wrapping_sub(ip) as i16;
@@ -390,137 +433,138 @@ impl VM {
         }
     }
 
-    pub fn load_byte(&self, address: u32) -> u32 {
+    #[inline(always)]
+    fn load_byte(&self, address: u32) -> u32 {
         self.memory[address as usize] as i8 as i32 as u32
     }
 
-    pub fn load_half(&self, address: u32) -> u32 {
+    #[inline(always)]
+    fn load_half(&self, address: u32) -> u32 {
         let addr = address as usize;
         let value = u16::from_le_bytes([self.memory[addr], self.memory[addr + 1]]);
         value as i16 as i32 as u32
     }
 
-    pub fn load_word(&self, address: u32) -> u32 {
+    #[inline(always)]
+    fn load_word(&self, address: u32) -> u32 {
         let addr = address as usize;
         let bytes = &self.memory[addr..addr + 4];
         u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
     }
 
-    pub fn store_byte(&mut self, address: u32, value: u32) {
+    #[inline(always)]
+    fn store_byte(&mut self, address: u32, value: u32) {
         self.memory[address as usize] = value as u8;
     }
 
-    pub fn store_half(&mut self, address: u32, value: u32) {
+    #[inline(always)]
+    fn store_half(&mut self, address: u32, value: u32) {
         let addr = address as usize;
         let bytes = (value as u16).to_le_bytes();
         self.memory[addr..addr + 2].copy_from_slice(&bytes);
     }
 
-    pub fn store_word(&mut self, address: u32, value: u32) {
+    #[inline(always)]
+    fn store_word(&mut self, address: u32, value: u32) {
         let addr = address as usize;
         let bytes = value.to_le_bytes();
         self.memory[addr..addr + 4].copy_from_slice(&bytes);
     }
 
+    #[inline(always)]
     fn step(&mut self) {
         if self.ip % 4 != 0 {
             panic!("instruction pointer is not word-aligned")
         }
+
+        let mut next_ip = self.ip.wrapping_add(4);
+
         match self.code[(self.ip / 4) as usize] {
+            Instr::Addi(rd, rs1, val) => {
+                self.regs[rd as usize] = self.regs[rs1 as usize].wrapping_add(val as u32);
+            }
             Instr::Add(rd, rs1, rs2) => {
                 self.regs[rd as usize] =
                     self.regs[rs1 as usize].wrapping_add(self.regs[rs2 as usize]);
-                self.ip += 4;
             }
-            Instr::Addi(rd, rs1, val) => {
-                self.regs[rd as usize] = self.regs[rs1 as usize].wrapping_add(val as u32);
-                self.ip += 4;
-            }
-            Instr::Beq(rs1, rs2, offset) => {
-                if self.regs[rs1 as usize] == self.regs[rs2 as usize] {
-                    self.ip = self.ip.wrapping_add(offset as u32);
-                } else {
-                    self.ip += 4;
-                }
-            }
-            Instr::Bge(rs1, rs2, offset) => {
-                if self.regs[rs1 as usize] >= self.regs[rs2 as usize] {
-                    self.ip = self.ip.wrapping_add(offset as u32);
-                } else {
-                    self.ip += 4;
-                }
-            }
-            Instr::Blt(rs1, rs2, offset) => {
-                if self.regs[rs1 as usize] < self.regs[rs2 as usize] {
-                    self.ip = self.ip.wrapping_add(offset as u32);
-                } else {
-                    self.ip += 4;
-                }
-            }
-            Instr::Jal(rd, offset) => {
-                self.regs[rd as usize] = self.ip + 4;
-                self.ip = self.ip.wrapping_add(offset as u32);
-            }
-            Instr::Jalr(rd, rs1, offset) => {
-                self.regs[rd as usize] = self.ip + 4;
-                self.ip = self.regs[rs1 as usize].wrapping_add(offset as u32);
-            }
-            Instr::Lb(rd, rs1, offset) => {
-                let address = self.regs[rs1 as usize].wrapping_add(offset as u32);
-                self.regs[rd as usize] = self.load_byte(address);
-                self.ip += 4;
-            }
-            Instr::Lh(rd, rs1, offset) => {
-                let address = self.regs[rs1 as usize].wrapping_add(offset as u32);
-                self.regs[rd as usize] = self.load_half(address);
-                self.ip += 4;
+            Instr::Sub(rd, rs1, rs2) => {
+                self.regs[rd as usize] =
+                    self.regs[rs1 as usize].wrapping_sub(self.regs[rs2 as usize]);
             }
             Instr::Lw(rd, rs1, offset) => {
                 let address = self.regs[rs1 as usize].wrapping_add(offset as u32);
                 self.regs[rd as usize] = self.load_word(address);
-                self.ip += 4;
-            }
-            Instr::Sb(rs1, rs2, offset) => {
-                let address = self.regs[rs2 as usize].wrapping_add(offset as u32);
-                self.store_byte(address, self.regs[rs1 as usize]);
-                self.ip += 4;
-            }
-            Instr::Sh(rs1, rs2, offset) => {
-                let address = self.regs[rs2 as usize].wrapping_add(offset as u32);
-                self.store_half(address, self.regs[rs1 as usize]);
-                self.ip += 4;
             }
             Instr::Sw(rs1, rs2, offset) => {
                 let address = self.regs[rs2 as usize].wrapping_add(offset as u32);
                 self.store_word(address, self.regs[rs1 as usize]);
-                self.ip += 4;
+            }
+            Instr::Beq(rs1, rs2, offset) => {
+                if self.regs[rs1 as usize] == self.regs[rs2 as usize] {
+                    next_ip = self.ip.wrapping_add(offset as u32);
+                }
+            }
+            Instr::Bne(rs1, rs2, offset) => {
+                if self.regs[rs1 as usize] != self.regs[rs2 as usize] {
+                    next_ip = self.ip.wrapping_add(offset as u32);
+                }
+            }
+            Instr::Bge(rs1, rs2, offset) => {
+                if self.regs[rs1 as usize] >= self.regs[rs2 as usize] {
+                    next_ip = self.ip.wrapping_add(offset as u32);
+                }
+            }
+            Instr::Blt(rs1, rs2, offset) => {
+                if self.regs[rs1 as usize] < self.regs[rs2 as usize] {
+                    next_ip = self.ip.wrapping_add(offset as u32);
+                }
+            }
+            Instr::Jal(rd, offset) => {
+                self.regs[rd as usize] = next_ip;
+                next_ip = self.ip.wrapping_add(offset as u32);
+            }
+            Instr::Jalr(rd, rs1, offset) => {
+                self.regs[rd as usize] = next_ip;
+                next_ip = self.regs[rs1 as usize].wrapping_add(offset as u32);
+            }
+            Instr::Xor(rd, rs1, rs2) => {
+                self.regs[rd as usize] = self.regs[rs1 as usize] ^ self.regs[rs2 as usize];
+            }
+            Instr::Or(rd, rs1, rs2) => {
+                self.regs[rd as usize] = self.regs[rs1 as usize] | self.regs[rs2 as usize];
+            }
+            Instr::And(rd, rs1, rs2) => {
+                self.regs[rd as usize] = self.regs[rs1 as usize] & self.regs[rs2 as usize];
+            }
+            Instr::Lh(rd, rs1, offset) => {
+                let address = self.regs[rs1 as usize].wrapping_add(offset as u32);
+                self.regs[rd as usize] = self.load_half(address);
+            }
+            Instr::Sh(rs1, rs2, offset) => {
+                let address = self.regs[rs2 as usize].wrapping_add(offset as u32);
+                self.store_half(address, self.regs[rs1 as usize]);
+            }
+            Instr::Lb(rd, rs1, offset) => {
+                let address = self.regs[rs1 as usize].wrapping_add(offset as u32);
+                self.regs[rd as usize] = self.load_byte(address);
+            }
+            Instr::Sb(rs1, rs2, offset) => {
+                let address = self.regs[rs2 as usize].wrapping_add(offset as u32);
+                self.store_byte(address, self.regs[rs1 as usize]);
             }
         }
+
+        self.ip = next_ip;
+        self.regs[0] = 0; // hard-wire the zero register
     }
 
     pub fn run(&mut self) {
+        let code_length = 4 * (self.code.len() as u32);
         loop {
-            // NOTE: the following is to "hard-wire" the register
-            // NOTE: arguably the register should just not be there
-            self.regs[0] = 0;
-            if self.ip >= (self.code.len() as u32) << 2 {
+            if self.ip >= code_length {
                 break;
             }
             self.step()
-        }
-    }
-
-    pub fn debug(&mut self, steps: u32) {
-        for _ in 0..steps {
-            // NOTE: the following is to "hard-wire" the register
-            // NOTE: arguably the register should just not be there
-            self.regs[0] = 0;
-            println!("regs: {:?}", self.regs);
-            if self.ip >= (self.code.len() as u32) << 2 {
-                break;
-            }
-            println!(">>> {:?}", self.code[(self.ip / 4) as usize]);
-            self.step();
         }
     }
 }
