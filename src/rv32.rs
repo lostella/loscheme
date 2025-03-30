@@ -1,7 +1,5 @@
 // TODO
 // - implement more instructions
-// - implement assembler
-// - add register aliases
 // - add pseudo-instructions (e.g. li)
 // - handle error situations
 // - make panic-free
@@ -141,17 +139,33 @@ impl From<u32> for Instr {
     }
 }
 
+const REGISTER_ABI_NAMES: [&str; 32] = [
+    "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4",
+    "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4",
+    "t5", "t6",
+];
+
 fn parse_register_index(name: &str) -> Result<usize, String> {
-    if !name.starts_with("x") {
-        return Err(format!("Unknown register: {}", name));
-    }
-    let Ok(idx) = name[1..].parse::<usize>() else {
+    if name.starts_with("x") {
+        if let Ok(idx) = name[1..].parse::<usize>() {
+            if idx >= 32 {
+                return Err(format!("Invalid register index: {}", name));
+            }
+            return Ok(idx);
+        }
         return Err(format!("Cannot parse register index: {}", name));
     };
-    if idx >= 32 {
-        return Err(format!("Invalid register index: {}", name));
+    if name == "fp" {
+        return Ok(8);
     }
-    Ok(idx)
+    if let Some(idx) = REGISTER_ABI_NAMES
+        .iter()
+        .position(|&abi_name| abi_name == name)
+    {
+        Ok(idx)
+    } else {
+        Err(format!("Uknown register: {}", name))
+    }
 }
 
 fn assemble_instruction(
@@ -686,33 +700,33 @@ fib_loop:
 
     const FIB_RECUR_ASM: &str = r#"
 # Compute Fib(n) recursively
-# Input n is passed in x10, output will be stored in x10
+# Input n is passed in a0, output will be stored in a0
 
 begin:
-    addi x5, x0, 1        # x5 = 1
-    blt x5, x10, recurse  # if 1 < n, recurse
-    jalr x0, x1, 0
+    addi t0, zero, 1     # t0 = 1
+    blt t0, a0, recurse  # if 1 < n, recurse
+    jalr zero, ra, 0
 
 recurse:
-    addi x2, x2, -12      # Allocate only 12 bytes
-    sw x1, 8(x2)          # Save return address
-    sw x10, 4(x2)         # Save n
+    addi sp, sp, -12     # Allocate 12 bytes
+    sw ra, 8(sp)         # Save return address
+    sw a0, 4(sp)         # Save n
 
-    addi x10, x10, -1     # n = n - 1
-    jal x1, begin         # Recursive call
-    sw x10, 0(x2)         # Save fib(n-1)
+    addi a0, a0, -1      # n = n - 1
+    jal ra, begin        # Recursive call
+    sw a0, 0(sp)         # Save fib(n-1)
 
-    lw x10, 4(x2)         # Restore original n
-    addi x10, x10, -2     # n = n - 2
-    jal x1, begin         # Recursive call
+    lw a0, 4(sp)         # Restore original n
+    addi a0, a0, -2      # n = n - 2
+    jal ra, begin        # Recursive call
 
-    lw x5, 0(x2)          # Load fib(n-1)
-    add x10, x10, x5      # fib(n) = fib(n-1) + fib(n-2)
+    lw t0, 0(sp)         # Load fib(n-1)
+    add a0, a0, t0       # fib(n) = fib(n-1) + fib(n-2)
 
-    lw x1, 8(x2)          # Restore return address
-    addi x2, x2, 12       # Deallocate stack space
+    lw ra, 8(sp)         # Restore return address
+    addi sp, sp, 12      # Deallocate stack space
 
-    jalr x0, x1, 0        # Return
+    jalr zero, ra, 0     # Return
 "#;
 
     const FIB_RECUR_OPS: [Instr; 17] = [
