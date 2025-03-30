@@ -391,51 +391,35 @@ impl VM {
     }
 
     pub fn load_byte(&self, address: u32) -> u32 {
-        let value = self.memory[address as usize] as u32;
-        // sign extension
-        if value >= 0x80 {
-            0xFFFFFF00 | value
-        } else {
-            value
-        }
+        self.memory[address as usize] as i8 as i32 as u32
     }
 
     pub fn load_half(&self, address: u32) -> u32 {
-        // little-endian layout
-        let value = self.memory[address as usize] as u32
-            | ((self.memory[address as usize + 1] as u32) << 8);
-        // sign extension
-        if value >= 0x8000 {
-            0xFFFF0000 | value
-        } else {
-            value
-        }
+        let addr = address as usize;
+        let value = u16::from_le_bytes([self.memory[addr], self.memory[addr + 1]]);
+        value as i16 as i32 as u32
     }
 
     pub fn load_word(&self, address: u32) -> u32 {
-        // little-endian layout
-        self.memory[address as usize] as u32
-            | ((self.memory[address as usize + 1] as u32) << 8)
-            | ((self.memory[address as usize + 2] as u32) << 16)
-            | ((self.memory[address as usize + 3] as u32) << 24)
+        let addr = address as usize;
+        let bytes = &self.memory[addr..addr + 4];
+        u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
     }
 
     pub fn store_byte(&mut self, address: u32, value: u32) {
-        self.memory[address as usize] = (value & 0xFF) as u8;
+        self.memory[address as usize] = value as u8;
     }
 
     pub fn store_half(&mut self, address: u32, value: u32) {
-        // little-endian layout
-        self.memory[address as usize] = (value & 0x00FF) as u8;
-        self.memory[address as usize + 1] = ((value & 0xFF00) >> 8) as u8;
+        let addr = address as usize;
+        let bytes = (value as u16).to_le_bytes();
+        self.memory[addr..addr + 2].copy_from_slice(&bytes);
     }
 
     pub fn store_word(&mut self, address: u32, value: u32) {
-        // little-endian layout
-        self.memory[address as usize] = (value & 0x000000FF) as u8;
-        self.memory[address as usize + 1] = ((value & 0x0000FF00) >> 8) as u8;
-        self.memory[address as usize + 2] = ((value & 0x00FF0000) >> 16) as u8;
-        self.memory[address as usize + 3] = ((value & 0xFF000000) >> 24) as u8;
+        let addr = address as usize;
+        let bytes = value.to_le_bytes();
+        self.memory[addr..addr + 4].copy_from_slice(&bytes);
     }
 
     fn step(&mut self) {
