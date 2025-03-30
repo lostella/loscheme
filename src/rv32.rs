@@ -146,8 +146,8 @@ const REGISTER_ABI_NAMES: [&str; 32] = [
 ];
 
 fn parse_register_index(name: &str) -> Result<usize, String> {
-    if name.starts_with("x") {
-        if let Ok(idx) = name[1..].parse::<usize>() {
+    if let Some(stripped) = name.strip_prefix("x") {
+        if let Ok(idx) = stripped.parse::<usize>() {
             if idx >= 32 {
                 return Err(format!("Invalid register index: {}", name));
             }
