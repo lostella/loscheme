@@ -10,23 +10,23 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instr {
     // R-TYPE (rd, rs1, rs2)
-    Add(usize, usize, usize),
+    Add(u8, u8, u8),
     // I-TYPE (rd, rs1, imm)
-    Addi(usize, usize, i16),
-    Jalr(usize, usize, i16),
-    Lb(usize, usize, i16),
-    Lh(usize, usize, i16),
-    Lw(usize, usize, i16),
+    Addi(u8, u8, i16),
+    Jalr(u8, u8, i16),
+    Lb(u8, u8, i16),
+    Lh(u8, u8, i16),
+    Lw(u8, u8, i16),
     // S-TYPE (rs1, rs2, imm)
-    Sb(usize, usize, i16),
-    Sh(usize, usize, i16),
-    Sw(usize, usize, i16),
+    Sb(u8, u8, i16),
+    Sh(u8, u8, i16),
+    Sw(u8, u8, i16),
     // B-TYPE (rs1, rs2, imm)
-    Beq(usize, usize, i16),
-    Bge(usize, usize, i16),
-    Blt(usize, usize, i16),
+    Beq(u8, u8, i16),
+    Bge(u8, u8, i16),
+    Blt(u8, u8, i16),
     // J-TYPE (rd, imm)
-    Jal(usize, i32),
+    Jal(u8, i32),
 }
 
 fn get_bits_32(word: u32, start_index: u8, num_bits: u8) -> u32 {
@@ -52,10 +52,10 @@ const B_TYPE: u32 = 0b1100011;
 const J_TYPE: u32 = 0b1101111;
 
 fn decode_r_type(word: u32) -> Instr {
-    let rd = get_bits_32(word, 7, 5) as usize;
+    let rd = get_bits_32(word, 7, 5) as u8;
     let funct3 = get_bits_32(word, 12, 3);
-    let rs1 = get_bits_32(word, 15, 5) as usize;
-    let rs2 = get_bits_32(word, 20, 5) as usize;
+    let rs1 = get_bits_32(word, 15, 5) as u8;
+    let rs2 = get_bits_32(word, 20, 5) as u8;
     let funct7 = get_bits_32(word, 25, 7);
     match (funct3, funct7) {
         (0b000, 0b0000000) => Instr::Add(rd, rs1, rs2),
@@ -65,9 +65,9 @@ fn decode_r_type(word: u32) -> Instr {
 
 fn decode_i_type(word: u32) -> Instr {
     let opcode = get_bits_32(word, 0, 7);
-    let rd = get_bits_32(word, 7, 5) as usize;
+    let rd = get_bits_32(word, 7, 5) as u8;
     let funct3 = get_bits_32(word, 12, 3);
-    let rs1 = get_bits_32(word, 15, 5) as usize;
+    let rs1 = get_bits_32(word, 15, 5) as u8;
     let imm = sign_extend_16(get_bits_32(word, 20, 12) as u16, 11);
     match (opcode, funct3) {
         (I_TYPE, 0b000) => Instr::Addi(rd, rs1, imm),
@@ -81,8 +81,8 @@ fn decode_i_type(word: u32) -> Instr {
 
 fn decode_s_type(word: u32) -> Instr {
     let funct3 = get_bits_32(word, 12, 3);
-    let rs1 = get_bits_32(word, 15, 5) as usize;
-    let rs2 = get_bits_32(word, 20, 5) as usize;
+    let rs1 = get_bits_32(word, 15, 5) as u8;
+    let rs2 = get_bits_32(word, 20, 5) as u8;
     let imm = sign_extend_16(
         (get_bits_32(word, 7, 5) | (get_bits_32(word, 25, 7) << 5)) as u16,
         11,
@@ -107,8 +107,8 @@ fn decode_b_type_imm(word: u32) -> i16 {
 
 fn decode_b_type(word: u32) -> Instr {
     let funct3 = get_bits_32(word, 12, 3);
-    let rs1 = get_bits_32(word, 15, 5) as usize;
-    let rs2 = get_bits_32(word, 20, 5) as usize;
+    let rs1 = get_bits_32(word, 15, 5) as u8;
+    let rs2 = get_bits_32(word, 20, 5) as u8;
     let imm = decode_b_type_imm(word);
     match funct3 {
         0b000 => Instr::Beq(rs1, rs2, imm),
@@ -128,7 +128,7 @@ fn decode_j_type_imm(word: u32) -> i32 {
 }
 
 fn decode_j_type(word: u32) -> Instr {
-    let rd = get_bits_32(word, 7, 5) as usize;
+    let rd = get_bits_32(word, 7, 5) as u8;
     Instr::Jal(rd, decode_j_type_imm(word))
 }
 
@@ -152,9 +152,9 @@ const REGISTER_ABI_NAMES: [&str; 32] = [
     "t5", "t6",
 ];
 
-fn parse_register_index(name: &str) -> Result<usize, String> {
+fn parse_register_index(name: &str) -> Result<u8, String> {
     if let Some(stripped) = name.strip_prefix("x") {
-        if let Ok(idx) = stripped.parse::<usize>() {
+        if let Ok(idx) = stripped.parse::<u8>() {
             if idx >= 32 {
                 return Err(format!("Invalid register index: {}", name));
             }
@@ -169,7 +169,7 @@ fn parse_register_index(name: &str) -> Result<usize, String> {
         .iter()
         .position(|&abi_name| abi_name == name)
     {
-        Ok(idx)
+        Ok(idx as u8)
     } else {
         Err(format!("Uknown register: {}", name))
     }
@@ -444,70 +444,71 @@ impl VM {
         }
         match self.code[(self.ip / 4) as usize] {
             Instr::Add(rd, rs1, rs2) => {
-                self.regs[rd] = self.regs[rs1].wrapping_add(self.regs[rs2]);
+                self.regs[rd as usize] =
+                    self.regs[rs1 as usize].wrapping_add(self.regs[rs2 as usize]);
                 self.ip += 4;
             }
             Instr::Addi(rd, rs1, val) => {
-                self.regs[rd] = self.regs[rs1].wrapping_add(val as u32);
+                self.regs[rd as usize] = self.regs[rs1 as usize].wrapping_add(val as u32);
                 self.ip += 4;
             }
             Instr::Beq(rs1, rs2, offset) => {
-                if self.regs[rs1] == self.regs[rs2] {
+                if self.regs[rs1 as usize] == self.regs[rs2 as usize] {
                     self.ip = self.ip.wrapping_add(offset as u32);
                 } else {
                     self.ip += 4;
                 }
             }
             Instr::Bge(rs1, rs2, offset) => {
-                if self.regs[rs1] >= self.regs[rs2] {
+                if self.regs[rs1 as usize] >= self.regs[rs2 as usize] {
                     self.ip = self.ip.wrapping_add(offset as u32);
                 } else {
                     self.ip += 4;
                 }
             }
             Instr::Blt(rs1, rs2, offset) => {
-                if self.regs[rs1] < self.regs[rs2] {
+                if self.regs[rs1 as usize] < self.regs[rs2 as usize] {
                     self.ip = self.ip.wrapping_add(offset as u32);
                 } else {
                     self.ip += 4;
                 }
             }
             Instr::Jal(rd, offset) => {
-                self.regs[rd] = self.ip + 4;
+                self.regs[rd as usize] = self.ip + 4;
                 self.ip = self.ip.wrapping_add(offset as u32);
             }
             Instr::Jalr(rd, rs1, offset) => {
-                self.regs[rd] = self.ip + 4;
-                self.ip = self.regs[rs1].wrapping_add(offset as u32);
+                self.regs[rd as usize] = self.ip + 4;
+                self.ip = self.regs[rs1 as usize].wrapping_add(offset as u32);
             }
             Instr::Lb(rd, rs1, offset) => {
-                let address = self.regs[rs1].wrapping_add(offset as u32);
-                self.regs[rd] = self.load_byte(address);
+                let address = self.regs[rs1 as usize].wrapping_add(offset as u32);
+                self.regs[rd as usize] = self.load_byte(address);
                 self.ip += 4;
             }
             Instr::Lh(rd, rs1, offset) => {
-                let address = self.regs[rs1].wrapping_add(offset as u32);
-                self.regs[rd] = self.load_half(address);
+                let address = self.regs[rs1 as usize].wrapping_add(offset as u32);
+                self.regs[rd as usize] = self.load_half(address);
                 self.ip += 4;
             }
             Instr::Lw(rd, rs1, offset) => {
-                let address = self.regs[rs1].wrapping_add(offset as u32);
-                self.regs[rd] = self.load_word(address);
+                let address = self.regs[rs1 as usize].wrapping_add(offset as u32);
+                self.regs[rd as usize] = self.load_word(address);
                 self.ip += 4;
             }
             Instr::Sb(rs1, rs2, offset) => {
-                let address = self.regs[rs2].wrapping_add(offset as u32);
-                self.store_byte(address, self.regs[rs1]);
+                let address = self.regs[rs2 as usize].wrapping_add(offset as u32);
+                self.store_byte(address, self.regs[rs1 as usize]);
                 self.ip += 4;
             }
             Instr::Sh(rs1, rs2, offset) => {
-                let address = self.regs[rs2].wrapping_add(offset as u32);
-                self.store_half(address, self.regs[rs1]);
+                let address = self.regs[rs2 as usize].wrapping_add(offset as u32);
+                self.store_half(address, self.regs[rs1 as usize]);
                 self.ip += 4;
             }
             Instr::Sw(rs1, rs2, offset) => {
-                let address = self.regs[rs2].wrapping_add(offset as u32);
-                self.store_word(address, self.regs[rs1]);
+                let address = self.regs[rs2 as usize].wrapping_add(offset as u32);
+                self.store_word(address, self.regs[rs1 as usize]);
                 self.ip += 4;
             }
         }
