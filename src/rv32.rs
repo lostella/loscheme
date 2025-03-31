@@ -111,25 +111,31 @@ fn parse_register_index(name: &str) -> Result<u8, String> {
     }
 }
 
-const INSTRUCTION_TEMPLATES: [(&str, u32); 18] = [
-    ("add", 0b00000000000000000000000000110011),
-    ("sub", 0b01000000000000000000000000110011),
-    ("xor", 0b00000000000000000100000000110011),
-    ("or", 0b00000000000000000110000000110011),
-    ("and", 0b00000000000000000111000000110011),
-    ("addi", 0b00000000000000000000000000010011),
-    ("jalr", 0b00000000000000000000000001100111),
-    ("lw", 0b00000000000000000010000000000011),
-    ("lh", 0b00000000000000000001000000000011),
-    ("lb", 0b00000000000000000000000000000011),
-    ("sw", 0b00000000000000000010000000100011),
-    ("sh", 0b00000000000000000001000000100011),
-    ("sb", 0b00000000000000000000000000100011),
-    ("beq", 0b00000000000000000000000001100011),
-    ("bne", 0b00000000000000000001000001100011),
-    ("bge", 0b00000000000000000101000001100011),
-    ("blt", 0b00000000000000000100000001100011),
-    ("jal", 0b00000000000000000000000001101111),
+const INSTRUCTION_TEMPLATES: [(u32, &str); 24] = [
+    (0b0000_0000_0000_0000_0000_0000_0011_0111, "lui"),
+    (0b0000_0000_0000_0000_0000_0000_0001_0111, "auipc"),
+    (0b0000_0000_0000_0000_0000_0000_0011_0011, "add"),
+    (0b0100_0000_0000_0000_0000_0000_0011_0011, "sub"),
+    (0b0000_0000_0000_0000_0100_0000_0011_0011, "xor"),
+    (0b0000_0000_0000_0000_0110_0000_0011_0011, "or"),
+    (0b0000_0000_0000_0000_0111_0000_0011_0011, "and"),
+    (0b0000_0000_0000_0000_0000_0000_0001_0011, "addi"),
+    (0b0000_0000_0000_0000_0000_0000_0110_0111, "jalr"),
+    (0b0000_0000_0000_0000_0010_0000_0000_0011, "lw"),
+    (0b0000_0000_0000_0000_0001_0000_0000_0011, "lh"),
+    (0b0000_0000_0000_0000_0000_0000_0000_0011, "lb"),
+    (0b0000_0000_0000_0000_0101_0000_0000_0011, "lhu"),
+    (0b0000_0000_0000_0000_0100_0000_0000_0011, "lbu"),
+    (0b0000_0000_0000_0000_0010_0000_0010_0011, "sw"),
+    (0b0000_0000_0000_0000_0001_0000_0010_0011, "sh"),
+    (0b0000_0000_0000_0000_0000_0000_0010_0011, "sb"),
+    (0b0000_0000_0000_0000_0000_0000_0110_0011, "beq"),
+    (0b0000_0000_0000_0000_0001_0000_0110_0011, "bne"),
+    (0b0000_0000_0000_0000_0101_0000_0110_0011, "bge"),
+    (0b0000_0000_0000_0000_0100_0000_0110_0011, "blt"),
+    (0b0000_0000_0000_0000_0111_0000_0110_0011, "bgeu"),
+    (0b0000_0000_0000_0000_0110_0000_0110_0011, "bltu"),
+    (0b0000_0000_0000_0000_0000_0000_0110_1111, "jal"),
 ];
 
 fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Result<u32, String> {
@@ -141,7 +147,7 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
 
     // NOTE: we assume 0x0 is not a valid instruction
     let mut template = 0;
-    for (n, t) in INSTRUCTION_TEMPLATES {
+    for (t, n) in INSTRUCTION_TEMPLATES {
         if opname == n {
             template = t;
         }
@@ -151,7 +157,14 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
         return Err(format!("Unsupported operation: {}", opname));
     }
 
-    if ["lw", "lh", "lb"].contains(&opname) {
+    if ["lui", "auipc"].contains(&opname) {
+        let rd = parse_register_index(split_args[0])? as u32;
+        let imm = split_args[2]
+            .parse::<u32>()
+            .ok()
+            .ok_or(format!("Cannot parse immediate: {}", instr))?;
+        Ok(template | set_bits(rd, 7, 5) | (imm & 0xFFFFF000))
+    } else if ["lw", "lh", "lb", "lhu", "lbu"].contains(&opname) {
         let memloc: Vec<&str> = split_args[1]
             .split(")")
             .next()
@@ -188,7 +201,7 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
         let rs1 = parse_register_index(split_args[1])? as u32;
         let rs2 = parse_register_index(split_args[2])? as u32;
         Ok(template | set_bits(rd, 7, 5) | set_bits(rs1, 15, 5) | set_bits(rs2, 20, 5))
-    } else if ["beq", "bne", "blt", "bge"].contains(&opname) {
+    } else if ["beq", "bne", "blt", "bge", "bltu", "bgeu"].contains(&opname) {
         let rs1 = parse_register_index(split_args[0])? as u32;
         let rs2 = parse_register_index(split_args[1])? as u32;
         let dest = *labels
@@ -281,13 +294,15 @@ pub struct VM {
     memory: Vec<u8>,
 }
 
-const R_TYPE: u32 = 0b0110011;
-const I_TYPE: u32 = 0b0010011;
-const I_TYPE_LOAD: u32 = 0b0000011;
-const I_TYPE_JALR: u32 = 0b1100111;
-const S_TYPE: u32 = 0b0100011;
-const B_TYPE: u32 = 0b1100011;
-const J_TYPE: u32 = 0b1101111;
+const OPCODE_LUI: u32 = 0b0110111;
+const OPCODE_AUIPC: u32 = 0b0010111;
+const OPCODE_JAL: u32 = 0b1101111;
+const OPCODE_JALR: u32 = 0b1100111;
+const OPCODE_BRANCH: u32 = 0b1100011;
+const OPCODE_LOAD: u32 = 0b0000011;
+const OPCODE_STORE: u32 = 0b0100011;
+const OPCODE_IMM: u32 = 0b0010011;
+const OPCODE_ARLOG: u32 = 0b0110011;
 
 impl VM {
     pub fn new(code: Vec<u32>, memory_size: usize) -> Self {
@@ -328,6 +343,16 @@ impl VM {
     }
 
     #[inline(always)]
+    fn load_byte_unsigned(&self, address: usize) -> u32 {
+        self.memory[address] as u32
+    }
+
+    #[inline(always)]
+    fn load_half_unsigned(&self, address: usize) -> u32 {
+        u16::from_le_bytes([self.memory[address], self.memory[address + 1]]) as u32
+    }
+
+    #[inline(always)]
     fn load_word(&self, address: usize) -> u32 {
         let bytes = &self.memory[address..address + 4];
         u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
@@ -350,7 +375,7 @@ impl VM {
         self.memory[address..address + 4].copy_from_slice(&bytes);
     }
 
-    fn execute_r_type(&mut self, word: u32) {
+    fn execute_arlog(&mut self, word: u32) {
         let rd = decode_rd(word);
         let (rs1, rs2) = (decode_rs1(word), decode_rs2(word));
         let (funct3, funct7) = (decode_funct3(word), decode_funct7(word));
@@ -366,7 +391,7 @@ impl VM {
         self.ip = self.ip.wrapping_add(4);
     }
 
-    fn execute_i_type(&mut self, word: u32) {
+    fn execute_imm(&mut self, word: u32) {
         let rd = decode_rd(word);
         let rs1 = decode_rs1(word);
         let funct3 = decode_funct3(word);
@@ -378,22 +403,7 @@ impl VM {
         self.ip = self.ip.wrapping_add(4);
     }
 
-    fn execute_jalr_type(&mut self, word: u32) {
-        let rd = decode_rd(word);
-        let rs1 = decode_rs1(word);
-        let funct3 = decode_funct3(word);
-        let imm = decode_imm_i_type(word);
-        match funct3 {
-            0b000 => {
-                // jalr
-                self.regs[rd] = self.ip.wrapping_add(4);
-                self.ip = self.regs[rs1].wrapping_add(imm);
-            }
-            _ => todo!("funct3 = 0b{:03b}", funct3),
-        }
-    }
-
-    fn execute_load_type(&mut self, word: u32) {
+    fn execute_load(&mut self, word: u32) {
         let rd = decode_rd(word);
         let rs1 = decode_rs1(word);
         let funct3 = decode_funct3(word);
@@ -403,12 +413,14 @@ impl VM {
             0b010 => self.regs[rd] = self.load_word(address), // lw
             0b001 => self.regs[rd] = self.load_half(address), // lh
             0b000 => self.regs[rd] = self.load_byte(address), // lb
+            0b100 => self.regs[rd] = self.load_byte_unsigned(address), // lbu
+            0b101 => self.regs[rd] = self.load_half_unsigned(address), // lhu
             _ => todo!("funct3 = 0b{:03b}", funct3),
         }
         self.ip = self.ip.wrapping_add(4);
     }
 
-    fn execute_s_type(&mut self, word: u32) {
+    fn execute_store(&mut self, word: u32) {
         let rs1 = decode_rs1(word);
         let rs2 = decode_rs2(word);
         let funct3 = decode_funct3(word);
@@ -423,17 +435,19 @@ impl VM {
         self.ip = self.ip.wrapping_add(4);
     }
 
-    fn execute_b_type(&mut self, word: u32) {
+    fn execute_branch(&mut self, word: u32) {
         let rs1 = decode_rs1(word);
         let rs2 = decode_rs2(word);
         let funct3 = decode_funct3(word);
         let imm = decode_imm_b_type(word);
         let (op1, op2) = (self.regs[rs1], self.regs[rs2]);
         let cond = match funct3 {
-            0b000 => op1 == op2, // beq
-            0b001 => op1 != op2, // bne
-            0b101 => op1 >= op2, // bge
-            0b100 => op1 < op2,  // blt
+            0b000 => op1 == op2,                   // beq
+            0b001 => op1 != op2,                   // bne
+            0b100 => (op1 as i32) < (op2 as i32),  // blt
+            0b101 => (op1 as i32) >= (op2 as i32), // bge
+            0b110 => op1 < op2,                    // bltu
+            0b111 => op1 >= op2,                   // bgeu
             _ => todo!("funct3 = 0b{:03b}", funct3),
         };
         self.ip = if cond {
@@ -443,23 +457,45 @@ impl VM {
         };
     }
 
-    fn execute_j_type(&mut self, word: u32) {
+    fn execute_jalr(&mut self, word: u32) {
         let rd = decode_rd(word);
-        let imm = decode_imm_j_type(word);
-        self.regs[rd] = self.ip.wrapping_add(4);
-        self.ip = self.ip.wrapping_add(imm);
+        let rs1 = decode_rs1(word);
+        let funct3 = decode_funct3(word);
+        let imm = decode_imm_i_type(word);
+        match funct3 {
+            0b000 => {
+                // jalr
+                self.regs[rd] = self.ip.wrapping_add(4);
+                self.ip = self.regs[rs1].wrapping_add(imm);
+            }
+            _ => todo!("funct3 = 0b{:03b}", funct3),
+        }
     }
 
     fn execute(&mut self, word: u32) {
         let opcode = word & 0x7F;
         match opcode {
-            R_TYPE => self.execute_r_type(word),
-            I_TYPE => self.execute_i_type(word),
-            I_TYPE_JALR => self.execute_jalr_type(word),
-            I_TYPE_LOAD => self.execute_load_type(word),
-            S_TYPE => self.execute_s_type(word),
-            B_TYPE => self.execute_b_type(word),
-            J_TYPE => self.execute_j_type(word),
+            OPCODE_ARLOG => self.execute_arlog(word),
+            OPCODE_IMM => self.execute_imm(word),
+            OPCODE_JALR => self.execute_jalr(word),
+            OPCODE_LOAD => self.execute_load(word),
+            OPCODE_STORE => self.execute_store(word),
+            OPCODE_BRANCH => self.execute_branch(word),
+            OPCODE_JAL => {
+                let rd = decode_rd(word);
+                let imm = decode_imm_j_type(word);
+                self.regs[rd] = self.ip.wrapping_add(4);
+                self.ip = self.ip.wrapping_add(imm);
+            }
+            OPCODE_LUI => {
+                let rd = decode_rd(word);
+                self.regs[rd] = word & 0xFFFFF000;
+            }
+            OPCODE_AUIPC => {
+                let rd = decode_rd(word);
+                let imm = word & 0xFFFFF000;
+                self.regs[rd] = self.ip.wrapping_add(imm);
+            }
             _ => todo!("opcode = 0b{:07b}", opcode),
         }
     }
