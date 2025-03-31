@@ -194,7 +194,7 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
         let dest = *labels
             .get(split_args[2])
             .ok_or(format!("Label not found: {}", instr))?;
-        let imm = dest.wrapping_sub(ip) as u32;
+        let imm = dest.wrapping_sub(ip);
         Ok(template
             | set_bits(rs1, 15, 5)
             | set_bits(rs2, 20, 5)
@@ -221,7 +221,7 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
         let dest = *labels
             .get(split_args[1])
             .ok_or(format!("Label not found: {}", instr))?;
-        let imm = dest.wrapping_sub(ip) as u32;
+        let imm = dest.wrapping_sub(ip);
         Ok(template
             | set_bits(rd, 7, 5)
             | set_bits(
