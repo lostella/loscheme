@@ -111,7 +111,7 @@ fn parse_register_index(name: &str) -> Result<u8, String> {
     }
 }
 
-const INSTRUCTION_TEMPLATES: [(u32, &str); 24] = [
+const INSTRUCTION_TEMPLATES: [(u32, &str); 29] = [
     (0b0000_0000_0000_0000_0000_0000_0011_0111, "lui"),
     (0b0000_0000_0000_0000_0000_0000_0001_0111, "auipc"),
     (0b0000_0000_0000_0000_0000_0000_0011_0011, "add"),
@@ -120,6 +120,11 @@ const INSTRUCTION_TEMPLATES: [(u32, &str); 24] = [
     (0b0000_0000_0000_0000_0110_0000_0011_0011, "or"),
     (0b0000_0000_0000_0000_0111_0000_0011_0011, "and"),
     (0b0000_0000_0000_0000_0000_0000_0001_0011, "addi"),
+    (0b0000_0000_0000_0000_0010_0000_0001_0011, "slti"),
+    (0b0000_0000_0000_0000_0011_0000_0001_0011, "sltiu"),
+    (0b0000_0000_0000_0000_0100_0000_0001_0011, "xori"),
+    (0b0000_0000_0000_0000_0110_0000_0001_0011, "ori"),
+    (0b0000_0000_0000_0000_0111_0000_0001_0011, "andi"),
     (0b0000_0000_0000_0000_0000_0000_0110_0111, "jalr"),
     (0b0000_0000_0000_0000_0010_0000_0000_0011, "lw"),
     (0b0000_0000_0000_0000_0001_0000_0000_0011, "lh"),
@@ -221,7 +226,7 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
                 25,
                 7,
             ))
-    } else if ["addi", "jalr"].contains(&opname) {
+    } else if ["addi", "jalr", "slti", "sltiu", "xori", "ori", "andi"].contains(&opname) {
         let rd = parse_register_index(split_args[0])? as u32;
         let rs1 = parse_register_index(split_args[1])? as u32;
         let imm = split_args[2]
@@ -398,6 +403,11 @@ impl VM {
         let imm = decode_imm_i_type(word);
         self.regs[rd] = match funct3 {
             0b000 => self.regs[rs1].wrapping_add(imm), // addi
+            0b010 => u32::from((self.regs[rs1] as i32) < (imm as i32)), // slti
+            0b011 => u32::from(self.regs[rs1] < imm),  // sltiu
+            0b100 => self.regs[rs1] ^ imm,             // xori
+            0b110 => self.regs[rs1] | imm,             // ori
+            0b111 => self.regs[rs1] & imm,             // andi
             _ => todo!("funct3 = 0b{:03b}", funct3),
         };
         self.ip = self.ip.wrapping_add(4);
