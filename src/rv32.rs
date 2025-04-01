@@ -10,11 +10,6 @@
 use std::collections::HashMap;
 
 #[inline(always)]
-fn get_bits(word: u32, start_index: u8, num_bits: u8) -> u32 {
-    (!(0xFFFFFFFFu32 << num_bits)) & (word >> start_index)
-}
-
-#[inline(always)]
 fn set_bits(word: u32, start_index: u8, num_bits: u8) -> u32 {
     (!(0xFFFFFFFFu32 << num_bits) & word) << start_index
 }
@@ -63,22 +58,19 @@ fn decode_imm_s_type(word: u32) -> u32 {
 
 #[inline(always)]
 fn decode_imm_b_type(word: u32) -> u32 {
-    let bits_4_1_11 = get_bits(word, 7, 5);
-    let bits_12_10_5 = get_bits(word, 25, 7);
-    let pre = ((bits_4_1_11 >> 1) << 1)
-        | (bits_12_10_5 << 5)
-        | ((bits_4_1_11 & 1) << 11)
-        | ((bits_12_10_5 & 128) << 12);
-    sign_extend(pre, 11)
+    let pre = ((word & 0xF00) >> 7)
+        | ((word & 0x7E000000) >> 20)
+        | ((word & 0x80) << 4)
+        | ((word & 0x80000000) >> 19);
+    sign_extend(pre, 12)
 }
 
 #[inline(always)]
 fn decode_imm_j_type(word: u32) -> u32 {
-    let bits = get_bits(word, 12, 20);
-    let pre = ((0xFF & bits) << 12)
-        | (((1 << 8) & bits) << 3)
-        | (((0b11_1111_1111 << 9) & bits) >> 8)
-        | (((1 << 19) & bits) << 1);
+    let pre = ((word & 0x7FE00000) >> 20)
+        | ((word & 0x100000) >> 9)
+        | (word & 0xFF000)
+        | ((word & 0x80000000) >> 11);
     sign_extend(pre, 20)
 }
 
@@ -528,12 +520,6 @@ impl VM {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_get_bits() {
-        assert_eq!(get_bits(0x00F23D00, 0, 9), 0x100);
-        assert_eq!(get_bits(0x00F23D00, 11, 11), 0b11_0010_0011_1);
-    }
 
     #[test]
     fn test_sign_extend() {
