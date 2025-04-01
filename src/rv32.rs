@@ -144,7 +144,7 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
 
     let Some((template, _)) = INSTRUCTION_TEMPLATES.iter().find(|_, &&name| name == opname) else {
         return Err(format!("Unsupported operation: {}", opname));
-    }
+    };
 
     if ["lui", "auipc"].contains(&opname) {
         let rd = parse_register_index(split_args[0])? as u32;
