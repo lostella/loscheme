@@ -142,7 +142,7 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
 
     let split_args = args.split(",").map(|s| s.trim()).collect::<Vec<&str>>();
 
-    let Some((template, _)) = INSTRUCTION_TEMPLATES.iter().find(|_, &&name| name == opname) else {
+    let Some((template, _)) = INSTRUCTION_TEMPLATES.iter().find(|(_, &&name)| name == opname) else {
         return Err(format!("Unsupported operation: {}", opname));
     };
 
