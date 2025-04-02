@@ -316,11 +316,7 @@ impl VM {
     }
 
     pub fn read_register(&self, idx: usize) -> u32 {
-        if idx > 0 {
-            self.regs[idx]
-        } else {
-            0
-        }
+        self.regs[idx]
     }
 
     #[inline(always)]
@@ -495,6 +491,7 @@ impl VM {
             }
             _ => todo!("opcode = 0b{:07b}", opcode),
         }
+        self.regs[0] = 0; // NOTE: hard-wire zero register
     }
 
     pub fn run(&mut self) {
@@ -507,7 +504,6 @@ impl VM {
                 panic!("instruction pointer is not word-aligned")
             }
             self.execute(self.code[(self.ip / 4) as usize]);
-            self.regs[0] = 0; // NOTE: hard-wire zero register
         }
     }
 }
