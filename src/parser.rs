@@ -185,6 +185,8 @@ pub enum Expr {
     Symbol(Intern<String>),
     Procedure(Procedure),
     Cons(Box<Cons>),
+    List(Vec<Expr>),
+    Dot,
 }
 
 pub fn parse_tokens(tokens: &mut Peekable<Tokenizer>) -> Result<Vec<Expr>, String> {
@@ -200,32 +202,25 @@ pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String
         Some(Token::LParen) => parse_list(tokens),
         Some(Token::Quote) => parse_quote(tokens),
         Some(Token::Atom(s)) => parse_atom(s),
-        Some(Token::Dot) => Err("Unexpected dot".to_string()),
+        Some(Token::Dot) => Ok(Expr::Dot),
         Some(Token::RParen) => Err("Unexpected closing parenthesis".to_string()),
         None => Err("Unexpected end of input".to_string()),
     }
 }
 
 fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    if let Some(token) = tokens.peek() {
+    let mut exprs = vec![];
+    while let Some(token) = tokens.peek() {
         match token {
             Token::RParen => {
                 tokens.next();
-                return Ok(Expr::Null);
-            }
-            Token::Dot => {
-                tokens.next();
-                let res = parse_expression(tokens);
-                match tokens.next() {
-                    Some(Token::RParen) => return res,
-                    _ => return Err("Expected closing parenthesis".to_string()),
+                if exprs.is_empty() {
+                    return Ok(Expr::Null);
                 }
+                return Ok(Expr::List(exprs));
             }
             _ => {
-                return Ok(Expr::Cons(Box::new(Cons {
-                    car: parse_expression(tokens)?,
-                    cdr: parse_list(tokens)?,
-                })));
+                exprs.push(parse_expression(tokens)?);
             }
         }
     }
@@ -233,13 +228,10 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
 }
 
 fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Box::new(Cons {
-        car: Expr::Keyword(Keyword::Quote),
-        cdr: Expr::Cons(Box::new(Cons {
-            car: parse_expression(tokens)?,
-            cdr: Expr::Null,
-        })),
-    })))
+    Ok(Expr::List(vec![
+        Expr::Keyword(Keyword::Quote),
+        parse_expression(tokens)?,
+    ]))
 }
 
 fn parse_rational(input: &str) -> Result<(i64, i64), ()> {
@@ -323,6 +315,19 @@ impl fmt::Display for Expr {
                 write!(f, ")")?;
                 Ok(())
             }
+            Expr::List(v) => {
+                write!(f, "(")?;
+                let mut iter = v.iter();
+                if let Some(expr) = iter.next() {
+                    write!(f, "{}", expr)?;
+                }
+                while let Some(expr) = iter.next() {
+                    write!(f, " {}", expr)?;
+                }
+                write!(f, ")")?;
+                Ok(())
+            }
+            Expr::Dot => write!(f, "."),
         }
     }
 }
@@ -626,10 +631,10 @@ mod tests {
     #[test]
     fn test_parser() {
         let code = "; comment\n(define (square x) ; comment\n\t(* x x))";
-        let expected = vec![Expr::from_vec(vec![
+        let expected = vec![Expr::List(vec![
             Expr::Keyword(Keyword::Define),
-            Expr::from_vec(vec![symbol_from_str("square"), symbol_from_str("x")]),
-            Expr::from_vec(vec![
+            Expr::List(vec![symbol_from_str("square"), symbol_from_str("x")]),
+            Expr::List(vec![
                 symbol_from_str("*"),
                 symbol_from_str("x"),
                 symbol_from_str("x"),

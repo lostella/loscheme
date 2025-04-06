@@ -8,6 +8,21 @@ use std::iter::zip;
 use std::mem::take;
 use std::rc::Rc;
 
+#[derive(Debug, PartialEq, Clone)]
+enum MaybeValue {
+    Just(Expr),
+    TailCall(Procedure, Vec<Expr>),
+}
+
+impl MaybeValue {
+    fn materialize(self) -> Result<Expr, String> {
+        match self {
+            Self::Just(expr) => Ok(expr),
+            Self::TailCall(proc, args) => proc.call(args)?.materialize(),
+        }
+    }
+}
+
 fn builtin_add(values: Vec<Expr>) -> Result<MaybeValue, String> {
     let res = values
         .into_iter()
@@ -109,7 +124,10 @@ fn builtin_apply(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
     let first = take(&mut values[0]);
     let second = take(&mut values[1]);
     match first {
-        Expr::Procedure(proc) => Ok(MaybeValue::TailCall(proc, second.into_vec()?)),
+        Expr::Procedure(proc) => match second {
+            Expr::List(v) => Ok(MaybeValue::TailCall(proc, v)),
+            _ => Ok(MaybeValue::TailCall(proc, second.into_vec()?)),
+        },
         _ => Err("Apply needs a procedure and a list as arguments".to_string()),
     }
 }
@@ -140,10 +158,11 @@ fn builtin_ispair(values: Vec<Expr>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Pair? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Expr::Bool(matches!(
-        &values[0],
-        Expr::Cons(_)
-    ))))
+    Ok(MaybeValue::Just(Expr::Bool(match values[0] {
+        Expr::Cons(_) => true,
+        Expr::List(_) => true,
+        _ => false,
+    })))
 }
 
 fn builtin_islist(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
@@ -155,6 +174,7 @@ fn builtin_islist(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
             MaybeValue::Just(Expr::Bool(b)) => Ok(MaybeValue::Just(Expr::Bool(b))),
             _ => Err("Unexpected non-boolean".to_string()),
         },
+        Expr::List(_) => Ok(MaybeValue::Just(Expr::Bool(true))),
         Expr::Null => Ok(MaybeValue::Just(Expr::Bool(true))),
         _ => Ok(MaybeValue::Just(Expr::Bool(false))),
     }
@@ -307,18 +327,18 @@ fn builtin_filter(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
         return Err("Filter needs exactly two arguments".to_string());
     }
     let pred = take(&mut values[0]);
-    let orig = take(&mut values[1]).into_vec()?;
-    match pred {
-        Expr::Procedure(proc) => {
-            let mut v = Vec::new();
-            for x in orig {
+    let list = take(&mut values[1]);
+    match (pred, list) {
+        (Expr::Procedure(proc), Expr::List(v)) => {
+            let mut w = Vec::new();
+            for x in v {
                 if proc.call(vec![x.clone()])?.materialize()? == Expr::Bool(true) {
-                    v.push(x)
+                    w.push(x)
                 }
             }
-            Ok(MaybeValue::Just(Expr::from_vec(v)))
+            Ok(MaybeValue::Just(Expr::List(w)))
         }
-        _ => Err("Not a procedure".to_string()),
+        _ => Err("Needs a procedure and a list".to_string()),
     }
 }
 
@@ -351,21 +371,6 @@ fn builtin_newline(values: Vec<Expr>) -> Result<MaybeValue, String> {
     }
     println!();
     Ok(MaybeValue::Just(Expr::Unspecified))
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum MaybeValue {
-    Just(Expr),
-    TailCall(Procedure, Vec<Expr>),
-}
-
-impl MaybeValue {
-    fn materialize(self) -> Result<Expr, String> {
-        match self {
-            Self::Just(expr) => Ok(expr),
-            Self::TailCall(proc, args) => proc.call(args)?.materialize(),
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -498,7 +503,7 @@ impl Environment {
             Expr::Rational(_, _) => Ok(MaybeValue::Just(expr.clone())),
             Expr::Str(_) => Ok(MaybeValue::Just(expr.clone())),
             Expr::Bool(_) => Ok(MaybeValue::Just(expr.clone())),
-            Expr::Cons(p) => self.maybe_evaluate_pair(p),
+            Expr::List(v) => self.maybe_evaluate_list(v),
             Expr::Symbol(s) => match self.get(s) {
                 Some(value) => Ok(MaybeValue::Just(value)),
                 None => Err(format!("Undefined symbol: {}", s)),
@@ -507,194 +512,185 @@ impl Environment {
         }
     }
 
-    fn maybe_evaluate_pair(&mut self, pair: &Cons) -> Result<MaybeValue, String> {
-        let args = pair.cdr.borrow_vec()?;
+    fn maybe_evaluate_list(&mut self, args: &[Expr]) -> Result<MaybeValue, String> {
+        let [head, tail @ ..] = args else {
+            return Err(format!("Not a procedure call: {:?}", args));
+        };
 
-        match &pair.car {
-            Expr::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(args)?)),
-            Expr::Keyword(Keyword::Lambda) => Ok(MaybeValue::Just(self.evaluate_lambda(args)?)),
-            Expr::Keyword(Keyword::Define) => Ok(MaybeValue::Just(self.evaluate_define(args)?)),
-            Expr::Keyword(Keyword::Set) => Ok(MaybeValue::Just(self.evaluate_set(args)?)),
-            Expr::Keyword(Keyword::If) => self.evaluate_if(args),
-            Expr::Keyword(Keyword::Cond) => self.evaluate_cond(args),
-            Expr::Keyword(Keyword::When) => self.evaluate_when(args),
-            Expr::Keyword(Keyword::Unless) => self.evaluate_unless(args),
-            Expr::Keyword(Keyword::Let) => self.evaluate_let(args),
-            Expr::Keyword(Keyword::Begin) => self.evaluate_begin(args),
-            Expr::Keyword(Keyword::And) => Ok(MaybeValue::Just(self.evaluate_and(args)?)),
-            Expr::Keyword(Keyword::Or) => Ok(MaybeValue::Just(self.evaluate_or(args)?)),
-            car => match self.evaluate(car)? {
+        match head {
+            Expr::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(tail)?)),
+            Expr::Keyword(Keyword::Lambda) => Ok(MaybeValue::Just(self.evaluate_lambda(tail)?)),
+            Expr::Keyword(Keyword::Define) => Ok(MaybeValue::Just(self.evaluate_define(tail)?)),
+            Expr::Keyword(Keyword::Set) => Ok(MaybeValue::Just(self.evaluate_set(tail)?)),
+            Expr::Keyword(Keyword::If) => self.evaluate_if(tail),
+            Expr::Keyword(Keyword::Cond) => self.evaluate_cond(tail),
+            Expr::Keyword(Keyword::When) => self.evaluate_when(tail),
+            Expr::Keyword(Keyword::Unless) => self.evaluate_unless(tail),
+            Expr::Keyword(Keyword::Let) => self.evaluate_let(tail),
+            Expr::Keyword(Keyword::Begin) => self.evaluate_begin(tail),
+            Expr::Keyword(Keyword::And) => Ok(MaybeValue::Just(self.evaluate_and(tail)?)),
+            Expr::Keyword(Keyword::Or) => Ok(MaybeValue::Just(self.evaluate_or(tail)?)),
+            _ => match self.evaluate(head)? {
                 Expr::Procedure(proc) => {
-                    let mut args_values = Vec::new();
-                    for arg in args {
-                        args_values.push(self.evaluate(arg)?)
+                    let mut tail_values = Vec::new();
+                    for expr in tail {
+                        tail_values.push(self.evaluate(expr)?)
                     }
-                    Ok(MaybeValue::TailCall(proc, args_values))
+                    Ok(MaybeValue::TailCall(proc, tail_values))
                 }
                 stuff => Err(format!("Not a procedure call: {}", stuff)),
             },
         }
     }
 
-    fn evaluate_quote(&mut self, args: Vec<&Expr>) -> Result<Expr, String> {
+    fn evaluate_quote(&mut self, args: &[Expr]) -> Result<Expr, String> {
         if args.len() != 1 {
             return Err(format!(
                 "Quote needs exactly one argument, got {}",
                 args.len()
             ));
         }
-        Ok(args[0].clone())
+        match args[0] {
+            _ => Ok(args[0].clone()),
+        }
     }
 
-    fn evaluate_lambda(&mut self, mut args: Vec<&Expr>) -> Result<Expr, String> {
-        if args.is_empty() {
-            return Err("Lambda needs at least one argument".to_string());
-        }
-        match args[0] {
-            Expr::Cons(_) => {
-                let mut params = Vec::new();
-                for expr in args[0].borrow_vec()? {
-                    match expr {
-                        Expr::Symbol(s) => params.push(*s),
-                        _ => return Err(format!("Not a symbol: {}", expr)),
-                    }
-                }
-                let mut body = Vec::new();
-                for expr in args.split_off(1) {
-                    body.push(expr.clone())
-                }
-                let proc = UserDefinedProcedure {
-                    params,
-                    body,
-                    env: self.clone(),
-                };
-                Ok(Expr::Procedure(Procedure::UserDefined(proc)))
+    fn evaluate_lambda(&mut self, args: &[Expr]) -> Result<Expr, String> {
+        let [Expr::List(exprs), body @ ..] = args else {
+            return Err("First argument to lambda must be a list of symbols".to_string());
+        };
+        let mut params = Vec::new();
+        for expr in exprs {
+            if let Expr::Symbol(s) = expr {
+                params.push(*s)
+            } else {
+                return Err(format!("Not a symbol: {}", expr));
             }
-            _ => Err("First argument to lambda must be a list of symbols".to_string()),
         }
+        let proc = UserDefinedProcedure {
+            params,
+            body: body.to_vec(),
+            env: self.clone(),
+        };
+        Ok(Expr::Procedure(Procedure::UserDefined(proc)))
     }
 
-    fn evaluate_define(&mut self, mut args: Vec<&Expr>) -> Result<Expr, String> {
-        if args.is_empty() {
-            return Err("Define needs at least one argument".to_string());
-        }
-        match args[0] {
-            Expr::Symbol(key) => {
-                let value = match args.len() {
-                    1 => Expr::Unspecified,
-                    2 => self.evaluate(args[1])?,
+    fn evaluate_define(&mut self, args: &[Expr]) -> Result<Expr, String> {
+        match args {
+            [Expr::Symbol(name), body @ ..] => {
+                let value = match body.len() {
+                    0 => Expr::Unspecified,
+                    1 => self.evaluate(&body[0])?,
                     _ => return Err("Define with a symbol gets at most two arguments".to_string()),
                 };
-                self.set(*key, value);
+                self.set(*name, value);
                 Ok(Expr::Unspecified)
             }
-            Expr::Cons(pair) => {
-                let key = match &pair.car {
-                    Expr::Symbol(s) => Ok(s),
-                    _ => Err("Not a symbol"),
-                }?;
+            [Expr::List(exprs), body @ ..] => {
+                let Expr::Symbol(name) = exprs[0] else {
+                    return Err(format!("Not a symbol: {}", exprs[0]));
+                };
                 let mut params = Vec::new();
-                for expr in pair.cdr.borrow_vec()? {
-                    match expr {
-                        Expr::Symbol(s) => params.push(*s),
-                        _ => return Err("Not a symbol".to_string()),
+                for expr in &exprs[1..exprs.len()] {
+                    if let Expr::Symbol(arg) = expr {
+                        params.push(*arg);
+                    } else {
+                        return Err(format!("Not a symbol: {}", expr));
                     }
-                }
-                let mut body = Vec::new();
-                for expr in args.split_off(1) {
-                    body.push(expr.clone())
                 }
                 let proc = UserDefinedProcedure {
                     params,
-                    body,
+                    body: body.to_vec(),
                     env: self.clone(),
                 };
-                self.set(*key, Expr::Procedure(Procedure::UserDefined(proc)));
+                self.set(name, Expr::Procedure(Procedure::UserDefined(proc)));
                 Ok(Expr::Unspecified)
             }
             _ => Err("Define needs a symbol or a list as first argument".to_string()),
         }
     }
 
-    fn evaluate_set(&mut self, args: Vec<&Expr>) -> Result<Expr, String> {
+    fn evaluate_set(&mut self, args: &[Expr]) -> Result<Expr, String> {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments".to_string());
         }
         match args[0] {
             Expr::Symbol(s) => {
-                if self.get(s).is_none() {
-                    return Err("Symbol is not bound".to_string());
+                if self.get(&s).is_none() {
+                    return Err(format!("Symbol is not bound: {}", s));
                 }
-                let value = self.evaluate(args[1])?;
-                self.set(*s, value);
+                let value = self.evaluate(&args[1])?;
+                self.set(s, value);
                 Ok(Expr::Unspecified)
             }
             _ => Err("First argument to set! must be a symbol".to_string()),
         }
     }
 
-    fn evaluate_if(&mut self, args: Vec<&Expr>) -> Result<MaybeValue, String> {
+    fn evaluate_if(&mut self, args: &[Expr]) -> Result<MaybeValue, String> {
         if args.len() < 2 || args.len() > 3 {
             return Err("If accepts two or three arguments".to_string());
         }
-        match self.evaluate(args[0])? {
-            Expr::Bool(true) => self.maybe_evaluate(args[1]),
+        match self.evaluate(&args[0])? {
+            Expr::Bool(true) => self.maybe_evaluate(&args[1]),
             Expr::Bool(false) => {
                 if args.len() == 2 {
                     Ok(MaybeValue::Just(Expr::Unspecified))
                 } else {
-                    self.maybe_evaluate(args[2])
+                    self.maybe_evaluate(&args[2])
                 }
             }
             _ => Err("First argument to if did not evaluate to a boolean".to_string()),
         }
     }
 
-    fn evaluate_cond(&mut self, args: Vec<&Expr>) -> Result<MaybeValue, String> {
+    fn evaluate_cond(&mut self, args: &[Expr]) -> Result<MaybeValue, String> {
         for clause in args {
-            match clause {
-                Expr::Cons(p) => {
-                    let seq = p.cdr.borrow_vec()?;
-                    if let Expr::Symbol(s) = &p.car {
-                        if **s == "else" {
-                            return self.evaluate_begin(seq);
-                        }
-                    }
-                    match self.evaluate(&p.car)? {
-                        Expr::Bool(true) => return self.evaluate_begin(seq),
-                        Expr::Bool(false) => continue,
-                        _ => return Err("Clause did not evaluate to a boolean".to_string()),
-                    }
+            let Expr::List(v) = clause else {
+                return Err(format!("Not a list: {}", clause));
+            };
+            if let Expr::Symbol(s) = &v[0] {
+                if **s == "else" {
+                    return self.evaluate_begin(&v[1..v.len()]);
                 }
-                _ => return Err("Not a list".to_string()),
+            }
+            match self.evaluate(&v[0])? {
+                Expr::Bool(true) => return self.evaluate_begin(&v[1..v.len()]),
+                Expr::Bool(false) => continue,
+                value => {
+                    return Err(format!(
+                        "Clause {} did not evaluate to a boolean: {}",
+                        v[0], value
+                    ))
+                }
             }
         }
         Ok(MaybeValue::Just(Expr::Unspecified))
     }
 
-    fn evaluate_when(&mut self, mut args: Vec<&Expr>) -> Result<MaybeValue, String> {
+    fn evaluate_when(&mut self, args: &[Expr]) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("When needs at least one argument".to_string());
         }
-        match self.evaluate(args[0])? {
-            Expr::Bool(true) => self.evaluate_begin(args.split_off(1)),
+        match self.evaluate(&args[0])? {
+            Expr::Bool(true) => self.evaluate_begin(&args[1..args.len()]),
             Expr::Bool(false) => Ok(MaybeValue::Just(Expr::Unspecified)),
             _ => Err("First argument to when did not evaluate to a boolean".to_string()),
         }
     }
 
-    fn evaluate_unless(&mut self, mut args: Vec<&Expr>) -> Result<MaybeValue, String> {
+    fn evaluate_unless(&mut self, args: &[Expr]) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("Unless needs at least one argument".to_string());
         }
-        match self.evaluate(args[0])? {
+        match self.evaluate(&args[0])? {
             Expr::Bool(true) => Ok(MaybeValue::Just(Expr::Unspecified)),
-            Expr::Bool(false) => self.evaluate_begin(args.split_off(1)),
+            Expr::Bool(false) => self.evaluate_begin(&args[1..args.len()]),
             _ => Err("First argument to unless did not evaluate to a boolean".to_string()),
         }
     }
 
-    fn evaluate_let(&mut self, mut args: Vec<&Expr>) -> Result<MaybeValue, String> {
+    fn evaluate_let(&mut self, args: &[Expr]) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("Let needs at least one argument".to_string());
         }
@@ -715,7 +711,7 @@ impl Environment {
             }
         }
         let mut out = MaybeValue::Just(Expr::Unspecified);
-        if let Some((last, rest)) = args.split_off(1).split_last() {
+        if let Some((last, rest)) = args[1..args.len()].split_last() {
             for expr in rest {
                 child.evaluate(expr)?;
             }
@@ -724,7 +720,7 @@ impl Environment {
         Ok(out)
     }
 
-    fn evaluate_begin(&mut self, args: Vec<&Expr>) -> Result<MaybeValue, String> {
+    fn evaluate_begin(&mut self, args: &[Expr]) -> Result<MaybeValue, String> {
         let mut out = MaybeValue::Just(Expr::Unspecified);
         if let Some((last, rest)) = args.split_last() {
             for expr in rest {
@@ -735,7 +731,7 @@ impl Environment {
         Ok(out)
     }
 
-    fn evaluate_and(&mut self, args: Vec<&Expr>) -> Result<Expr, String> {
+    fn evaluate_and(&mut self, args: &[Expr]) -> Result<Expr, String> {
         for expr in args {
             match self.evaluate(expr) {
                 Ok(Expr::Bool(true)) => continue,
@@ -746,7 +742,7 @@ impl Environment {
         Ok(Expr::Bool(true))
     }
 
-    fn evaluate_or(&mut self, args: Vec<&Expr>) -> Result<Expr, String> {
+    fn evaluate_or(&mut self, args: &[Expr]) -> Result<Expr, String> {
         for expr in args {
             match self.evaluate(expr) {
                 Ok(Expr::Bool(true)) => return Ok(Expr::Bool(true)),
@@ -1068,29 +1064,29 @@ mod tests {
     #[test]
     fn test_quote() {
         let steps = vec![
-            ("(quote ())", Expr::from_vec(vec![])),
+            ("(quote ())", Expr::Null),
             (
                 "(quote (#t #f))",
-                Expr::from_vec(vec![Expr::Bool(true), Expr::Bool(false)]),
+                Expr::List(vec![Expr::Bool(true), Expr::Bool(false)]),
             ),
             ("(quote 42.0)", Expr::Float(42.0)),
             (
                 "(quote (* 3 4))",
-                Expr::from_vec(vec![
+                Expr::List(vec![
                     symbol_from_str("*"),
                     Expr::Integer(3),
                     Expr::Integer(4),
                 ]),
             ),
-            ("'()", Expr::from_vec(vec![])),
+            ("'()", Expr::Null),
             (
                 "'(#t #f)",
-                Expr::from_vec(vec![Expr::Bool(true), Expr::Bool(false)]),
+                Expr::List(vec![Expr::Bool(true), Expr::Bool(false)]),
             ),
             ("'42.0", Expr::Float(42.0)),
             (
                 "'(* 3 4)",
-                Expr::from_vec(vec![
+                Expr::List(vec![
                     symbol_from_str("*"),
                     Expr::Integer(3),
                     Expr::Integer(4),
@@ -1424,11 +1420,11 @@ mod tests {
         let steps = vec![
             (
                 "(filter (lambda (x) (< x 3)) '(5 4 3 2 1))",
-                Expr::from_vec(vec![Expr::Integer(2), Expr::Integer(1)]),
+                Expr::List(vec![Expr::Integer(2), Expr::Integer(1)]),
             ),
             (
                 "(filter (lambda (x) (< x 0)) '(-5 4 -3 2 -1))",
-                Expr::from_vec(vec![
+                Expr::List(vec![
                     Expr::Integer(-5),
                     Expr::Integer(-3),
                     Expr::Integer(-1),
