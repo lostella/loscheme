@@ -7,20 +7,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    name: Test Suite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
@@ -52,10 +38,39 @@ jobs:
         with:
           command: clippy
 
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --lib --bins --examples
+
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+
   deploy:
     name: Deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, fmt, clippy]
+    needs: [fmt, clippy, build, test]
     permissions:
       pages: write
       id-token: write

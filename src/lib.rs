@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod parser;
 pub mod rationals;
 pub mod run;
 pub mod rv32;

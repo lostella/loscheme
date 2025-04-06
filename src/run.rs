@@ -1,5 +1,6 @@
 use crate::errors::MyError;
-use crate::treewalk::{parse, Environment, Expr};
+use crate::parser::{parse, Expr};
+use crate::treewalk::Environment;
 
 pub fn run(code: &str, env: &mut Environment) -> Result<Expr, MyError> {
     let mut val: Expr = Expr::Unspecified;
