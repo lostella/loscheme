@@ -40,7 +40,7 @@ fn repl_loop() {
                 continue;
             }
             Ok(_) => {
-                if let Some(_) = input.split_once(":quit") {
+                if input.split_once(":quit").is_some() {
                     break;
                 }
                 let to_be_run = if let Some((_, filename)) = input.trim().split_once(":load ") {
