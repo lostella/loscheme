@@ -6,6 +6,23 @@ use std::io::{self, prelude::*, BufReader};
 
 const REPL_PROMPT: &str = "λscm>";
 
+fn read_code_file(filename: &str) -> String {
+    let file = File::open(filename).expect("Unable to open file");
+    let reader = BufReader::new(file);
+    let mut code = String::new();
+
+    for res in reader.lines() {
+        let line = res.expect("Unable to read line");
+        match line.find(';') {
+            Some(idx) => code.push_str(&line[..idx]),
+            None => code.push_str(&line),
+        }
+        code.push('\n');
+    }
+
+    code
+}
+
 fn repl_loop() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -22,10 +39,20 @@ fn repl_loop() {
                 println!();
                 continue;
             }
-            Ok(_) => match run(&input, &mut env) {
-                Ok(v) => println!("{}", v),
-                Err(err) => eprintln!("{}", err),
-            },
+            Ok(_) => {
+                if let Some(_) = input.split_once(":quit") {
+                    break;
+                }
+                let to_be_run = if let Some((_, filename)) = input.trim().split_once(":load ") {
+                    read_code_file(filename)
+                } else {
+                    input
+                };
+                match run(&to_be_run, &mut env) {
+                    Ok(v) => println!("{}", v),
+                    Err(err) => eprintln!("{}", err),
+                }
+            }
             Err(err) => {
                 eprintln!("{}", err);
             }
@@ -34,21 +61,8 @@ fn repl_loop() {
 }
 
 fn script_loop(filename: &str) {
-    let file = File::open(filename).expect("Unable to open file");
-    let reader = BufReader::new(file);
-    let mut code = String::new();
-
-    for res in reader.lines() {
-        let line = res.expect("Unable to read line");
-        match line.find(';') {
-            Some(idx) => code.push_str(&line[..idx]),
-            None => code.push_str(&line),
-        }
-        code.push('\n');
-    }
-
+    let code = read_code_file(filename);
     let output = run_standard(&code);
-
     if let Err(err) = output {
         eprintln!("{}", err)
     }
