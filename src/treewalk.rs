@@ -55,6 +55,32 @@ fn builtin_div(values: Vec<Expr>) -> Result<MaybeValue, String> {
     Ok(MaybeValue::Just(res))
 }
 
+fn builtin_quotient(values: Vec<Expr>) -> Result<MaybeValue, String> {
+    match values.as_slice() {
+        [Expr::Integer(a), Expr::Integer(b)] => Ok(MaybeValue::Just(Expr::Integer(a / b))),
+        _ => Err("Quotient needs exactly two arguments".to_string()),
+    }
+}
+
+fn builtin_remainder(values: Vec<Expr>) -> Result<MaybeValue, String> {
+    match values.as_slice() {
+        [Expr::Integer(a), Expr::Integer(b)] => Ok(MaybeValue::Just(Expr::Integer(a % b))),
+        _ => Err("Remainder needs exactly two arguments".to_string()),
+    }
+}
+
+fn builtin_modulo(values: Vec<Expr>) -> Result<MaybeValue, String> {
+    match values.as_slice() {
+        [Expr::Integer(a), Expr::Integer(b)] => {
+            let r = a % b;
+            Ok(MaybeValue::Just(Expr::Integer(
+                if a.signum() != b.signum() { r + b } else { r },
+            )))
+        }
+        _ => Err("Modulo needs exactly two integers".to_string()),
+    }
+}
+
 type CmpFnType = fn(&Expr, &Expr) -> Result<Expr, String>;
 
 fn builtin_cmp(values: Vec<Expr>, method: CmpFnType) -> Result<MaybeValue, String> {
@@ -467,6 +493,9 @@ impl Environment {
             ("read", builtin_read as BuiltInFnType),
             ("write", builtin_write as BuiltInFnType),
             ("newline", builtin_newline as BuiltInFnType),
+            ("quotient", builtin_quotient as BuiltInFnType),
+            ("remainder", builtin_remainder as BuiltInFnType),
+            ("modulo", builtin_modulo as BuiltInFnType),
         ];
         for (s, f) in to_set {
             env.set(

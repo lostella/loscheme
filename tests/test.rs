@@ -180,6 +180,18 @@ fn test_language_features() {
         ("(apply * (list -5 4))", "-20"),
         ("(define (twoxplusy x y) (+ (* 2 x) y))", ""),
         ("(apply twoxplusy '(-4 2))", "-6"),
+        ("(quotient 7 3)", "2"),
+        ("(quotient -7 3)", "-2"),
+        ("(quotient -7 -3)", "2"),
+        ("(quotient 7 -3)", "-2"),
+        ("(remainder 7 3)", "1"),
+        ("(remainder -7 3)", "-1"),
+        ("(remainder -7 -3)", "-1"),
+        ("(remainder 7 -3)", "1"),
+        ("(modulo 7 3)", "1"),
+        ("(modulo -7 3)", "2"),
+        ("(modulo -7 -3)", "-1"),
+        ("(modulo 7 -3)", "-2"),
         // ("`(a ,(+ 1 2) c)", "(a 3 c)"),
         // (
         //     "(case 2 ((1) 'one) ((2) 'two) (else 'other))",
@@ -194,13 +206,14 @@ fn test_language_features() {
         //     "(letrec ((fact (lambda (n) (if (= n 0) 1 (* n (fact (- n 1))))))) (fact 4))",
         //     "24",
         // ),
-        // ("(quotient 7 3)", "2"),
-        // ("(remainder 7 3)", "1"),
-        // ("(modulo 7 3)", "1"),
+
         // ("(eq? 'a 'a)", "#t"),
         // ("(eq? '(1 2) '(1 2))", "#f"),
         // ("(eqv? 1 1)", "#t"),
+        // ("(eqv? 'a 'a)", "#t"),
+        // ("(eqv? 3.14 3.14)", "#t"),
         // ("(eqv? 0 0.0)", "#f"),
+        // ("(eqv? '(a) '(a))", "#f"),
         // ("(equal? '(1 2) '(1 2))", "#t"),
         // ("(equal? '(a . b) '(a b))", "#f"),
     ];
@@ -278,5 +291,58 @@ fn test_quicksort() {
     assert_eq!(
         format!("{}", run_standard(code).unwrap()),
         "(1 2 3 5 6 7 23 32 32 34 45 62 78 99)"
+    );
+}
+
+#[test]
+fn test_sqrt_newton_1() {
+    let code = r#"
+        (define (sqrt x)
+            (define (square x) (* x x))
+            (define (average x y) (/ (+ x y) 2))
+            (define (good-enough? guess)
+                (< (abs (- (square guess) x)) 0.001))
+            (define (improve guess)
+                (average guess (/ x guess)))
+            (define (sqrt-iter guess)
+                (if (good-enough? guess)
+                    guess
+                    (sqrt-iter (improve guess))))
+            (sqrt-iter 1.0))
+
+        (sqrt 2)
+    "#;
+    assert_eq!(
+        format!("{}", run_standard(code).unwrap()),
+        "1.4142156862745097"
+    );
+}
+
+#[test]
+fn test_sqrt_newton_2() {
+    let code = r#"
+        (define (square x) (* x x))
+
+        (define (average x y) (/ (+ x y) 2))
+
+        (define (good-enough? guess x)
+            (< (abs (- (square guess) x)) 0.001))
+
+        (define (improve guess x)
+            (average guess (/ x guess)))
+
+        (define (sqrt-iter guess x)
+            (if (good-enough? guess x)
+                guess
+                (sqrt-iter (improve guess x) x)))
+
+        (define (sqrt x)
+            (sqrt-iter 1.0 x))
+
+        (sqrt 2)
+    "#;
+    assert_eq!(
+        format!("{}", run_standard(code).unwrap()),
+        "1.4142156862745097"
     );
 }
