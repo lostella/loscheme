@@ -348,6 +348,33 @@ fn builtin_filter(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
     }
 }
 
+fn builtin_map(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
+    if values.len() != 2 {
+        return Err("Map needs exactly two arguments".to_string());
+    }
+    let pred = take(&mut values[0]);
+    let orig = take(&mut values[1]).into_vec()?;
+    match pred {
+        Expr::Procedure(proc) => {
+            let mut v = Vec::new();
+            for x in orig {
+                v.push(proc.call(vec![x])?.materialize()?)
+            }
+            Ok(MaybeValue::Just(Expr::from_vec(v)))
+        }
+        _ => Err("Not a procedure".to_string()),
+    }
+}
+
+fn builtin_reverse(mut values: Vec<Expr>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Reverse needs exactly one argument".to_string());
+    }
+    let mut res = take(&mut values[0]).into_vec()?;
+    res.reverse();
+    Ok(MaybeValue::Just(Expr::from_vec(res)))
+}
+
 fn builtin_read(values: Vec<Expr>) -> Result<MaybeValue, String> {
     if !values.is_empty() {
         return Err("Read takes no arguments".to_string());
@@ -490,6 +517,8 @@ impl Environment {
             ("car", builtin_car as BuiltInFnType),
             ("cdr", builtin_cdr as BuiltInFnType),
             ("filter", builtin_filter as BuiltInFnType),
+            ("map", builtin_map as BuiltInFnType),
+            ("reverse", builtin_reverse as BuiltInFnType),
             ("read", builtin_read as BuiltInFnType),
             ("write", builtin_write as BuiltInFnType),
             ("newline", builtin_newline as BuiltInFnType),
@@ -541,6 +570,9 @@ impl Environment {
 
         match &pair.car {
             Expr::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(args)?)),
+            Expr::Keyword(Keyword::Quasiquote) => {
+                Ok(MaybeValue::Just(self.evaluate_quasiquote(args)?))
+            }
             Expr::Keyword(Keyword::Lambda) => Ok(MaybeValue::Just(self.evaluate_lambda(args)?)),
             Expr::Keyword(Keyword::Define) => Ok(MaybeValue::Just(self.evaluate_define(args)?)),
             Expr::Keyword(Keyword::Set) => Ok(MaybeValue::Just(self.evaluate_set(args)?)),
@@ -573,6 +605,36 @@ impl Environment {
             ));
         }
         Ok(args[0].clone())
+    }
+
+    fn do_quasiquote(&mut self, expr: &Expr) -> Result<Expr, String> {
+        if let Expr::Cons(c) = expr {
+            if let Expr::Keyword(Keyword::Unquote) = c.car {
+                let Expr::Cons(to_eval) = &c.cdr else {
+                    return Err("Unquote as part of improper list".to_string());
+                };
+                let Expr::Null = to_eval.cdr else {
+                    return Err("Unquote takes a single argument".to_string());
+                };
+                return self.evaluate(&to_eval.car);
+            } else {
+                return Ok(Expr::Cons(Box::new(Cons {
+                    car: self.do_quasiquote(&c.car)?,
+                    cdr: self.do_quasiquote(&c.cdr)?,
+                })));
+            }
+        }
+        Ok(expr.clone())
+    }
+
+    fn evaluate_quasiquote(&mut self, args: Vec<&Expr>) -> Result<Expr, String> {
+        if args.len() != 1 {
+            return Err(format!(
+                "Quasiquote needs exactly one argument, got {}",
+                args.len()
+            ));
+        }
+        self.do_quasiquote(args[0])
     }
 
     fn evaluate_lambda(&mut self, mut args: Vec<&Expr>) -> Result<Expr, String> {

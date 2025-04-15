@@ -11,6 +11,8 @@ pub enum Token {
     LParen,
     RParen,
     Quote,
+    Quasiquote,
+    Unquote,
     Dot,
     Atom(String),
 }
@@ -30,7 +32,7 @@ impl<'a> Tokenizer<'a> {
         let mut result = String::new();
 
         while let Some(&c) = self.input.peek() {
-            if c.is_whitespace() || c == '(' || c == ')' || c == '\'' {
+            if c.is_whitespace() || c == '(' || c == ')' || c == '\'' || c == '`' || c == ',' {
                 break;
             } else {
                 result.push(c);
@@ -91,6 +93,14 @@ impl Iterator for Tokenizer<'_> {
                     self.input.next();
                     return Some(Token::Quote);
                 }
+                '`' => {
+                    self.input.next();
+                    return Some(Token::Quasiquote);
+                }
+                ',' => {
+                    self.input.next();
+                    return Some(Token::Unquote);
+                }
                 '.' => {
                     self.input.next();
                     return Some(Token::Dot);
@@ -110,6 +120,8 @@ impl Iterator for Tokenizer<'_> {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Keyword {
     Quote,
+    Quasiquote,
+    Unquote,
     Lambda,
     Define,
     If,
@@ -131,6 +143,8 @@ impl FromStr for Keyword {
         match s {
             "lambda" => Ok(Keyword::Lambda),
             "quote" => Ok(Keyword::Quote),
+            "quasiquote" => Ok(Keyword::Quasiquote),
+            "unquote" => Ok(Keyword::Unquote),
             "define" => Ok(Keyword::Define),
             "if" => Ok(Keyword::If),
             "when" => Ok(Keyword::When),
@@ -151,6 +165,8 @@ impl fmt::Display for Keyword {
         match self {
             Keyword::Lambda => write!(f, "lambda"),
             Keyword::Quote => write!(f, "quote"),
+            Keyword::Quasiquote => write!(f, "quasiquote"),
+            Keyword::Unquote => write!(f, "unquote"),
             Keyword::Define => write!(f, "define"),
             Keyword::If => write!(f, "if"),
             Keyword::When => write!(f, "when"),
@@ -199,6 +215,8 @@ pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String
     match tokens.next() {
         Some(Token::LParen) => parse_list(tokens),
         Some(Token::Quote) => parse_quote(tokens),
+        Some(Token::Quasiquote) => parse_quasiquote(tokens),
+        Some(Token::Unquote) => parse_unquote(tokens),
         Some(Token::Atom(s)) => parse_atom(s),
         Some(Token::Dot) => Err("Unexpected dot".to_string()),
         Some(Token::RParen) => Err("Unexpected closing parenthesis".to_string()),
@@ -235,6 +253,26 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
 fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     Ok(Expr::Cons(Box::new(Cons {
         car: Expr::Keyword(Keyword::Quote),
+        cdr: Expr::Cons(Box::new(Cons {
+            car: parse_expression(tokens)?,
+            cdr: Expr::Null,
+        })),
+    })))
+}
+
+fn parse_quasiquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
+    Ok(Expr::Cons(Box::new(Cons {
+        car: Expr::Keyword(Keyword::Quasiquote),
+        cdr: Expr::Cons(Box::new(Cons {
+            car: parse_expression(tokens)?,
+            cdr: Expr::Null,
+        })),
+    })))
+}
+
+fn parse_unquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
+    Ok(Expr::Cons(Box::new(Cons {
+        car: Expr::Keyword(Keyword::Unquote),
         cdr: Expr::Cons(Box::new(Cons {
             car: parse_expression(tokens)?,
             cdr: Expr::Null,
