@@ -1,9 +1,8 @@
-use crate::rationals::{lcm, simplify};
-use crate::treewalk::Procedure;
+use crate::rationals::simplify;
 use internment::Intern;
 use std::fmt;
 use std::iter::Peekable;
-use std::mem::take;
+use std::rc::Rc;
 use std::str::{Chars, FromStr};
 
 #[derive(Debug, PartialEq)]
@@ -187,10 +186,8 @@ pub struct Cons {
     pub cdr: Expr,
 }
 
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
-    #[default]
-    Unspecified,
     Null,
     Integer(i64),
     Float(f64),
@@ -199,8 +196,7 @@ pub enum Expr {
     Bool(bool),
     Keyword(Keyword),
     Symbol(Intern<String>),
-    Procedure(Procedure),
-    Cons(Box<Cons>),
+    Cons(Rc<Cons>),
 }
 
 pub fn parse_tokens(tokens: &mut Peekable<Tokenizer>) -> Result<Vec<Expr>, String> {
@@ -240,7 +236,7 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
                 }
             }
             _ => {
-                return Ok(Expr::Cons(Box::new(Cons {
+                return Ok(Expr::Cons(Rc::new(Cons {
                     car: parse_expression(tokens)?,
                     cdr: parse_list(tokens)?,
                 })));
@@ -251,9 +247,9 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
 }
 
 fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Box::new(Cons {
+    Ok(Expr::Cons(Rc::new(Cons {
         car: Expr::Keyword(Keyword::Quote),
-        cdr: Expr::Cons(Box::new(Cons {
+        cdr: Expr::Cons(Rc::new(Cons {
             car: parse_expression(tokens)?,
             cdr: Expr::Null,
         })),
@@ -261,9 +257,9 @@ fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
 }
 
 fn parse_quasiquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Box::new(Cons {
+    Ok(Expr::Cons(Rc::new(Cons {
         car: Expr::Keyword(Keyword::Quasiquote),
-        cdr: Expr::Cons(Box::new(Cons {
+        cdr: Expr::Cons(Rc::new(Cons {
             car: parse_expression(tokens)?,
             cdr: Expr::Null,
         })),
@@ -271,9 +267,9 @@ fn parse_quasiquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
 }
 
 fn parse_unquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Box::new(Cons {
+    Ok(Expr::Cons(Rc::new(Cons {
         car: Expr::Keyword(Keyword::Unquote),
-        cdr: Expr::Cons(Box::new(Cons {
+        cdr: Expr::Cons(Rc::new(Cons {
             car: parse_expression(tokens)?,
             cdr: Expr::Null,
         })),
@@ -333,7 +329,6 @@ pub fn parse(code: &str) -> Result<Vec<Expr>, String> {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Unspecified => Ok(()),
             Expr::Null => write!(f, "()"),
             Expr::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
             Expr::Integer(v) => write!(f, "{}", v),
@@ -342,7 +337,6 @@ impl fmt::Display for Expr {
             Expr::Str(v) => write!(f, "\"{}\"", v),
             Expr::Keyword(k) => write!(f, "{}", k),
             Expr::Symbol(s) => write!(f, "{}", s),
-            Expr::Procedure(proc) => write!(f, "{}", proc),
             Expr::Cons(p) => {
                 write!(f, "(")?;
                 let mut cur = p;
@@ -366,12 +360,12 @@ impl fmt::Display for Expr {
 }
 
 impl Expr {
-    pub fn from_vec(mut v: Vec<Expr>) -> Self {
+    pub fn from_slice(v: &[Expr]) -> Self {
         match v.len() {
             0 => Expr::Null,
-            _ => Expr::Cons(Box::new(Cons {
-                car: take(&mut v[0]),
-                cdr: Expr::from_vec(v.split_off(1)),
+            _ => Expr::Cons(Rc::new(Cons {
+                car: v[0].clone(),
+                cdr: Expr::from_slice(&v[1..v.len()]),
             })),
         }
     }
@@ -382,237 +376,12 @@ impl Expr {
         loop {
             match cur {
                 Expr::Cons(pair) => {
-                    res.push(pair.car);
-                    cur = pair.cdr;
+                    res.push(pair.car.clone());
+                    cur = pair.cdr.clone();
                 }
                 Expr::Null => return Ok(res),
                 _ => return Err("Not a proper list".to_string()),
             }
-        }
-    }
-
-    pub fn borrow_vec(&self) -> Result<Vec<&Expr>, String> {
-        let mut cur = self;
-        let mut res = Vec::new();
-        loop {
-            match cur {
-                Expr::Null => break,
-                Expr::Cons(pair) => {
-                    res.push(&pair.car);
-                    cur = &pair.cdr;
-                }
-                _ => return Err("Not a proper list".to_string()),
-            }
-        }
-        Ok(res)
-    }
-
-    pub fn add(&self, other: &Expr) -> Result<Expr, String> {
-        match (self, other) {
-            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a + b)),
-            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 + b)),
-            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a + b)),
-            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a + *b as f64)),
-            (Expr::Rational(num, denom), Expr::Float(b)) => {
-                Ok(Expr::Float((*num as f64) / (*denom as f64) + b))
-            }
-            (Expr::Float(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Float(a + (*num as f64) / (*denom as f64)))
-            }
-            (Expr::Rational(num, denom), Expr::Integer(b)) => {
-                Ok(make_rational(num + (b * denom), *denom))
-            }
-            (Expr::Integer(a), Expr::Rational(num, denom)) => {
-                Ok(make_rational((a * denom) + num, *denom))
-            }
-            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
-                let denom = lcm(*denom1, *denom2);
-                Ok(make_rational(
-                    num1 * denom / denom1 + num2 * denom / denom2,
-                    denom,
-                ))
-            }
-            _ => Err("Cannot add types".to_string()),
-        }
-    }
-
-    pub fn mul(&self, other: &Expr) -> Result<Expr, String> {
-        match (self, other) {
-            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a * b)),
-            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 * b)),
-            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a * b)),
-            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a * *b as f64)),
-            (Expr::Rational(num, denom), Expr::Float(b)) => {
-                Ok(Expr::Float((*num as f64) / (*denom as f64) * b))
-            }
-            (Expr::Float(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Float(a * (*num as f64) / (*denom as f64)))
-            }
-            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(make_rational(*num * *b, *denom)),
-            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(make_rational(*a * *num, *denom)),
-            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
-                Ok(make_rational(num1 * num2, denom1 * denom2))
-            }
-            _ => Err("Cannot multiply types".to_string()),
-        }
-    }
-
-    pub fn sub(&self, other: &Expr) -> Result<Expr, String> {
-        match (self, other) {
-            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Integer(a - b)),
-            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 - b)),
-            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a - b)),
-            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a - *b as f64)),
-            (Expr::Rational(num, denom), Expr::Float(b)) => {
-                Ok(Expr::Float((*num as f64) / (*denom as f64) - b))
-            }
-            (Expr::Float(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Float(a - (*num as f64) / (*denom as f64)))
-            }
-            (Expr::Rational(num, denom), Expr::Integer(b)) => {
-                Ok(make_rational(num - (b * denom), *denom))
-            }
-            (Expr::Integer(a), Expr::Rational(num, denom)) => {
-                Ok(make_rational((a * denom) - num, *denom))
-            }
-            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
-                let denom = lcm(*denom1, *denom2);
-                Ok(make_rational(
-                    num1 * denom / denom1 - num2 * denom / denom2,
-                    denom,
-                ))
-            }
-            _ => Err("Cannot subtract types".to_string()),
-        }
-    }
-
-    pub fn div(&self, other: &Expr) -> Result<Expr, String> {
-        match (self, other) {
-            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Float(*a as f64 / *b as f64)),
-            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Float(*a as f64 / b)),
-            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Float(a / b)),
-            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Float(a / *b as f64)),
-            (Expr::Rational(num, denom), Expr::Float(b)) => {
-                Ok(Expr::Float((*num as f64) / (*denom as f64) / b))
-            }
-            (Expr::Float(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Float(a / (*num as f64) / (*denom as f64)))
-            }
-            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(make_rational(*num, *denom * *b)),
-            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(make_rational(*num, *a * *denom)),
-            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
-                Ok(make_rational(num1 * denom2, denom1 * num2))
-            }
-            _ => Err("Cannot divide types".to_string()),
-        }
-    }
-
-    pub fn lt(&self, other: &Expr) -> Result<Expr, String> {
-        match (self, other) {
-            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a < b)),
-            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) < *b)),
-            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a < b)),
-            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a < (*b as f64))),
-            (Expr::Rational(num, denom), Expr::Float(b)) => {
-                Ok(Expr::Bool((*num as f64) / (*denom as f64) < *b))
-            }
-            (Expr::Float(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Bool(*a < (*num as f64) / (*denom as f64)))
-            }
-            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(Expr::Bool(*num < denom * b)),
-            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(Expr::Bool(*num < denom * a)),
-            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
-                Ok(Expr::Bool(num1 * denom2 < num2 * denom1))
-            }
-            _ => Err("Cannot compare types".to_string()),
-        }
-    }
-
-    pub fn gt(&self, other: &Expr) -> Result<Expr, String> {
-        match (self, other) {
-            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a > b)),
-            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) > *b)),
-            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a > b)),
-            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a > (*b as f64))),
-            (Expr::Rational(num, denom), Expr::Float(b)) => {
-                Ok(Expr::Bool((*num as f64) / (*denom as f64) > *b))
-            }
-            (Expr::Float(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Bool(*a > (*num as f64) / (*denom as f64)))
-            }
-            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(Expr::Bool(*num > denom * b)),
-            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(Expr::Bool(*num > denom * a)),
-            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
-                Ok(Expr::Bool(num1 * denom2 > num2 * denom1))
-            }
-            _ => Err("Cannot compare types".to_string()),
-        }
-    }
-
-    pub fn leq(&self, other: &Expr) -> Result<Expr, String> {
-        match (self, other) {
-            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a <= b)),
-            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) <= *b)),
-            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a <= b)),
-            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a <= (*b as f64))),
-            (Expr::Rational(num, denom), Expr::Float(b)) => {
-                Ok(Expr::Bool((*num as f64) / (*denom as f64) <= *b))
-            }
-            (Expr::Float(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Bool(*a <= (*num as f64) / (*denom as f64)))
-            }
-            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(Expr::Bool(*num <= denom * b)),
-            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(Expr::Bool(*num <= denom * a)),
-            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
-                Ok(Expr::Bool(num1 * denom2 <= num2 * denom1))
-            }
-            _ => Err("Cannot compare types".to_string()),
-        }
-    }
-
-    pub fn geq(&self, other: &Expr) -> Result<Expr, String> {
-        match (self, other) {
-            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a >= b)),
-            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool((*a as f64) >= *b)),
-            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a >= b)),
-            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a >= (*b as f64))),
-            (Expr::Rational(num, denom), Expr::Float(b)) => {
-                Ok(Expr::Bool((*num as f64) / (*denom as f64) >= *b))
-            }
-            (Expr::Float(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Bool(*a >= (*num as f64) / (*denom as f64)))
-            }
-            (Expr::Rational(num, denom), Expr::Integer(b)) => Ok(Expr::Bool(*num >= denom * b)),
-            (Expr::Integer(a), Expr::Rational(num, denom)) => Ok(Expr::Bool(*num >= denom * a)),
-            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
-                Ok(Expr::Bool(num1 * denom2 >= num2 * denom1))
-            }
-            _ => Err("Cannot compare types".to_string()),
-        }
-    }
-
-    pub fn iseq(&self, other: &Expr) -> Result<Expr, String> {
-        match (self, other) {
-            (Expr::Integer(a), Expr::Integer(b)) => Ok(Expr::Bool(a == b)),
-            (Expr::Integer(a), Expr::Float(b)) => Ok(Expr::Bool(*a as f64 == *b)),
-            (Expr::Float(a), Expr::Float(b)) => Ok(Expr::Bool(a == b)),
-            (Expr::Float(a), Expr::Integer(b)) => Ok(Expr::Bool(*a == *b as f64)),
-            (Expr::Rational(num, denom), Expr::Float(b)) => {
-                Ok(Expr::Bool((*num as f64) / (*denom as f64) == *b))
-            }
-            (Expr::Float(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Bool(*a == (*num as f64) / (*denom as f64)))
-            }
-            (Expr::Rational(num, denom), Expr::Integer(b)) => {
-                Ok(Expr::Bool(num == b && *denom == 1))
-            }
-            (Expr::Integer(a), Expr::Rational(num, denom)) => {
-                Ok(Expr::Bool(num == a && *denom == 1))
-            }
-            (Expr::Rational(num1, denom1), Expr::Rational(num2, denom2)) => {
-                Ok(Expr::Bool(num1 == num2 && denom1 == denom2))
-            }
-            _ => Err("Cannot compare types".to_string()),
         }
     }
 }
@@ -664,10 +433,10 @@ mod tests {
     #[test]
     fn test_parser() {
         let code = "; comment\n(define (square x) ; comment\n\t(* x x))";
-        let expected = vec![Expr::from_vec(vec![
+        let expected = vec![Expr::from_slice(&[
             Expr::Keyword(Keyword::Define),
-            Expr::from_vec(vec![symbol_from_str("square"), symbol_from_str("x")]),
-            Expr::from_vec(vec![
+            Expr::from_slice(&[symbol_from_str("square"), symbol_from_str("x")]),
+            Expr::from_slice(&[
                 symbol_from_str("*"),
                 symbol_from_str("x"),
                 symbol_from_str("x"),
@@ -680,24 +449,24 @@ mod tests {
     #[test]
     fn test_pair_vs_vec() {
         let v = vec![Expr::Integer(3), Expr::Integer(2), Expr::Integer(1)];
-        let expr = Expr::from_vec(v.clone());
+        let expr = Expr::from_slice(&v);
         let res = expr.into_vec();
         assert_eq!(res, Ok(v));
     }
 
     #[test]
     fn test_external_repr() {
-        let expr = Expr::from_vec(vec![
+        let expr = Expr::from_slice(&[
             Expr::Keyword(Keyword::Define),
-            Expr::from_vec(vec![symbol_from_str("f"), symbol_from_str("x")]),
+            Expr::from_slice(&[symbol_from_str("f"), symbol_from_str("x")]),
             Expr::Str("hello, world!".to_string()),
-            Expr::from_vec(vec![Expr::Keyword(Keyword::Quote), symbol_from_str("a")]),
-            Expr::from_vec(vec![
+            Expr::from_slice(&[Expr::Keyword(Keyword::Quote), symbol_from_str("a")]),
+            Expr::from_slice(&[
                 symbol_from_str("*"),
                 symbol_from_str("x"),
                 symbol_from_str("2"),
             ]),
-            Expr::Cons(Box::new(Cons {
+            Expr::Cons(Rc::new(Cons {
                 car: Expr::Integer(-1),
                 cdr: Expr::Integer(1),
             })),

@@ -1,16 +1,16 @@
 use crate::errors::MyError;
-use crate::parser::{parse, Expr};
-use crate::treewalk::Environment;
+use crate::parser::parse;
+use crate::treewalk::{Environment, Value};
 
-pub fn run(code: &str, env: &mut Environment) -> Result<Expr, MyError> {
-    let mut val: Expr = Expr::Unspecified;
+pub fn run(code: &str, env: &mut Environment) -> Result<Value, MyError> {
+    let mut val: Value = Value::Unspecified;
 
     match parse(code) {
         Ok(exprs) => {
             for expr in exprs {
-                match env.evaluate(&expr) {
+                match env.evaluate(&expr.into()) {
                     Err(err) => return Err(MyError::RuntimeError(err.to_string())),
-                    Ok(expr) => val = expr,
+                    Ok(res) => val = res,
                 }
             }
             Ok(val)
@@ -19,7 +19,7 @@ pub fn run(code: &str, env: &mut Environment) -> Result<Expr, MyError> {
     }
 }
 
-pub fn run_standard(code: &str) -> Result<Expr, MyError> {
+pub fn run_standard(code: &str) -> Result<Value, MyError> {
     let mut env = Environment::standard().child();
     run(code, &mut env)
 }
