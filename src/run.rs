@@ -8,7 +8,7 @@ pub fn run(code: &str, env: &mut Environment) -> Result<Value, MyError> {
     match parse(code) {
         Ok(exprs) => {
             for expr in exprs {
-                match env.evaluate(&expr.into()) {
+                match env.evaluate(Value::from(expr)) {
                     Err(err) => return Err(MyError::RuntimeError(err.to_string())),
                     Ok(res) => val = res,
                 }
