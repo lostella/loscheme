@@ -11,8 +11,8 @@ use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Cons {
-    pub car: Value,
-    pub cdr: Value,
+    pub car: Rc<Value>,
+    pub cdr: Rc<Value>,
 }
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -25,7 +25,7 @@ pub enum Value {
     Bool(bool),
     Keyword(Keyword),
     Symbol(Intern<String>),
-    Cons(Rc<Cons>),
+    Cons(Cons),
     Procedure(Procedure),
     #[default]
     Unspecified,
