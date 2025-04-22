@@ -780,10 +780,8 @@ impl MaybeValue {
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
     data: FxHashMap<Intern<String>, Value>,
-    parent: Option<EnvironmentLink>,
+    parent: Option<Rc<RefCell<EnvironmentNode>>>,
 }
-
-type EnvironmentLink = Rc<RefCell<EnvironmentNode>>;
 
 impl EnvironmentNode {
     #[inline(always)]
@@ -805,41 +803,34 @@ impl EnvironmentNode {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Environment {
-    head: EnvironmentLink,
+    head: Rc<RefCell<EnvironmentNode>>,
 }
 
 type BuiltInFnType = fn(Vec<Value>) -> Result<MaybeValue, String>;
 
 impl Environment {
-    pub fn empty() -> Environment {
+    pub fn empty() -> Self {
         let node = EnvironmentNode {
             data: FxHashMap::default(),
             parent: None,
         };
-        Environment {
+        Self {
             head: Rc::new(RefCell::new(node)),
         }
     }
 
-    pub fn child(&self) -> Environment {
+    pub fn child(&self) -> Self {
         let node = EnvironmentNode {
             data: FxHashMap::default(),
             parent: Some(self.head.clone()),
         };
-        Environment {
+        Self {
             head: Rc::new(RefCell::new(node)),
         }
     }
 
-    pub fn standard() -> Environment {
-        let node = EnvironmentNode {
-            data: FxHashMap::default(),
-            parent: None,
-        };
-        let mut env = Environment {
-            head: Rc::new(RefCell::new(node)),
-        };
-        // TODO add all built-in procedures in standard env
+    pub fn standard() -> Self {
+        let mut env = Self::empty();
         let to_set = vec![
             ("+", builtin_add as BuiltInFnType),
             ("-", builtin_sub as BuiltInFnType),
