@@ -34,6 +34,12 @@ impl From<Expr> for ValueRef {
     }
 }
 
+impl From<Value> for ValueRef {
+    fn from(value: Value) -> Self {
+        Rc::new(RefCell::new(value))
+    }
+}
+
 impl From<Expr> for Value {
     fn from(expr: Expr) -> Self {
         match expr {
@@ -66,20 +72,20 @@ impl Value {
     pub fn from_vec(mut v: Vec<Value>) -> Self {
         match v.len() {
             0 => Value::Null,
-            _ => Value::Cons(Rc::new(Cons {
-                car: take(&mut v[0]),
-                cdr: Value::from_vec(v.split_off(1)),
-            })),
+            _ => Value::Pair {
+                car: take(&mut v[0]).into(),
+                cdr: Value::from_vec(v.split_off(1)).into(),
+            },
         }
     }
 
     pub fn from_slice(v: &[Value]) -> Self {
         match v.len() {
             0 => Value::Null,
-            _ => Value::Cons(Rc::new(Cons {
-                car: v[0].clone(),
-                cdr: Value::from_slice(&v[1..v.len()]),
-            })),
+            _ => Value::Pair {
+                car: v[0].clone().into(),
+                cdr: Value::from_slice(&v[1..v.len()]).into(),
+            },
         }
     }
 
@@ -89,8 +95,8 @@ impl Value {
         loop {
             match cur {
                 Value::Cons(pair) => {
-                    res.push(pair.car.clone());
-                    cur = pair.cdr.clone();
+                    res.push(pair.car.borrow().clone());
+                    cur = pair.cdr.borrow().clone();
                 }
                 Value::Null => return Ok(res),
                 _ => return Err("Not a proper list".to_string()),
