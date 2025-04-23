@@ -38,7 +38,7 @@ impl From<Expr> for Value {
     fn from(expr: Expr) -> Self {
         match expr {
             Expr::Null => Value::Null,
-            Expr::Bool(x) => ValueKind::Bool(x),
+            Expr::Bool(x) => Value::Bool(x),
             Expr::Integer(x) => Value::Integer(x),
             Expr::Float(x) => Value::Float(x),
             Expr::Rational(x, y) => Value::Rational(x, y),
