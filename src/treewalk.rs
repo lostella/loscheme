@@ -27,13 +27,6 @@ pub enum Value {
     Unspecified,
 }
 
-impl From<Expr> for ValueRef {
-    fn from(expr: Expr) -> Self {
-        let value = Value::from(expr);
-        Rc::new(RefCell::new(value))
-    }
-}
-
 impl From<Value> for ValueRef {
     fn from(value: Value) -> Self {
         Rc::new(RefCell::new(value))
@@ -52,8 +45,8 @@ impl From<Expr> for Value {
             Expr::Keyword(x) => Value::Keyword(x),
             Expr::Symbol(x) => Value::Symbol(x),
             Expr::Cons(x) => Value::Pair {
-                car: x.car.into(),
-                cdr: x.cdr.into(),
+                car: x.car.into().into(),
+                cdr: x.cdr.into().into(),
             },
         }
     }
