@@ -45,8 +45,8 @@ impl From<Expr> for Value {
             Expr::Keyword(x) => Value::Keyword(x),
             Expr::Symbol(x) => Value::Symbol(x),
             Expr::Cons(x) => Value::Pair {
-                car: x.car.into().into(),
-                cdr: x.cdr.into().into(),
+                car: ValueRef::from(Value::from(x.car)),
+                cdr: ValueRef::from(Value::from(x.cdr)),
             },
         }
     }
