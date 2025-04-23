@@ -9,11 +9,7 @@ use std::iter::zip;
 use std::mem::take;
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Cons {
-    pub car: Rc<Value>,
-    pub cdr: Rc<Value>,
-}
+type ValueRef = Rc<RefCell<ValueKind>>;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub enum Value {
@@ -25,27 +21,34 @@ pub enum Value {
     Bool(bool),
     Keyword(Keyword),
     Symbol(Intern<String>),
-    Cons(Cons),
+    Pair { car: ValueRef, cdr: ValueRef },
     Procedure(Procedure),
     #[default]
     Unspecified,
+}
+
+impl From<Expr> for ValueRef {
+    fn from(expr: Expr) -> Self {
+        let value = Value::from(expr);
+        Rc::new(RefCell::new(value))
+    }
 }
 
 impl From<Expr> for Value {
     fn from(expr: Expr) -> Self {
         match expr {
             Expr::Null => Value::Null,
-            Expr::Bool(x) => Value::Bool(x),
+            Expr::Bool(x) => ValueKind::Bool(x),
             Expr::Integer(x) => Value::Integer(x),
             Expr::Float(x) => Value::Float(x),
             Expr::Rational(x, y) => Value::Rational(x, y),
             Expr::Str(x) => Value::Str(x),
             Expr::Keyword(x) => Value::Keyword(x),
             Expr::Symbol(x) => Value::Symbol(x),
-            Expr::Cons(x) => Value::Cons(Rc::new(Cons {
-                car: Value::from(x.car.clone()),
-                cdr: Value::from(x.cdr.clone()),
-            })),
+            Expr::Cons(x) => Value::Pair {
+                car: x.car.into(),
+                cdr: x.cdr.into(),
+            },
         }
     }
 }
