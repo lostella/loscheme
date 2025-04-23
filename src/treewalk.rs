@@ -9,7 +9,7 @@ use std::iter::zip;
 use std::mem::take;
 use std::rc::Rc;
 
-type ValueRef = Rc<RefCell<ValueKind>>;
+type ValueRef = Rc<RefCell<Value>>;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub enum Value {
