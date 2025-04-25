@@ -401,14 +401,14 @@ impl fmt::Display for Value {
 fn builtin_add(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(0), |acc, x| acc.add(&*x.borrow()))?;
+        .try_fold(Value::Integer(0), |acc, x| acc.add(&x.borrow()))?;
     Ok(MaybeValue::Just(res.into()))
 }
 
 fn builtin_mul(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(1), |acc, x| acc.mul(&*x.borrow()))?;
+        .try_fold(Value::Integer(1), |acc, x| acc.mul(&x.borrow()))?;
     Ok(MaybeValue::Just(res.into()))
 }
 
@@ -417,9 +417,9 @@ fn builtin_sub(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     let Some(v) = values_iter.next() else {
         return Ok(MaybeValue::Just(Value::Integer(0).into()));
     };
-    let mut res = (&*v.borrow()).clone();
-    while let Some(v) = values_iter.next() {
-        res = res.sub(&*v.borrow())?
+    let mut res = (*v.borrow()).clone();
+    for v in values_iter {
+        res = res.sub(&v.borrow())?
     }
     Ok(MaybeValue::Just(res.into()))
 }
@@ -444,9 +444,9 @@ fn builtin_div(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     let Some(v) = values_iter.next() else {
         return Ok(MaybeValue::Just(Value::Integer(1).into()));
     };
-    let mut res = (&*v.borrow()).clone();
-    while let Some(v) = values_iter.next() {
-        res = res.div(&*v.borrow())?
+    let mut res = (*v.borrow()).clone();
+    for v in values_iter {
+        res = res.div(&v.borrow())?
     }
     Ok(MaybeValue::Just(res.into()))
 }
@@ -493,7 +493,7 @@ type CmpFnType = fn(&Value, &Value) -> Result<Value, String>;
 
 fn builtin_cmp(values: Vec<ValueRef>, method: CmpFnType) -> Result<MaybeValue, String> {
     for (a, b) in values.iter().zip(values.iter().skip(1)) {
-        match method(&*a.borrow(), &*b.borrow()) {
+        match method(&a.borrow(), &b.borrow()) {
             Ok(Value::Bool(false)) => return Ok(MaybeValue::Just(Value::Bool(false).into())),
             Err(s) => return Err(s),
             _ => (),
@@ -546,7 +546,7 @@ fn builtin_apply(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     match &*values[0].borrow() {
         Value::Procedure(proc) => Ok(MaybeValue::TailCall(
             proc.clone(),
-            (&*values[1].borrow()).borrow_vec()?,
+            values[1].borrow().borrow_vec()?,
         )),
         _ => Err("Apply needs a procedure and a list as arguments".to_string()),
     }
@@ -556,7 +556,7 @@ fn builtin_length(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument".to_string());
     }
-    match (&*values[0].borrow()).borrow_vec() {
+    match values[0].borrow().borrow_vec() {
         Ok(v) => Ok(MaybeValue::Just(Value::Integer(v.len() as i64).into())),
         _ => Err("Cannot compute length (is it a list?)".to_string()),
     }
@@ -746,7 +746,7 @@ fn builtin_filter(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     match &*values[0].borrow() {
         Value::Procedure(proc) => {
             let mut v = Vec::new();
-            for x in (&*values[1].borrow()).borrow_vec()? {
+            for x in values[1].borrow().borrow_vec()? {
                 if proc.call(vec![x.clone()])?.materialize()? == Value::Bool(true).into() {
                     v.push(x)
                 }
@@ -764,7 +764,7 @@ fn builtin_map(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     match &*values[0].borrow() {
         Value::Procedure(proc) => {
             let mut v = Vec::new();
-            for x in (&*values[1].borrow()).borrow_vec()? {
+            for x in values[1].borrow().borrow_vec()? {
                 v.push(proc.call(vec![x])?.materialize()?)
             }
             Ok(MaybeValue::Just(Value::from_slice_ref(&v).into()))
@@ -1154,7 +1154,7 @@ impl Environment {
         for clause in args {
             match &*clause.borrow() {
                 Value::Pair { car, cdr } => {
-                    let seq = (&*cdr.borrow()).borrow_vec()?;
+                    let seq = cdr.borrow().borrow_vec()?;
                     if let Value::Symbol(s) = &*car.borrow() {
                         if **s == "else" {
                             return self.evaluate_begin(seq);
