@@ -9,7 +9,7 @@ use std::iter::zip;
 use std::mem::take;
 use std::rc::Rc;
 
-type ValueRef = Rc<RefCell<Value>>;
+pub type ValueRef = Rc<RefCell<Value>>;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub enum Value {
@@ -21,16 +21,13 @@ pub enum Value {
     Bool(bool),
     Keyword(Keyword),
     Symbol(Intern<String>),
-    Pair { car: ValueRef, cdr: ValueRef },
+    Pair {
+        car: ValueRef,
+        cdr: ValueRef,
+    },
     Procedure(Procedure),
     #[default]
     Unspecified,
-}
-
-impl From<Value> for ValueRef {
-    fn from(value: Value) -> Self {
-        Rc::new(RefCell::new(value))
-    }
 }
 
 impl From<Expr> for Value {
@@ -45,10 +42,16 @@ impl From<Expr> for Value {
             Expr::Keyword(x) => Value::Keyword(x),
             Expr::Symbol(x) => Value::Symbol(x),
             Expr::Cons(x) => Value::Pair {
-                car: ValueRef::from(Value::from(x.car)),
-                cdr: ValueRef::from(Value::from(x.cdr)),
+                car: ValueRef::from(Value::from(x.car.clone())),
+                cdr: ValueRef::from(Value::from(x.cdr.clone())),
             },
         }
+    }
+}
+
+impl From<Value> for ValueRef {
+    fn from(value: Value) -> Self {
+        Rc::new(RefCell::new(value))
     }
 }
 
@@ -72,6 +75,16 @@ impl Value {
         }
     }
 
+    pub fn from_slice_ref(v: &[ValueRef]) -> Self {
+        match v.len() {
+            0 => Value::Null,
+            _ => Value::Pair {
+                car: v[0].clone(),
+                cdr: Value::from_slice_ref(&v[1..v.len()]).into(),
+            },
+        }
+    }
+
     pub fn from_slice(v: &[Value]) -> Self {
         match v.len() {
             0 => Value::Null,
@@ -82,35 +95,47 @@ impl Value {
         }
     }
 
-    pub fn into_vec(self) -> Result<Vec<Value>, String> {
-        let mut res = Vec::new();
-        let mut cur = self;
-        loop {
-            match cur {
-                Value::Cons(pair) => {
-                    res.push(pair.car.borrow().clone());
-                    cur = pair.cdr.borrow().clone();
-                }
-                Value::Null => return Ok(res),
-                _ => return Err("Not a proper list".to_string()),
-            }
-        }
-    }
+    // pub fn into_vec(self) -> Result<Vec<ValueRef>, String> {
+    //     let mut res = Vec::new();
+    //     let mut cur = &self;
+    //     loop {
+    //         match cur {
+    //             Value::Pair { car, cdr } => {
+    //                 res.push(car.clone());
+    //                 cur = &*cdr.borrow();
+    //             }
+    //             Value::Null => return Ok(res),
+    //             _ => return Err("Not a proper list".to_string()),
+    //         }
+    //     }
+    // }
 
-    pub fn borrow_vec(&self) -> Result<Vec<&Value>, String> {
-        let mut cur = self;
-        let mut res = Vec::new();
-        loop {
-            match cur {
-                Value::Null => break,
-                Value::Cons(pair) => {
-                    res.push(&pair.car);
-                    cur = &pair.cdr;
+    pub fn borrow_vec(&self) -> Result<Vec<ValueRef>, String> {
+        match self {
+            Value::Null => Ok(vec![]),
+            Value::Pair { car, cdr } => {
+                let mut res = vec![car.clone()];
+                let mut next = Rc::clone(cdr);
+                loop {
+                    let borrowed = next.borrow();
+                    match &*borrowed {
+                        Value::Pair {
+                            car: inner_car,
+                            cdr: inner_cdr,
+                        } => {
+                            res.push(inner_car.clone());
+                            let new_next = Rc::clone(inner_cdr);
+                            drop(borrowed);
+                            next = new_next;
+                        }
+                        Value::Null => break,
+                        _ => return Err("Not a proper list".to_string()),
+                    }
                 }
-                _ => return Err("Not a proper list".to_string()),
+                Ok(res)
             }
+            _ => Err("Not a list".to_string()),
         }
-        Ok(res)
     }
 
     pub fn add(&self, other: &Value) -> Result<Value, String> {
@@ -342,20 +367,27 @@ impl fmt::Display for Value {
             Value::Str(v) => write!(f, "\"{}\"", v),
             Value::Keyword(k) => write!(f, "{}", k),
             Value::Symbol(s) => write!(f, "{}", s),
-            Value::Cons(p) => {
-                write!(f, "(")?;
-                let mut cur = p;
+            Value::Pair { car, cdr } => {
+                write!(f, "({}", &*car.borrow())?;
+                let mut next = Rc::clone(cdr);
                 loop {
-                    write!(f, "{}", cur.car)?;
-                    match &cur.cdr {
+                    let borrowed = next.borrow();
+                    match &*borrowed {
+                        Value::Pair {
+                            car: inner_car,
+                            cdr: inner_cdr,
+                        } => {
+                            write!(f, " {}", &*inner_car.borrow())?;
+                            let new_next = Rc::clone(inner_cdr);
+                            drop(borrowed);
+                            next = new_next;
+                        }
                         Value::Null => break,
-                        Value::Cons(pp) => cur = pp,
-                        _ => {
-                            write!(f, " . {}", cur.cdr)?;
+                        other => {
+                            write!(f, " . {}", other)?;
                             break;
                         }
                     }
-                    write!(f, " ")?;
                 }
                 write!(f, ")")?;
                 Ok(())
@@ -366,374 +398,391 @@ impl fmt::Display for Value {
     }
 }
 
-fn builtin_add(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_add(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(0), |acc, x| acc.add(&x))?;
-    Ok(MaybeValue::Just(res))
+        .try_fold(Value::Integer(0), |acc, x| acc.add(&*x.borrow()))?;
+    Ok(MaybeValue::Just(res.into()))
 }
 
-fn builtin_mul(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_mul(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(1), |acc, x| acc.mul(&x))?;
-    Ok(MaybeValue::Just(res))
+        .try_fold(Value::Integer(1), |acc, x| acc.mul(&*x.borrow()))?;
+    Ok(MaybeValue::Just(res.into()))
 }
 
-fn builtin_sub(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_sub(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     let mut values_iter = values.into_iter();
-    let res = match values_iter.next() {
-        None => Value::Integer(0),
-        Some(v) => values_iter.try_fold(v, |acc, x| acc.sub(&x))?,
+    let Some(v) = values_iter.next() else {
+        return Ok(MaybeValue::Just(Value::Integer(0).into()));
     };
-    Ok(MaybeValue::Just(res))
+    let mut res = (&*v.borrow()).clone();
+    while let Some(v) = values_iter.next() {
+        res = res.sub(&*v.borrow())?
+    }
+    Ok(MaybeValue::Just(res.into()))
 }
 
-fn builtin_abs(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_abs(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Abs needs exactly one argument".to_string());
     }
     let res = match values.first() {
-        Some(value) => match value {
+        Some(value) => match &*value.borrow() {
             Value::Integer(n) => Value::Integer(if *n >= 0 { *n } else { -*n }),
             Value::Float(n) => Value::Float(if *n >= 0.0 { *n } else { -*n }),
             _ => return Err("Abs needs a number argument".to_string()),
         },
         _ => return Err("Abs needs exactly one argument".to_string()),
     };
-    Ok(MaybeValue::Just(res))
+    Ok(MaybeValue::Just(res.into()))
 }
 
-fn builtin_div(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_div(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     let mut values_iter = values.into_iter();
-    let res = match values_iter.next() {
-        None => Value::Integer(1),
-        Some(v) => values_iter.try_fold(v, |acc, x| acc.div(&x))?,
+    let Some(v) = values_iter.next() else {
+        return Ok(MaybeValue::Just(Value::Integer(1).into()));
     };
-    Ok(MaybeValue::Just(res))
+    let mut res = (&*v.borrow()).clone();
+    while let Some(v) = values_iter.next() {
+        res = res.div(&*v.borrow())?
+    }
+    Ok(MaybeValue::Just(res.into()))
 }
 
-fn builtin_quotient(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_quotient(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     match values.as_slice() {
-        [Value::Integer(a), Value::Integer(b)] => Ok(MaybeValue::Just(Value::Integer(a / b))),
+        [a, b] => match (&*a.borrow(), &*b.borrow()) {
+            (Value::Integer(a), Value::Integer(b)) => {
+                Ok(MaybeValue::Just(Value::Integer(a / b).into()))
+            }
+            _ => Err("Quotient needs integer arguments".to_string()),
+        },
         _ => Err("Quotient needs exactly two arguments".to_string()),
     }
 }
 
-fn builtin_remainder(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_remainder(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     match values.as_slice() {
-        [Value::Integer(a), Value::Integer(b)] => Ok(MaybeValue::Just(Value::Integer(a % b))),
+        [a, b] => match (&*a.borrow(), &*b.borrow()) {
+            (Value::Integer(a), Value::Integer(b)) => {
+                Ok(MaybeValue::Just(Value::Integer(a % b).into()))
+            }
+            _ => Err("Remainder needs integer arguments".to_string()),
+        },
         _ => Err("Remainder needs exactly two arguments".to_string()),
     }
 }
 
-fn builtin_modulo(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_modulo(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     match values.as_slice() {
-        [Value::Integer(a), Value::Integer(b)] => {
-            let r = a % b;
-            Ok(MaybeValue::Just(Value::Integer(
-                if a.signum() != b.signum() { r + b } else { r },
-            )))
-        }
-        _ => Err("Modulo needs exactly two integers".to_string()),
+        [a, b] => match (&*a.borrow(), &*b.borrow()) {
+            (Value::Integer(a), Value::Integer(b)) => {
+                let r = a % b;
+                let m = if a.signum() != b.signum() { r + b } else { r };
+                Ok(MaybeValue::Just(Value::Integer(m).into()))
+            }
+            _ => Err("Modulo needs integer arguments".to_string()),
+        },
+        _ => Err("Modulo needs exactly two arguments".to_string()),
     }
 }
 
 type CmpFnType = fn(&Value, &Value) -> Result<Value, String>;
 
-fn builtin_cmp(values: Vec<Value>, method: CmpFnType) -> Result<MaybeValue, String> {
+fn builtin_cmp(values: Vec<ValueRef>, method: CmpFnType) -> Result<MaybeValue, String> {
     for (a, b) in values.iter().zip(values.iter().skip(1)) {
-        match method(a, b) {
-            Ok(Value::Bool(false)) => return Ok(MaybeValue::Just(Value::Bool(false))),
+        match method(&*a.borrow(), &*b.borrow()) {
+            Ok(Value::Bool(false)) => return Ok(MaybeValue::Just(Value::Bool(false).into())),
             Err(s) => return Err(s),
             _ => (),
         }
     }
-    Ok(MaybeValue::Just(Value::Bool(true)))
+    Ok(MaybeValue::Just(Value::Bool(true).into()))
 }
 
-fn builtin_lt(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_lt(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::lt)
 }
 
-fn builtin_gt(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_gt(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::gt)
 }
 
-fn builtin_leq(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_leq(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::leq)
 }
 
-fn builtin_geq(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_geq(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::geq)
 }
 
-fn builtin_iseq(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_iseq(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::iseq)
 }
 
-fn builtin_not(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_not(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Not needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Value::Bool(match values[0] {
-        Value::Bool(b) => !b,
-        _ => false,
-    })))
+    Ok(MaybeValue::Just(
+        Value::Bool(match &*values[0].borrow() {
+            Value::Bool(b) => !b,
+            _ => false,
+        })
+        .into(),
+    ))
 }
 
-fn builtin_list(values: Vec<Value>) -> Result<MaybeValue, String> {
-    Ok(MaybeValue::Just(Value::from_vec(values)))
+fn builtin_list(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+    Ok(MaybeValue::Just(Value::from_slice_ref(&values).into()))
 }
 
-fn builtin_apply(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_apply(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Apply needs exactly two arguments".to_string());
     }
-    let first = take(&mut values[0]);
-    let second = take(&mut values[1]);
-    match first {
-        Value::Procedure(proc) => Ok(MaybeValue::TailCall(proc, second.into_vec()?)),
+    match &*values[0].borrow() {
+        Value::Procedure(proc) => Ok(MaybeValue::TailCall(
+            proc.clone(),
+            (&*values[1].borrow()).borrow_vec()?,
+        )),
         _ => Err("Apply needs a procedure and a list as arguments".to_string()),
     }
 }
 
-fn builtin_length(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_length(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument".to_string());
     }
-    match take(&mut values[0]).into_vec() {
-        Ok(v) => Ok(MaybeValue::Just(Value::Integer(v.len() as i64))),
+    match (&*values[0].borrow()).borrow_vec() {
+        Ok(v) => Ok(MaybeValue::Just(Value::Integer(v.len() as i64).into())),
         _ => Err("Cannot compute length (is it a list?)".to_string()),
     }
 }
 
-fn builtin_append(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_append(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     let mut all = Vec::new();
     for value in values {
-        match value {
-            Value::Cons(_) => all.extend(value.into_vec()?),
+        let borrowed = &*value.borrow();
+        match borrowed {
+            Value::Pair { .. } => all.extend(borrowed.borrow_vec()?),
             Value::Null => (),
             _ => return Err("Append needs lists as arguments".to_string()),
         }
     }
-    Ok(MaybeValue::Just(Value::from_vec(all)))
+    Ok(MaybeValue::Just(Value::from_slice_ref(&all).into()))
 }
 
-fn builtin_ispair(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_ispair(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Pair? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Value::Bool(matches!(
-        &values[0],
-        Value::Cons(_)
-    ))))
+    Ok(MaybeValue::Just(
+        Value::Bool(matches!(&*values[0].borrow(), Value::Pair { .. })).into(),
+    ))
 }
 
-fn builtin_islist(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_islist(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("List? needs exactly one argument".to_string());
     }
-    match take(&mut values[0]) {
-        Value::Cons(pair) => match builtin_islist(vec![pair.cdr.clone()])? {
-            MaybeValue::Just(Value::Bool(b)) => Ok(MaybeValue::Just(Value::Bool(b))),
-            _ => Err("Unexpected non-boolean".to_string()),
-        },
-        Value::Null => Ok(MaybeValue::Just(Value::Bool(true))),
-        _ => Ok(MaybeValue::Just(Value::Bool(false))),
+    match &*values[0].borrow() {
+        Value::Pair { car: _, cdr } => builtin_islist(vec![cdr.clone()]),
+        Value::Null => Ok(MaybeValue::Just(Value::Bool(true).into())),
+        _ => Ok(MaybeValue::Just(Value::Bool(false).into())),
     }
 }
 
-fn builtin_isnull(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_isnull(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Null? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Value::Bool(matches!(
-        &values[0],
-        Value::Null
-    ))))
+    Ok(MaybeValue::Just(
+        Value::Bool(matches!(&*values[0].borrow(), Value::Null)).into(),
+    ))
 }
 
-fn builtin_isnumber(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_isnumber(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Number? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Value::Bool(matches!(
-        &values[0],
-        Value::Float(_) | Value::Integer(_)
-    ))))
+    Ok(MaybeValue::Just(
+        Value::Bool(matches!(
+            &*values[0].borrow(),
+            Value::Float(_) | Value::Integer(_)
+        ))
+        .into(),
+    ))
 }
 
-fn builtin_issymbol(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_issymbol(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Symbol? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Value::Bool(matches!(
-        &values[0],
-        Value::Symbol(_)
-    ))))
+    Ok(MaybeValue::Just(
+        Value::Bool(matches!(&*values[0].borrow(), Value::Symbol(_))).into(),
+    ))
 }
 
-fn builtin_isstring(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_isstring(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("String? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Value::Bool(matches!(
-        &values[0],
-        Value::Str(_)
-    ))))
+    Ok(MaybeValue::Just(
+        Value::Bool(matches!(&*values[0].borrow(), Value::Str(_))).into(),
+    ))
 }
 
-fn builtin_isboolean(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_isboolean(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Boolean? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Value::Bool(matches!(
-        &values[0],
-        Value::Bool(_)
-    ))))
+    Ok(MaybeValue::Just(
+        Value::Bool(matches!(&*values[0].borrow(), Value::Bool(_))).into(),
+    ))
 }
 
-fn builtin_isprocedure(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_isprocedure(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Procedure? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Value::Bool(matches!(
-        &values[0],
-        Value::Procedure(_)
-    ))))
+    Ok(MaybeValue::Just(
+        Value::Bool(matches!(&*values[0].borrow(), Value::Procedure(_))).into(),
+    ))
 }
 
-fn builtin_iseven(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_iseven(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Even? needs exactly one argument".to_string());
     }
-    match &values[0] {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v % 2 == 0))),
+    match &*values[0].borrow() {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v % 2 == 0).into())),
         _ => Err("Even? needs an integer argument".to_string()),
     }
 }
 
-fn builtin_isodd(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_isodd(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Odd? needs exactly one argument".to_string());
     }
-    match &values[0] {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v % 2 != 0))),
+    match &*values[0].borrow() {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v % 2 != 0).into())),
         _ => Err("Odd? needs an integer argument".to_string()),
     }
 }
 
-fn builtin_ispositive(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_ispositive(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Positive? needs exactly one argument".to_string());
     }
-    match &values[0] {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(*v > 0))),
-        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(*v > 0 as f64))),
+    match &*values[0].borrow() {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(*v > 0).into())),
+        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(*v > 0 as f64).into())),
         _ => Err("Positive? needs a number argument".to_string()),
     }
 }
 
-fn builtin_isnegative(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_isnegative(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Negative? needs exactly one argument".to_string());
     }
-    match &values[0] {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(*v < 0))),
-        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(*v < 0 as f64))),
+    match &*values[0].borrow() {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(*v < 0).into())),
+        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(*v < 0 as f64).into())),
         _ => Err("Negative? needs a number argument".to_string()),
     }
 }
 
-fn builtin_iszero(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_iszero(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Zero? needs exactly one argument".to_string());
     }
-    match &values[0] {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(*v == 0))),
-        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(*v == 0 as f64))),
+    match &*values[0].borrow() {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(*v == 0).into())),
+        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(*v == 0 as f64).into())),
         _ => Err("Zero? needs a number argument".to_string()),
     }
 }
 
-fn builtin_cons(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_cons(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Cons needs exactly two arguments".to_string());
     }
-    let car = take(&mut values[0]);
-    let cdr = take(&mut values[1]);
-    Ok(MaybeValue::Just(Value::Cons(Rc::new(Cons { car, cdr }))))
+    Ok(MaybeValue::Just(
+        Value::Pair {
+            car: values[0].clone(),
+            cdr: values[1].clone(),
+        }
+        .into(),
+    ))
 }
 
-fn builtin_car(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_car(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Car needs exactly one argument".to_string());
     }
-    match take(&mut values[0]) {
-        Value::Cons(p) => Ok(MaybeValue::Just(p.car.clone())),
+    match &*values[0].borrow() {
+        Value::Pair { car, cdr: _ } => Ok(MaybeValue::Just(car.clone())),
         _ => Err("Car needs a pair as argument".to_string()),
     }
 }
 
-fn builtin_cdr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_cdr(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Cdr needs exactly one argument".to_string());
     }
-    match take(&mut values[0]) {
-        Value::Cons(p) => Ok(MaybeValue::Just(p.cdr.clone())),
+    match &*values[0].borrow() {
+        Value::Pair { car: _, cdr } => Ok(MaybeValue::Just(cdr.clone())),
         _ => Err("Cdr needs a pair as argument".to_string()),
     }
 }
 
-fn builtin_filter(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_filter(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Filter needs exactly two arguments".to_string());
     }
-    let pred = take(&mut values[0]);
-    let orig = take(&mut values[1]).into_vec()?;
-    match pred {
+    match &*values[0].borrow() {
         Value::Procedure(proc) => {
             let mut v = Vec::new();
-            for x in orig {
-                if proc.call(vec![x.clone()])?.materialize()? == Value::Bool(true) {
+            for x in (&*values[1].borrow()).borrow_vec()? {
+                if proc.call(vec![x.clone()])?.materialize()? == Value::Bool(true).into() {
                     v.push(x)
                 }
             }
-            Ok(MaybeValue::Just(Value::from_vec(v)))
+            Ok(MaybeValue::Just(Value::from_slice_ref(&v).into()))
         }
         _ => Err("Not a procedure".to_string()),
     }
 }
 
-fn builtin_map(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_map(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Map needs exactly two arguments".to_string());
     }
-    let pred = take(&mut values[0]);
-    let orig = take(&mut values[1]).into_vec()?;
-    match pred {
+    match &*values[0].borrow() {
         Value::Procedure(proc) => {
             let mut v = Vec::new();
-            for x in orig {
+            for x in (&*values[1].borrow()).borrow_vec()? {
                 v.push(proc.call(vec![x])?.materialize()?)
             }
-            Ok(MaybeValue::Just(Value::from_vec(v)))
+            Ok(MaybeValue::Just(Value::from_slice_ref(&v).into()))
         }
         _ => Err("Not a procedure".to_string()),
     }
 }
 
-fn builtin_reverse(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_reverse(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Reverse needs exactly one argument".to_string());
     }
-    let mut res = take(&mut values[0]).into_vec()?;
+    let res = &mut *values[0].borrow().borrow_vec()?;
     res.reverse();
-    Ok(MaybeValue::Just(Value::from_vec(res)))
+    Ok(MaybeValue::Just(Value::from_slice_ref(res).into()))
 }
 
-fn builtin_read(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_read(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if !values.is_empty() {
         return Err("Read takes no arguments".to_string());
     }
@@ -742,38 +791,38 @@ fn builtin_read(values: Vec<Value>) -> Result<MaybeValue, String> {
     loop {
         let mut tokens = Tokenizer::new(&input).peekable();
         if let Ok(expr) = parse_expression(&mut tokens) {
-            return Ok(MaybeValue::Just(expr.into()));
+            return Ok(MaybeValue::Just(Value::from(expr).into()));
         }
         let _ = io::stdin().lock().read_line(&mut input);
     }
 }
 
-fn builtin_write(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_write(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Write needs exactly one argument".to_string());
     }
-    print!("{}", values[0]);
-    Ok(MaybeValue::Just(Value::Unspecified))
+    print!("{}", &*values[0].borrow());
+    Ok(MaybeValue::Just(Value::Unspecified.into()))
 }
 
-fn builtin_newline(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_newline(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if !values.is_empty() {
         return Err("Write takes no arguments".to_string());
     }
     println!();
-    Ok(MaybeValue::Just(Value::Unspecified))
+    Ok(MaybeValue::Just(Value::Unspecified.into()))
 }
 
 #[derive(Debug, PartialEq, Clone)]
 enum MaybeValue {
-    Just(Value),
-    TailCall(Procedure, Vec<Value>),
+    Just(ValueRef),
+    TailCall(Procedure, Vec<ValueRef>),
 }
 
 impl MaybeValue {
-    fn materialize(self) -> Result<Value, String> {
+    fn materialize(self) -> Result<ValueRef, String> {
         match self {
-            Self::Just(expr) => Ok(expr),
+            Self::Just(value) => Ok(value),
             Self::TailCall(proc, args) => proc.call(args)?.materialize(),
         }
     }
@@ -781,18 +830,18 @@ impl MaybeValue {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
-    data: FxHashMap<Intern<String>, Value>,
+    data: FxHashMap<Intern<String>, ValueRef>,
     parent: Option<Rc<RefCell<EnvironmentNode>>>,
 }
 
 impl EnvironmentNode {
     #[inline(always)]
-    pub fn set(&mut self, key: Intern<String>, value: Value) -> Option<Value> {
+    pub fn set(&mut self, key: Intern<String>, value: ValueRef) -> Option<ValueRef> {
         self.data.insert(key, value)
     }
 
     #[inline(always)]
-    pub fn get(&self, key: &Intern<String>) -> Option<Value> {
+    pub fn get(&self, key: &Intern<String>) -> Option<ValueRef> {
         match self.data.get(key) {
             Some(value) => Some(value.clone()),
             None => match &self.parent {
@@ -808,7 +857,7 @@ pub struct Environment {
     head: Rc<RefCell<EnvironmentNode>>,
 }
 
-type BuiltInFnType = fn(Vec<Value>) -> Result<MaybeValue, String>;
+type BuiltInFnType = fn(Vec<ValueRef>) -> Result<MaybeValue, String>;
 
 impl Environment {
     pub fn empty() -> Self {
@@ -878,34 +927,34 @@ impl Environment {
         for (s, f) in to_set {
             env.set(
                 Intern::new(s.to_string()),
-                Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: f })),
+                Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: f })).into(),
             );
         }
         env
     }
 
     #[inline(always)]
-    pub fn set(&mut self, key: Intern<String>, value: Value) -> Option<Value> {
+    pub fn set(&mut self, key: Intern<String>, value: ValueRef) -> Option<ValueRef> {
         self.head.borrow_mut().set(key, value)
     }
 
     #[inline(always)]
-    pub fn get(&self, key: &Intern<String>) -> Option<Value> {
+    pub fn get(&self, key: &Intern<String>) -> Option<ValueRef> {
         self.head.borrow().get(key)
     }
 
-    pub fn evaluate(&mut self, expr: &Value) -> Result<Value, String> {
+    pub fn evaluate(&mut self, expr: ValueRef) -> Result<ValueRef, String> {
         self.maybe_evaluate(expr)?.materialize()
     }
 
-    fn maybe_evaluate(&mut self, expr: &Value) -> Result<MaybeValue, String> {
-        match expr {
+    fn maybe_evaluate(&mut self, expr: ValueRef) -> Result<MaybeValue, String> {
+        match &*expr.borrow() {
             Value::Integer(_) => Ok(MaybeValue::Just(expr.clone())),
             Value::Float(_) => Ok(MaybeValue::Just(expr.clone())),
             Value::Rational(_, _) => Ok(MaybeValue::Just(expr.clone())),
             Value::Str(_) => Ok(MaybeValue::Just(expr.clone())),
             Value::Bool(_) => Ok(MaybeValue::Just(expr.clone())),
-            Value::Cons(p) => self.maybe_evaluate_pair(p),
+            Value::Pair { car, cdr } => self.maybe_evaluate_pair(car.clone(), cdr.clone()),
             Value::Symbol(s) => match self.get(s) {
                 Some(value) => Ok(MaybeValue::Just(value)),
                 None => Err(format!("Undefined symbol: {}", s)),
@@ -914,10 +963,10 @@ impl Environment {
         }
     }
 
-    fn maybe_evaluate_pair(&mut self, pair: &Cons) -> Result<MaybeValue, String> {
-        let args = pair.cdr.borrow_vec()?;
+    fn maybe_evaluate_pair(&mut self, car: ValueRef, cdr: ValueRef) -> Result<MaybeValue, String> {
+        let args = cdr.borrow().borrow_vec()?;
 
-        match &pair.car {
+        match &*car.borrow() {
             Value::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(args)?)),
             Value::Keyword(Keyword::Quasiquote) => {
                 Ok(MaybeValue::Just(self.evaluate_quasiquote(args)?))
@@ -933,20 +982,20 @@ impl Environment {
             Value::Keyword(Keyword::Begin) => self.evaluate_begin(args),
             Value::Keyword(Keyword::And) => Ok(MaybeValue::Just(self.evaluate_and(args)?)),
             Value::Keyword(Keyword::Or) => Ok(MaybeValue::Just(self.evaluate_or(args)?)),
-            car => match self.evaluate(car)? {
+            _ => match &*self.evaluate(car.clone())?.borrow() {
                 Value::Procedure(proc) => {
                     let mut args_values = Vec::new();
                     for arg in args {
                         args_values.push(self.evaluate(arg)?)
                     }
-                    Ok(MaybeValue::TailCall(proc, args_values))
+                    Ok(MaybeValue::TailCall(proc.clone(), args_values))
                 }
                 stuff => Err(format!("Not a procedure call: {}", stuff)),
             },
         }
     }
 
-    fn evaluate_quote(&mut self, args: Vec<&Value>) -> Result<Value, String> {
+    fn evaluate_quote(&mut self, args: Vec<ValueRef>) -> Result<ValueRef, String> {
         if args.len() != 1 {
             return Err(format!(
                 "Quote needs exactly one argument, got {}",
@@ -956,151 +1005,162 @@ impl Environment {
         Ok(args[0].clone())
     }
 
-    fn do_quasiquote(&mut self, expr: &Value) -> Result<Value, String> {
-        if let Value::Cons(c) = expr {
-            if let Value::Keyword(Keyword::Unquote) = c.car {
-                let Value::Cons(to_eval) = &c.cdr else {
+    fn do_quasiquote(&mut self, expr: ValueRef) -> Result<ValueRef, String> {
+        if let Value::Pair { car, cdr } = &*expr.borrow() {
+            if let Value::Keyword(Keyword::Unquote) = &*car.borrow() {
+                let Value::Pair {
+                    car: inner_car,
+                    cdr: inner_cdr,
+                } = &*cdr.borrow()
+                else {
                     return Err("Unquote as part of improper list".to_string());
                 };
-                let Value::Null = to_eval.cdr else {
+                let Value::Null = &*inner_cdr.borrow() else {
                     return Err("Unquote takes a single argument".to_string());
                 };
-                return self.evaluate(&to_eval.car);
+                return self.evaluate(inner_car.clone());
             } else {
-                return Ok(Value::Cons(Rc::new(Cons {
-                    car: self.do_quasiquote(&c.car)?,
-                    cdr: self.do_quasiquote(&c.cdr)?,
-                })));
+                return Ok(Value::Pair {
+                    car: self.do_quasiquote(car.clone())?,
+                    cdr: self.do_quasiquote(cdr.clone())?,
+                }
+                .into());
             }
         }
         Ok(expr.clone())
     }
 
-    fn evaluate_quasiquote(&mut self, args: Vec<&Value>) -> Result<Value, String> {
+    fn evaluate_quasiquote(&mut self, args: Vec<ValueRef>) -> Result<ValueRef, String> {
         if args.len() != 1 {
             return Err(format!(
                 "Quasiquote needs exactly one argument, got {}",
                 args.len()
             ));
         }
-        self.do_quasiquote(args[0])
+        self.do_quasiquote(args[0].clone())
     }
 
-    fn evaluate_lambda(&mut self, mut args: Vec<&Value>) -> Result<Value, String> {
+    fn evaluate_lambda(&mut self, args: Vec<ValueRef>) -> Result<ValueRef, String> {
         if args.is_empty() {
             return Err("Lambda needs at least one argument".to_string());
         }
-        match args[0] {
-            Value::Cons(_) => {
+        let first = &*args[0].borrow();
+        let rest = &args[1..args.len()];
+        match first {
+            Value::Pair { .. } => {
                 let mut params = Vec::new();
-                for expr in args[0].borrow_vec()? {
-                    match expr {
+                for val_ref in first.borrow_vec()? {
+                    let val = &*val_ref.borrow();
+                    match val {
                         Value::Symbol(s) => params.push(*s),
-                        _ => return Err(format!("Not a symbol: {}", expr)),
+                        _ => return Err(format!("Not a symbol: {}", val)),
                     }
                 }
                 let mut body = Vec::new();
-                for expr in args.split_off(1) {
-                    body.push(expr.clone())
+                for expr in rest {
+                    body.push((*expr).clone())
                 }
                 let proc = UserDefinedProcedure {
                     params,
                     body,
                     env: self.clone(),
                 };
-                Ok(Value::Procedure(Procedure::UserDefined(proc)))
+                Ok(Value::Procedure(Procedure::UserDefined(proc)).into())
             }
             _ => Err("First argument to lambda must be a list of symbols".to_string()),
         }
     }
 
-    fn evaluate_define(&mut self, mut args: Vec<&Value>) -> Result<Value, String> {
+    fn evaluate_define(&mut self, args: Vec<ValueRef>) -> Result<ValueRef, String> {
         if args.is_empty() {
             return Err("Define needs at least one argument".to_string());
         }
-        match args[0] {
+        let first = &*args[0].borrow();
+        let rest = &args[1..args.len()];
+        match first {
             Value::Symbol(key) => {
                 let value = match args.len() {
-                    1 => Value::Unspecified,
-                    2 => self.evaluate(args[1])?,
+                    1 => Value::Unspecified.into(),
+                    2 => self.evaluate(args[1].clone())?,
                     _ => return Err("Define with a symbol gets at most two arguments".to_string()),
                 };
                 self.set(*key, value);
-                Ok(Value::Unspecified)
+                Ok(Value::Unspecified.into())
             }
-            Value::Cons(pair) => {
-                let key = match &pair.car {
+            Value::Pair { car, cdr } => {
+                let key = match *car.borrow() {
                     Value::Symbol(s) => Ok(s),
                     _ => Err("Not a symbol"),
                 }?;
                 let mut params = Vec::new();
-                for expr in pair.cdr.borrow_vec()? {
-                    match expr {
+                for val_ref in cdr.borrow().borrow_vec()? {
+                    let val = &*val_ref.borrow();
+                    match val {
                         Value::Symbol(s) => params.push(*s),
-                        _ => return Err("Not a symbol".to_string()),
+                        _ => return Err(format!("Not a symbol: {}", val)),
                     }
                 }
                 let mut body = Vec::new();
-                for expr in args.split_off(1) {
-                    body.push(expr.clone())
+                for expr in rest {
+                    body.push((*expr).clone())
                 }
                 let proc = UserDefinedProcedure {
                     params,
                     body,
                     env: self.clone(),
                 };
-                self.set(*key, Value::Procedure(Procedure::UserDefined(proc)));
-                Ok(Value::Unspecified)
+                self.set(key, Value::Procedure(Procedure::UserDefined(proc)).into());
+                Ok(Value::Unspecified.into())
             }
             _ => Err("Define needs a symbol or a list as first argument".to_string()),
         }
     }
 
-    fn evaluate_set(&mut self, args: Vec<&Value>) -> Result<Value, String> {
+    fn evaluate_set(&mut self, args: Vec<ValueRef>) -> Result<ValueRef, String> {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments".to_string());
         }
-        match args[0] {
+        match &*args[0].borrow() {
             Value::Symbol(s) => {
                 if self.get(s).is_none() {
                     return Err("Symbol is not bound".to_string());
                 }
-                let value = self.evaluate(args[1])?;
+                let value = self.evaluate(args[1].clone())?;
                 self.set(*s, value);
-                Ok(Value::Unspecified)
+                Ok(Value::Unspecified.into())
             }
             _ => Err("First argument to set! must be a symbol".to_string()),
         }
     }
 
-    fn evaluate_if(&mut self, args: Vec<&Value>) -> Result<MaybeValue, String> {
+    fn evaluate_if(&mut self, args: Vec<ValueRef>) -> Result<MaybeValue, String> {
         if args.len() < 2 || args.len() > 3 {
             return Err("If accepts two or three arguments".to_string());
         }
-        match self.evaluate(args[0])? {
-            Value::Bool(true) => self.maybe_evaluate(args[1]),
+        match &*self.evaluate(args[0].clone())?.borrow() {
+            Value::Bool(true) => self.maybe_evaluate(args[1].clone()),
             Value::Bool(false) => {
                 if args.len() == 2 {
-                    Ok(MaybeValue::Just(Value::Unspecified))
+                    Ok(MaybeValue::Just(Value::Unspecified.into()))
                 } else {
-                    self.maybe_evaluate(args[2])
+                    self.maybe_evaluate(args[2].clone())
                 }
             }
             _ => Err("First argument to if did not evaluate to a boolean".to_string()),
         }
     }
 
-    fn evaluate_cond(&mut self, args: Vec<&Value>) -> Result<MaybeValue, String> {
+    fn evaluate_cond(&mut self, args: Vec<ValueRef>) -> Result<MaybeValue, String> {
         for clause in args {
-            match clause {
-                Value::Cons(p) => {
-                    let seq = p.cdr.borrow_vec()?;
-                    if let Value::Symbol(s) = &p.car {
+            match &*clause.borrow() {
+                Value::Pair { car, cdr } => {
+                    let seq = (&*cdr.borrow()).borrow_vec()?;
+                    if let Value::Symbol(s) = &*car.borrow() {
                         if **s == "else" {
                             return self.evaluate_begin(seq);
                         }
                     }
-                    match self.evaluate(&p.car)? {
+                    match &*(self.evaluate(car.clone())?).borrow() {
                         Value::Bool(true) => return self.evaluate_begin(seq),
                         Value::Bool(false) => continue,
                         _ => return Err("Clause did not evaluate to a boolean".to_string()),
@@ -1109,44 +1169,50 @@ impl Environment {
                 _ => return Err("Not a list".to_string()),
             }
         }
-        Ok(MaybeValue::Just(Value::Unspecified))
+        Ok(MaybeValue::Just(Value::Unspecified.into()))
     }
 
-    fn evaluate_when(&mut self, mut args: Vec<&Value>) -> Result<MaybeValue, String> {
+    fn evaluate_when(&mut self, mut args: Vec<ValueRef>) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("When needs at least one argument".to_string());
         }
-        match self.evaluate(args[0])? {
+        match &*self.evaluate(args[0].clone())?.borrow() {
             Value::Bool(true) => self.evaluate_begin(args.split_off(1)),
-            Value::Bool(false) => Ok(MaybeValue::Just(Value::Unspecified)),
+            Value::Bool(false) => Ok(MaybeValue::Just(Value::Unspecified.into())),
             _ => Err("First argument to when did not evaluate to a boolean".to_string()),
         }
     }
 
-    fn evaluate_unless(&mut self, mut args: Vec<&Value>) -> Result<MaybeValue, String> {
+    fn evaluate_unless(&mut self, mut args: Vec<ValueRef>) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("Unless needs at least one argument".to_string());
         }
-        match self.evaluate(args[0])? {
-            Value::Bool(true) => Ok(MaybeValue::Just(Value::Unspecified)),
+        match &*self.evaluate(args[0].clone())?.borrow() {
+            Value::Bool(true) => Ok(MaybeValue::Just(Value::Unspecified.into())),
             Value::Bool(false) => self.evaluate_begin(args.split_off(1)),
             _ => Err("First argument to unless did not evaluate to a boolean".to_string()),
         }
     }
 
-    fn evaluate_let(&mut self, mut args: Vec<&Value>) -> Result<MaybeValue, String> {
+    fn evaluate_let(&mut self, mut args: Vec<ValueRef>) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("Let needs at least one argument".to_string());
         }
         let mut child = self.child();
-        for expr in args[0].borrow_vec()? {
-            match expr {
-                Value::Cons(p) => match (&p.car, &p.cdr) {
-                    (Value::Symbol(s), Value::Cons(cdr)) => {
-                        if cdr.cdr != Value::Null {
+        for expr in args[0].borrow().borrow_vec()? {
+            match &*expr.borrow() {
+                Value::Pair { car, cdr } => match (&*car.borrow(), &*cdr.borrow()) {
+                    (
+                        Value::Symbol(s),
+                        Value::Pair {
+                            car: inner_car,
+                            cdr: inner_cdr,
+                        },
+                    ) => {
+                        if *inner_cdr.borrow() != Value::Null {
                             return Err("Not a 2-list".to_string());
                         }
-                        let value = child.evaluate(&cdr.car)?;
+                        let value = child.evaluate(inner_car.clone())?;
                         child.set(*s, value);
                     }
                     _ => return Err("Not a symbol".to_string()),
@@ -1154,64 +1220,64 @@ impl Environment {
                 _ => return Err("Not a 2-list".to_string()),
             }
         }
-        let mut out = MaybeValue::Just(Value::Unspecified);
+        let mut out = MaybeValue::Just(Value::Unspecified.into());
         if let Some((last, rest)) = args.split_off(1).split_last() {
             for expr in rest {
-                child.evaluate(expr)?;
+                child.evaluate(expr.clone())?;
             }
-            out = child.maybe_evaluate(last)?;
+            out = child.maybe_evaluate(last.clone())?;
         }
         Ok(out)
     }
 
-    fn evaluate_begin(&mut self, args: Vec<&Value>) -> Result<MaybeValue, String> {
-        let mut out = MaybeValue::Just(Value::Unspecified);
+    fn evaluate_begin(&mut self, args: Vec<ValueRef>) -> Result<MaybeValue, String> {
+        let mut out = MaybeValue::Just(Value::Unspecified.into());
         if let Some((last, rest)) = args.split_last() {
             for expr in rest {
-                self.evaluate(expr)?;
+                self.evaluate(expr.clone())?;
             }
-            out = self.maybe_evaluate(last)?;
+            out = self.maybe_evaluate(last.clone())?;
         }
         Ok(out)
     }
 
-    fn evaluate_and(&mut self, args: Vec<&Value>) -> Result<Value, String> {
+    fn evaluate_and(&mut self, args: Vec<ValueRef>) -> Result<ValueRef, String> {
         for expr in args {
-            match self.evaluate(expr) {
-                Ok(Value::Bool(true)) => continue,
-                Ok(Value::Bool(false)) => return Ok(Value::Bool(false)),
+            match &*self.evaluate(expr)?.borrow() {
+                Value::Bool(true) => continue,
+                Value::Bool(false) => return Ok(Value::Bool(false).into()),
                 _ => return Err("Cannot \"and\" type".to_string()),
             }
         }
-        Ok(Value::Bool(true))
+        Ok(Value::Bool(true).into())
     }
 
-    fn evaluate_or(&mut self, args: Vec<&Value>) -> Result<Value, String> {
+    fn evaluate_or(&mut self, args: Vec<ValueRef>) -> Result<ValueRef, String> {
         for expr in args {
-            match self.evaluate(expr) {
-                Ok(Value::Bool(true)) => return Ok(Value::Bool(true)),
-                Ok(Value::Bool(false)) => continue,
+            match &*self.evaluate(expr)?.borrow() {
+                Value::Bool(true) => return Ok(Value::Bool(true).into()),
+                Value::Bool(false) => continue,
                 _ => return Err("Cannot \"or\" type".to_string()),
             }
         }
-        Ok(Value::Bool(false))
+        Ok(Value::Bool(false).into())
     }
 }
 
 trait Callable {
-    fn call(&self, args: Vec<Value>) -> Result<MaybeValue, String>;
+    fn call(&self, args: Vec<ValueRef>) -> Result<MaybeValue, String>;
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct UserDefinedProcedure {
     params: Vec<Intern<String>>,
-    body: Vec<Value>,
+    body: Vec<ValueRef>,
     env: Environment,
 }
 
 impl UserDefinedProcedure {
     #[inline(always)]
-    fn call_except_tail(&self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn call_except_tail(&self, args: Vec<ValueRef>) -> Result<MaybeValue, String> {
         let params = &self.params;
         let body = &self.body;
         let mut env = self.env.child();
@@ -1221,19 +1287,19 @@ impl UserDefinedProcedure {
         for (param, arg) in zip(params, args) {
             env.set(*param, arg);
         }
-        let mut out = MaybeValue::Just(Value::Unspecified);
+        let mut out = MaybeValue::Just(Value::Unspecified.into());
         if let Some((last, rest)) = body.split_last() {
             for expr in rest {
-                env.evaluate(expr)?;
+                env.evaluate(expr.clone())?;
             }
-            out = env.maybe_evaluate(last)?;
+            out = env.maybe_evaluate(last.clone())?;
         }
         Ok(out)
     }
 }
 
 impl Callable for UserDefinedProcedure {
-    fn call(&self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn call(&self, args: Vec<ValueRef>) -> Result<MaybeValue, String> {
         let mut out = self.call_except_tail(args);
         loop {
             match out? {
@@ -1253,7 +1319,7 @@ pub struct BuiltInProcedure {
 }
 
 impl Callable for BuiltInProcedure {
-    fn call(&self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn call(&self, args: Vec<ValueRef>) -> Result<MaybeValue, String> {
         (self.func)(args)
     }
 }
@@ -1265,7 +1331,7 @@ pub enum Procedure {
 }
 
 impl Callable for Procedure {
-    fn call(&self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn call(&self, args: Vec<ValueRef>) -> Result<MaybeValue, String> {
         match self {
             Procedure::UserDefined(proc) => proc.call(args),
             Procedure::BuiltIn(proc) => proc.call(args),
@@ -1298,45 +1364,45 @@ mod tests {
     #[test]
     fn test_environment() {
         let mut base = Environment::empty();
-        base.set(intern_str("a"), Value::Integer(42));
+        base.set(intern_str("a"), Value::Integer(42).into());
 
         let mut child = base.child();
 
-        child.set(intern_str("a"), Value::Str("hello".to_string()));
-        child.set(intern_str("b"), Value::Str("world".to_string()));
+        child.set(intern_str("a"), Value::Str("hello".to_string()).into());
+        child.set(intern_str("b"), Value::Str("world".to_string()).into());
 
-        assert_eq!(base.get(&intern_str("a")), Some(Value::Integer(42)));
+        assert_eq!(base.get(&intern_str("a")), Some(Value::Integer(42).into()));
         assert_eq!(base.get(&intern_str("b")), None);
         assert_eq!(
             child.get(&intern_str("a")),
-            Some(Value::Str("hello".to_string()))
+            Some(Value::Str("hello".to_string()).into())
         );
         assert_eq!(
             child.get(&intern_str("b")),
-            Some(Value::Str("world".to_string()))
+            Some(Value::Str("world".to_string()).into())
         );
     }
 
     #[test]
     fn test_builtin_add() {
-        let values = vec![Value::Integer(10), Value::Float(42.0)];
+        let values = vec![Value::Integer(10).into(), Value::Float(42.0).into()];
 
         assert_eq!(
             builtin_add(values),
-            Ok(MaybeValue::Just(Value::Float(52.0)))
+            Ok(MaybeValue::Just(Value::Float(52.0).into()))
         );
 
-        let values = vec![Value::Float(42.0), Value::Integer(13)];
+        let values = vec![Value::Float(42.0).into(), Value::Integer(13).into()];
 
         assert_eq!(
             builtin_add(values),
-            Ok(MaybeValue::Just(Value::Float(55.0)))
+            Ok(MaybeValue::Just(Value::Float(55.0).into()))
         );
 
         let values = vec![
-            Value::Float(42.0),
-            Value::Integer(13),
-            Value::Str("hey, hey".to_string()),
+            Value::Float(42.0).into(),
+            Value::Integer(13).into(),
+            Value::Str("hey, hey".to_string()).into(),
         ];
 
         assert_eq!(builtin_add(values), Err("Cannot add types".to_string()));
@@ -1344,14 +1410,14 @@ mod tests {
 
     fn validate(steps: Vec<(&str, Value)>) {
         let mut env = Environment::standard().child();
-        for (code, val) in steps {
-            let expr = parse(code).unwrap().remove(0).into();
+        for (code, out) in steps {
+            let val = Value::from(parse(code).unwrap().remove(0));
             assert_eq!(
-                env.evaluate(&expr),
-                Ok(val.clone()),
+                env.evaluate(val.into()),
+                Ok(out.clone().into()),
                 "we are testing that {} gives {}",
                 code,
-                val
+                out
             );
         }
     }
@@ -1422,37 +1488,39 @@ mod tests {
             ("(= -1 -1 -2)", Value::Bool(false)),
             (
                 "(cons 1 2)",
-                Value::Cons(Rc::new(Cons {
-                    car: Value::Integer(1),
-                    cdr: Value::Integer(2),
-                })),
+                Value::Pair {
+                    car: Value::Integer(1).into(),
+                    cdr: Value::Integer(2).into(),
+                },
             ),
             (
                 "'(1 . 2)",
-                Value::Cons(Rc::new(Cons {
-                    car: Value::Integer(1),
-                    cdr: Value::Integer(2),
-                })),
+                Value::Pair {
+                    car: Value::Integer(1).into(),
+                    cdr: Value::Integer(2).into(),
+                },
             ),
             (
                 "'(1 2 . 3)",
-                Value::Cons(Rc::new(Cons {
-                    car: Value::Integer(1),
-                    cdr: Value::Cons(Rc::new(Cons {
-                        car: Value::Integer(2),
-                        cdr: Value::Integer(3),
-                    })),
-                })),
+                Value::Pair {
+                    car: Value::Integer(1).into(),
+                    cdr: Value::Pair {
+                        car: Value::Integer(2).into(),
+                        cdr: Value::Integer(3).into(),
+                    }
+                    .into(),
+                },
             ),
             (
                 "'(1 . (2 . 3))",
-                Value::Cons(Rc::new(Cons {
-                    car: Value::Integer(1),
-                    cdr: Value::Cons(Rc::new(Cons {
-                        car: Value::Integer(2),
-                        cdr: Value::Integer(3),
-                    })),
-                })),
+                Value::Pair {
+                    car: Value::Integer(1).into(),
+                    cdr: Value::Pair {
+                        car: Value::Integer(2).into(),
+                        cdr: Value::Integer(3).into(),
+                    }
+                    .into(),
+                },
             ),
             (
                 "(list 1 2 3)",
@@ -1821,10 +1889,10 @@ mod tests {
             ),
             (
                 "(cons 1 2)",
-                Value::Cons(Rc::new(Cons {
-                    car: Value::Integer(1),
-                    cdr: Value::Integer(2),
-                })),
+                Value::Pair {
+                    car: Value::Integer(1).into(),
+                    cdr: Value::Integer(2).into(),
+                },
             ),
         ];
         validate(steps);

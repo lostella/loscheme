@@ -49,7 +49,7 @@ fn repl_loop() {
                     input
                 };
                 match run(&to_be_run, &mut env) {
-                    Ok(v) => println!("{}", v),
+                    Ok(v) => println!("{}", v.borrow()),
                     Err(err) => eprintln!("{}", err),
                 }
             }
