@@ -181,6 +181,8 @@ fn test_language_features() {
         ("(apply * (list -5 4))", "-20"),
         ("(define (twoxplusy x y) (+ (* 2 x) y))", ""),
         ("(apply twoxplusy '(-4 2))", "-6"),
+        ("(define (forty-two) 42)", ""),
+        ("(forty-two)", "42"),
         ("(quotient 7 3)", "2"),
         ("(quotient -7 3)", "-2"),
         ("(quotient -7 -3)", "2"),
