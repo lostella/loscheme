@@ -739,6 +739,34 @@ fn builtin_cdr(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
+fn builtin_setcar(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+    if values.len() != 2 {
+        return Err("Set-car needs exactly two arguments".to_string());
+    }
+    let first = &mut *values[0].borrow_mut();
+    match first {
+        Value::Pair { car, cdr: _ } => {
+            *car = values[1].clone();
+            Ok(MaybeValue::Just(Value::Unspecified.into()))
+        }
+        _ => Err("Set-car needs a pair as first argument".to_string()),
+    }
+}
+
+fn builtin_setcdr(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+    if values.len() != 2 {
+        return Err("Set-cdr needs exactly two arguments".to_string());
+    }
+    let first = &mut *values[0].borrow_mut();
+    match first {
+        Value::Pair { car: _, cdr } => {
+            *cdr = values[1].clone();
+            Ok(MaybeValue::Just(Value::Unspecified.into()))
+        }
+        _ => Err("Set-cdr needs a pair as first argument".to_string()),
+    }
+}
+
 fn builtin_filter(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Filter needs exactly two arguments".to_string());
@@ -914,6 +942,8 @@ impl Environment {
             ("cons", builtin_cons as BuiltInFnType),
             ("car", builtin_car as BuiltInFnType),
             ("cdr", builtin_cdr as BuiltInFnType),
+            ("set-car!", builtin_setcar as BuiltInFnType),
+            ("set-cdr!", builtin_setcdr as BuiltInFnType),
             ("filter", builtin_filter as BuiltInFnType),
             ("map", builtin_map as BuiltInFnType),
             ("reverse", builtin_reverse as BuiltInFnType),
