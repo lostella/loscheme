@@ -1076,9 +1076,9 @@ impl Environment {
         }
         let first = &*args[0].borrow();
         let rest = &args[1..args.len()];
+        let mut params = Vec::new();
         match first {
             Value::Pair { .. } => {
-                let mut params = Vec::new();
                 for val_ref in first.borrow_vec()? {
                     let val = &*val_ref.borrow();
                     match val {
@@ -1086,19 +1086,20 @@ impl Environment {
                         _ => return Err(format!("Not a symbol: {}", val)),
                     }
                 }
-                let mut body = Vec::new();
-                for expr in rest {
-                    body.push((*expr).clone())
-                }
-                let proc = UserDefinedProcedure {
-                    params,
-                    body,
-                    env: self.clone(),
-                };
-                Ok(Value::Procedure(Procedure::UserDefined(proc)).into())
             }
-            _ => Err("First argument to lambda must be a list of symbols".to_string()),
+            Value::Null => (),
+            _ => return Err("First argument to lambda must be a list of symbols".to_string()),
+        };
+        let mut body = Vec::new();
+        for expr in rest {
+            body.push((*expr).clone())
         }
+        let proc = UserDefinedProcedure {
+            params,
+            body,
+            env: self.clone(),
+        };
+        Ok(Value::Procedure(Procedure::UserDefined(proc)).into())
     }
 
     fn evaluate_define(&mut self, args: Vec<ValueRef>) -> Result<ValueRef, String> {
@@ -1152,11 +1153,10 @@ impl Environment {
         }
         match &*args[0].borrow() {
             Value::Symbol(s) => {
-                if self.get(s).is_none() {
+                let Some(valref) = self.get(s) else {
                     return Err("Symbol is not bound".to_string());
-                }
-                let value = self.evaluate(args[1].clone())?;
-                self.set(*s, value);
+                };
+                *valref.borrow_mut() = (*self.evaluate(args[1].clone())?.borrow()).clone();
                 Ok(Value::Unspecified.into())
             }
             _ => Err("First argument to set! must be a symbol".to_string()),
