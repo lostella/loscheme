@@ -6,7 +6,6 @@ use std::cell::RefCell;
 use std::fmt;
 use std::io::{self, BufRead};
 use std::iter::zip;
-use std::mem::take;
 use std::rc::Rc;
 
 pub type ValueRef = Rc<RefCell<Value>>;
@@ -65,16 +64,6 @@ fn make_rational(num: i64, denom: i64) -> Value {
 }
 
 impl Value {
-    pub fn from_vec(mut v: Vec<Value>) -> Self {
-        match v.len() {
-            0 => Value::Null,
-            _ => Value::Pair {
-                car: take(&mut v[0]).into(),
-                cdr: Value::from_vec(v.split_off(1)).into(),
-            },
-        }
-    }
-
     pub fn from_slice_ref(v: &[ValueRef]) -> Self {
         match v.len() {
             0 => Value::Null,
@@ -94,21 +83,6 @@ impl Value {
             },
         }
     }
-
-    // pub fn into_vec(self) -> Result<Vec<ValueRef>, String> {
-    //     let mut res = Vec::new();
-    //     let mut cur = &self;
-    //     loop {
-    //         match cur {
-    //             Value::Pair { car, cdr } => {
-    //                 res.push(car.clone());
-    //                 cur = &*cdr.borrow();
-    //             }
-    //             Value::Null => return Ok(res),
-    //             _ => return Err("Not a proper list".to_string()),
-    //         }
-    //     }
-    // }
 
     pub fn borrow_vec(&self) -> Result<Vec<ValueRef>, String> {
         match self {
@@ -1990,11 +1964,8 @@ mod tests {
             ),
             (
                 "(quicksort '(34 7 23 32 5 62 32 2 1 6 45 78 99 3))",
-                Value::from_vec(
-                    vec![1, 2, 3, 5, 6, 7, 23, 32, 32, 34, 45, 62, 78, 99]
-                        .into_iter()
-                        .map(Value::Integer)
-                        .collect(),
+                Value::from_slice(
+                    &[1, 2, 3, 5, 6, 7, 23, 32, 32, 34, 45, 62, 78, 99].map(Value::Integer),
                 ),
             ),
         ];
