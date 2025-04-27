@@ -376,8 +376,8 @@ fn builtin_cons(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
     Ok(MaybeValue::Just(
         Value::Pair {
-            car: values[0].clone(),
-            cdr: values[1].clone(),
+            car: values[0].borrow().clone().into(),
+            cdr: values[1].borrow().clone().into(),
         }
         .into(),
     ))

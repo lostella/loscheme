@@ -260,6 +260,19 @@ fn test_language_features() {
         ),
         ("(counter)", "1"),
         ("(counter)", "2"),
+        (
+            "(define counter2
+                (begin
+                    (define n 0)
+                    (lambda () (set! n (+ n 1)) n)))",
+            "",
+        ),
+        ("(counter2)", "1"),
+        ("(counter2)", "2"),
+        ("(define a '(2 3))", ""),
+        ("(define b (cons 1 a))", ""),
+        ("(set! a 42)", ""),
+        ("b", "(1 2 3)"),
         // ("(eq? 'a 'a)", "#t"),
         // ("(eq? '(1 2) '(1 2))", "#f"),
         // ("(eqv? 1 1)", "#t"),
