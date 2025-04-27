@@ -460,7 +460,7 @@ impl Environment {
 
     fn maybe_evaluate(&mut self, expr: ValueRef) -> Result<MaybeValue, String> {
         match &*expr.borrow() {
-            Value::Integer(_) => Ok(MaybeValue::Just(expr.clone())),
+            Value::Integer(_) => Ok(MaybeValue::Just(expr.borrow().clone().into())),
             Value::Float(_) => Ok(MaybeValue::Just(expr.clone())),
             Value::Rational(_, _) => Ok(MaybeValue::Just(expr.clone())),
             Value::Str(_) => Ok(MaybeValue::Just(expr.clone())),
