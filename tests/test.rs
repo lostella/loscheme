@@ -80,9 +80,16 @@ fn test_language_features() {
         ("((lambda () 1 2 3 42))", "42"),
         ("(if (> 3 7) (- 3 7) (- 7 3))", "4"),
         ("(if (< 3 7) (- 3 7) (- 7 3))", "-4"),
-        ("(cond ((> 3 5) 'greater) ((< 3 5) 'smaller))", "smaller"),
         (
-            "(cond ((> 3 5) 'greater) (else 'not-greater))",
+            "(cond
+                ((> 3 5) 'greater)
+                ((< 3 5) 'smaller))",
+            "smaller",
+        ),
+        (
+            "(cond
+                ((> 3 5) 'greater)
+                (else 'not-greater))",
             "not-greater",
         ),
         ("(begin (+ 4 7) (- 5 2) (* 7 3))", "21"),
@@ -203,7 +210,10 @@ fn test_language_features() {
         ("(reverse '(1 2 3))", "(3 2 1)"),
         ("(reverse '())", "()"),
         (
-            "(define (sum xs) (if (null? xs) 0 (+ (car xs) (sum (cdr xs)))))",
+            "(define (sum xs)
+                (if (null? xs)
+                    0
+                    (+ (car xs) (sum (cdr xs)))))",
             "",
         ),
         ("(sum '(1 2 3))", "6"),
@@ -236,8 +246,16 @@ fn test_language_features() {
         ("(car (cdr endless))", "1"),
         ("(car (cdr (cdr endless)))", "1"),
         ("(car (cdr (cdr (cdr endless))))", "1"),
+        ("(define n 42)", ""),
+        ("(define (inc-n) (set! n (+ n 1)))", ""),
+        ("(inc-n)", ""),
+        ("n", "43"),
         (
-            "(define counter (let ((n 0)) (lambda () (set! n (+ n 1)) n)))",
+            "(define counter
+                (let
+                    ((n 0))
+                    (lambda () (set! n (+ n 1))
+                    n)))",
             "",
         ),
         ("(counter)", "1"),
