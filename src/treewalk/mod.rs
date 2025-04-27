@@ -461,10 +461,10 @@ impl Environment {
     fn maybe_evaluate(&mut self, expr: ValueRef) -> Result<MaybeValue, String> {
         match &*expr.borrow() {
             Value::Integer(_) => Ok(MaybeValue::Just(expr.borrow().clone().into())),
-            Value::Float(_) => Ok(MaybeValue::Just(expr.clone())),
-            Value::Rational(_, _) => Ok(MaybeValue::Just(expr.clone())),
-            Value::Str(_) => Ok(MaybeValue::Just(expr.clone())),
-            Value::Bool(_) => Ok(MaybeValue::Just(expr.clone())),
+            Value::Float(_) => Ok(MaybeValue::Just(expr.borrow().clone().into())),
+            Value::Rational(_, _) => Ok(MaybeValue::Just(expr.borrow().clone().into())),
+            Value::Str(_) => Ok(MaybeValue::Just(expr.borrow().clone().into())),
+            Value::Bool(_) => Ok(MaybeValue::Just(expr.borrow().clone().into())),
             Value::Pair { car, cdr } => self.maybe_evaluate_pair(car.clone(), cdr.clone()),
             Value::Symbol(s) => match self.get(s) {
                 Some(value) => Ok(MaybeValue::Just(value)),
