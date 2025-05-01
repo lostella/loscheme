@@ -441,7 +441,7 @@ impl Environment {
             Value::Rational(_, _) => Ok(MaybeValue::Just(expr)),
             Value::Str(_) => Ok(MaybeValue::Just(expr)),
             Value::Bool(_) => Ok(MaybeValue::Just(expr)),
-            Value::Pair(p) => self.maybe_evaluate_pair(&*p.borrow()),
+            Value::Pair(p) => self.maybe_evaluate_pair(&p.borrow()),
             Value::Symbol(s) => match self.get(&s) {
                 Some(cell) => Ok(MaybeValue::Just(cell.borrow().clone())),
                 None => Err(format!("Undefined symbol: {}", s)),
@@ -562,12 +562,12 @@ impl Environment {
         match first {
             Value::Symbol(key) => {
                 let value = match args.len() {
-                    1 => Value::Unspecified.into(),
+                    1 => Value::Unspecified,
                     2 => self.evaluate(args[1].clone())?,
                     _ => return Err("Define with a symbol gets at most two arguments".to_string()),
                 };
                 self.set(key, value);
-                Ok(Value::Unspecified.into())
+                Ok(Value::Unspecified)
             }
             Value::Pair(p) => {
                 let key = match p.borrow().0 {

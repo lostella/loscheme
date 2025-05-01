@@ -425,7 +425,7 @@ fn builtin_filter(values: Vec<Value>) -> Result<MaybeValue, String> {
         Value::Procedure(proc) => {
             let mut v = Vec::new();
             for x in values[1].clone().into_vec()? {
-                if proc.call(vec![x.clone()])?.materialize()? == Value::Bool(true).into() {
+                if proc.call(vec![x.clone()])?.materialize()? == Value::Bool(true) {
                     v.push(x)
                 }
             }
