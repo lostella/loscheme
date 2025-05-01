@@ -360,18 +360,18 @@ impl MaybeValue {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentNode {
-    data: FxHashMap<Intern<String>, Value>,
+    data: FxHashMap<Intern<String>, Rc<RefCell<Value>>>,
     parent: Option<Rc<RefCell<EnvironmentNode>>>,
 }
 
 impl EnvironmentNode {
     #[inline(always)]
-    pub fn set(&mut self, key: Intern<String>, value: Value) -> Option<Value> {
-        self.data.insert(key, value)
+    pub fn set(&mut self, key: Intern<String>, value: Value) {
+        self.data.insert(key, Rc::new(RefCell::new(value)));
     }
 
     #[inline(always)]
-    pub fn get(&self, key: &Intern<String>) -> Option<Value> {
+    pub fn get(&self, key: &Intern<String>) -> Option<Rc<RefCell<Value>>> {
         match self.data.get(key) {
             Some(value) => Some(value.clone()),
             None => match &self.parent {
@@ -421,12 +421,12 @@ impl Environment {
     }
 
     #[inline(always)]
-    pub fn set(&mut self, key: Intern<String>, value: Value) -> Option<Value> {
-        self.head.borrow_mut().set(key, value)
+    pub fn set(&mut self, key: Intern<String>, value: Value) {
+        self.head.borrow_mut().set(key, value);
     }
 
     #[inline(always)]
-    pub fn get(&self, key: &Intern<String>) -> Option<Value> {
+    pub fn get(&self, key: &Intern<String>) -> Option<Rc<RefCell<Value>>> {
         self.head.borrow().get(key)
     }
 
@@ -443,7 +443,7 @@ impl Environment {
             Value::Bool(_) => Ok(MaybeValue::Just(expr)),
             Value::Pair(p) => self.maybe_evaluate_pair(&*p.borrow()),
             Value::Symbol(s) => match self.get(&s) {
-                Some(value) => Ok(MaybeValue::Just(value)),
+                Some(cell) => Ok(MaybeValue::Just(cell.borrow().clone())),
                 None => Err(format!("Undefined symbol: {}", s)),
             },
             _ => Err("Cannot evaluate expression".to_string()),
@@ -603,11 +603,11 @@ impl Environment {
         }
         match args[0] {
             Value::Symbol(s) => {
-                let Some(_) = self.get(&s) else {
+                let Some(cell) = self.get(&s) else {
                     return Err("Symbol is not bound".to_string());
                 };
                 let val = self.evaluate(args[1].clone())?;
-                self.set(s, val);
+                *cell.borrow_mut() = val;
                 Ok(Value::Unspecified)
             }
             _ => Err("First argument to set! must be a symbol".to_string()),
@@ -853,15 +853,18 @@ mod tests {
         child.set(intern_str("a"), Value::Str("hello".to_string().into()));
         child.set(intern_str("b"), Value::Str("world".to_string().into()));
 
-        assert_eq!(base.get(&intern_str("a")), Some(Value::Integer(42)));
+        assert_eq!(
+            base.get(&intern_str("a")).unwrap().take(),
+            Value::Integer(42)
+        );
         assert_eq!(base.get(&intern_str("b")), None);
         assert_eq!(
-            child.get(&intern_str("a")),
-            Some(Value::Str("hello".to_string().into()))
+            child.get(&intern_str("a")).unwrap().take(),
+            Value::Str("hello".to_string().into())
         );
         assert_eq!(
-            child.get(&intern_str("b")),
-            Some(Value::Str("world".to_string().into()))
+            child.get(&intern_str("b")).unwrap().take(),
+            Value::Str("world".to_string().into())
         );
     }
 
