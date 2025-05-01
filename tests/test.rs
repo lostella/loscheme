@@ -314,7 +314,7 @@ fn test_language_features() {
 
     let mut env = Environment::standard().child();
     for (code, exp) in steps {
-        let got = format!("{}", run(code, &mut env).unwrap().borrow());
+        let got = format!("{}", run(code, &mut env).unwrap());
         assert_eq!(
             exp, got,
             "we are testing that {} gives {}, but got {}",
@@ -334,10 +334,7 @@ fn test_factorial() {
 
         (fact 12)
     "#;
-    assert_eq!(
-        "479001600",
-        format!("{}", run_standard(code).unwrap().borrow())
-    );
+    assert_eq!("479001600", format!("{}", run_standard(code).unwrap()));
 }
 
 #[test]
@@ -353,10 +350,7 @@ fn test_fibonacci() {
 
         (fib 50)
     "#;
-    assert_eq!(
-        "12586269025",
-        format!("{}", run_standard(code).unwrap().borrow())
-    );
+    assert_eq!("12586269025", format!("{}", run_standard(code).unwrap()));
 }
 
 #[test]
@@ -370,7 +364,7 @@ fn test_ackermann() {
 
         (ackermann 2 3) ; keep the arguments small!
     "#;
-    assert_eq!("9", format!("{}", run_standard(code).unwrap().borrow()));
+    assert_eq!("9", format!("{}", run_standard(code).unwrap()));
 }
 
 #[test]
@@ -389,7 +383,7 @@ fn test_quicksort() {
         (quicksort '(34 7 23 32 5 62 32 2 1 6 45 78 99 3))
     "#;
     assert_eq!(
-        format!("{}", run_standard(code).unwrap().borrow()),
+        format!("{}", run_standard(code).unwrap()),
         "(1 2 3 5 6 7 23 32 32 34 45 62 78 99)"
     );
 }
@@ -413,7 +407,7 @@ fn test_sqrt_newton_1() {
         (sqrt 2)
     "#;
     assert_eq!(
-        format!("{}", run_standard(code).unwrap().borrow()),
+        format!("{}", run_standard(code).unwrap()),
         "1.4142156862745097"
     );
 }
@@ -442,7 +436,7 @@ fn test_sqrt_newton_2() {
         (sqrt 2)
     "#;
     assert_eq!(
-        format!("{}", run_standard(code).unwrap().borrow()),
+        format!("{}", run_standard(code).unwrap()),
         "1.4142156862745097"
     );
 }

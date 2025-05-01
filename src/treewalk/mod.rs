@@ -310,7 +310,7 @@ impl fmt::Display for Value {
             Value::Keyword(k) => write!(f, "{}", k),
             Value::Symbol(s) => write!(f, "{}", s),
             Value::Pair(_) => {
-                write!(f, "(");
+                write!(f, "(")?;
                 let mut current = self.clone();
                 let mut first = true;
 
@@ -319,18 +319,18 @@ impl fmt::Display for Value {
                         Value::Pair(pair_rc) => {
                             let pair = pair_rc.borrow();
                             if !first {
-                                write!(f, " ");
+                                write!(f, " ")?;
                             }
-                            write!(f, "{}", pair.0);
+                            write!(f, "{}", pair.0)?;
                             current = pair.1.clone();
                             first = false;
                         }
                         Value::Null => {
-                            write!(f, ")");
+                            write!(f, ")")?;
                             break;
                         }
                         other => {
-                            write!(f, " . {})", other);
+                            write!(f, " . {})", other)?;
                             break;
                         }
                     }
@@ -414,7 +414,7 @@ impl Environment {
         for (s, f) in builtin::BUILTIN_BINDINGS {
             env.set(
                 Intern::new(s.to_string()),
-                Value::Procedure(Procedure::BuiltIn(BuiltInProcedure { func: f }).into()),
+                Value::Procedure(Rc::new(Procedure::BuiltIn(BuiltInProcedure { func: f }))),
             );
         }
         env
@@ -451,7 +451,7 @@ impl Environment {
     }
 
     fn maybe_evaluate_pair(&mut self, pair: &(Value, Value)) -> Result<MaybeValue, String> {
-        let args = pair.1.borrow_vec()?;
+        let args = pair.1.clone().into_vec()?;
 
         match pair.0 {
             Value::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(args)?)),
@@ -495,17 +495,17 @@ impl Environment {
     fn do_quasiquote(&mut self, expr: Value) -> Result<Value, String> {
         if let Value::Pair(p) = expr {
             if let Value::Keyword(Keyword::Unquote) = p.borrow().0 {
-                let Value::Pair(p) = p.borrow().1 else {
+                let Value::Pair(p) = p.borrow().1.clone() else {
                     return Err("Unquote as part of improper list".to_string());
                 };
                 let Value::Null = p.borrow().1 else {
                     return Err("Unquote takes a single argument".to_string());
                 };
-                return self.evaluate(p.borrow().0);
+                return self.evaluate(p.borrow().0.clone());
             } else {
                 return Ok(Value::Pair(Rc::new(RefCell::new((
-                    self.do_quasiquote(p.borrow().0)?,
-                    self.do_quasiquote(p.borrow().1)?,
+                    self.do_quasiquote(p.borrow().0.clone())?,
+                    self.do_quasiquote(p.borrow().1.clone())?,
                 )))));
             }
         }
@@ -526,15 +526,14 @@ impl Environment {
         if args.is_empty() {
             return Err("Lambda needs at least one argument".to_string());
         }
-        let first = &*args[0].borrow();
+        let first = args[0].clone();
         let rest = &args[1..args.len()];
         let mut params = Vec::new();
         match first {
-            Value::Pair { .. } => {
-                for val_ref in first.borrow_vec()? {
-                    let val = &*val_ref.borrow();
+            Value::Pair(_) => {
+                for val in first.into_vec()? {
                     match val {
-                        Value::Symbol(s) => params.push(*s),
+                        Value::Symbol(s) => params.push(s),
                         _ => return Err(format!("Not a symbol: {}", val)),
                     }
                 }
@@ -551,14 +550,14 @@ impl Environment {
             body,
             env: self.clone(),
         };
-        Ok(Value::Procedure(Procedure::UserDefined(proc)).into())
+        Ok(Value::Procedure(Rc::new(Procedure::UserDefined(proc))))
     }
 
     fn evaluate_define(&mut self, args: Vec<Value>) -> Result<Value, String> {
         if args.is_empty() {
             return Err("Define needs at least one argument".to_string());
         }
-        let first = &*args[0].borrow();
+        let first = args[0].clone();
         let rest = &args[1..args.len()];
         match first {
             Value::Symbol(key) => {
@@ -567,19 +566,18 @@ impl Environment {
                     2 => self.evaluate(args[1].clone())?,
                     _ => return Err("Define with a symbol gets at most two arguments".to_string()),
                 };
-                self.set(*key, value);
+                self.set(key, value);
                 Ok(Value::Unspecified.into())
             }
-            Value::Pair { car, cdr } => {
-                let key = match *car.borrow() {
+            Value::Pair(p) => {
+                let key = match p.borrow().0 {
                     Value::Symbol(s) => Ok(s),
                     _ => Err("Not a symbol"),
                 }?;
                 let mut params = Vec::new();
-                for val_ref in cdr.borrow().borrow_vec()? {
-                    let val = &*val_ref.borrow();
+                for val in p.borrow().1.clone().into_vec()? {
                     match val {
-                        Value::Symbol(s) => params.push(*s),
+                        Value::Symbol(s) => params.push(s),
                         _ => return Err(format!("Not a symbol: {}", val)),
                     }
                 }
@@ -592,8 +590,8 @@ impl Environment {
                     body,
                     env: self.clone(),
                 };
-                self.set(key, Value::Procedure(Procedure::UserDefined(proc)).into());
-                Ok(Value::Unspecified.into())
+                self.set(key, Value::Procedure(Rc::new(Procedure::UserDefined(proc))));
+                Ok(Value::Unspecified)
             }
             _ => Err("Define needs a symbol or a list as first argument".to_string()),
         }
@@ -603,13 +601,14 @@ impl Environment {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments".to_string());
         }
-        match &*args[0].borrow() {
+        match args[0] {
             Value::Symbol(s) => {
-                let Some(valref) = self.get(s) else {
+                let Some(_) = self.get(&s) else {
                     return Err("Symbol is not bound".to_string());
                 };
-                *valref.borrow_mut() = (*self.evaluate(args[1].clone())?.borrow()).clone();
-                Ok(Value::Unspecified.into())
+                let val = self.evaluate(args[1].clone())?;
+                self.set(s, val);
+                Ok(Value::Unspecified)
             }
             _ => Err("First argument to set! must be a symbol".to_string()),
         }
@@ -634,15 +633,16 @@ impl Environment {
 
     fn evaluate_cond(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
         for clause in args {
-            match &*clause.borrow() {
-                Value::Pair { car, cdr } => {
-                    let seq = cdr.borrow().borrow_vec()?;
-                    if let Value::Symbol(s) = &*car.borrow() {
-                        if **s == "else" {
+            match clause {
+                Value::Pair(p) => {
+                    let seq = p.borrow().1.clone().into_vec()?;
+                    if let Value::Symbol(s) = p.borrow().0 {
+                        if *s == "else" {
                             return self.evaluate_begin(seq);
                         }
                     }
-                    match &*(self.evaluate(car.clone())?).borrow() {
+                    let val = self.evaluate(p.borrow().0.clone())?;
+                    match val {
                         Value::Bool(true) => return self.evaluate_begin(seq),
                         Value::Bool(false) => continue,
                         _ => return Err("Clause did not evaluate to a boolean".to_string()),
@@ -651,7 +651,7 @@ impl Environment {
                 _ => return Err("Not a list".to_string()),
             }
         }
-        Ok(MaybeValue::Just(Value::Unspecified.into()))
+        Ok(MaybeValue::Just(Value::Unspecified))
     }
 
     fn evaluate_when(&mut self, mut args: Vec<Value>) -> Result<MaybeValue, String> {
@@ -660,7 +660,7 @@ impl Environment {
         }
         match self.evaluate(args[0].clone())? {
             Value::Bool(true) => self.evaluate_begin(args.split_off(1)),
-            Value::Bool(false) => Ok(MaybeValue::Just(Value::Unspecified.into())),
+            Value::Bool(false) => Ok(MaybeValue::Just(Value::Unspecified)),
             _ => Err("First argument to when did not evaluate to a boolean".to_string()),
         }
     }
@@ -670,7 +670,7 @@ impl Environment {
             return Err("Unless needs at least one argument".to_string());
         }
         match self.evaluate(args[0].clone())? {
-            Value::Bool(true) => Ok(MaybeValue::Just(Value::Unspecified.into())),
+            Value::Bool(true) => Ok(MaybeValue::Just(Value::Unspecified)),
             Value::Bool(false) => self.evaluate_begin(args.split_off(1)),
             _ => Err("First argument to unless did not evaluate to a boolean".to_string()),
         }
@@ -681,28 +681,26 @@ impl Environment {
             return Err("Let needs at least one argument".to_string());
         }
         let mut child = self.child();
-        for expr in args[0].borrow().borrow_vec()? {
-            match &*expr.borrow() {
-                Value::Pair { car, cdr } => match (&*car.borrow(), &*cdr.borrow()) {
-                    (
-                        Value::Symbol(s),
-                        Value::Pair {
-                            car: inner_car,
-                            cdr: inner_cdr,
-                        },
-                    ) => {
-                        if *inner_cdr.borrow() != Value::Null {
-                            return Err("Not a 2-list".to_string());
+        for expr in args[0].clone().into_vec()? {
+            match expr {
+                Value::Pair(p) => {
+                    let borrowed = p.borrow();
+                    match (borrowed.0.clone(), borrowed.1.clone()) {
+                        (Value::Symbol(s), Value::Pair(inner_p)) => {
+                            let inner_borrowed = inner_p.borrow();
+                            if inner_borrowed.1 != Value::Null {
+                                return Err("Not a 2-list".to_string());
+                            }
+                            let value = child.evaluate(inner_borrowed.0.clone())?;
+                            child.set(s, value);
                         }
-                        let value = child.evaluate(inner_car.clone())?;
-                        child.set(*s, value);
+                        _ => return Err("Not a symbol".to_string()),
                     }
-                    _ => return Err("Not a symbol".to_string()),
-                },
+                }
                 _ => return Err("Not a 2-list".to_string()),
             }
         }
-        let mut out = MaybeValue::Just(Value::Unspecified.into());
+        let mut out = MaybeValue::Just(Value::Unspecified);
         if let Some((last, rest)) = args.split_off(1).split_last() {
             for expr in rest {
                 child.evaluate(expr.clone())?;
@@ -713,7 +711,7 @@ impl Environment {
     }
 
     fn evaluate_begin(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
-        let mut out = MaybeValue::Just(Value::Unspecified.into());
+        let mut out = MaybeValue::Just(Value::Unspecified);
         if let Some((last, rest)) = args.split_last() {
             for expr in rest {
                 self.evaluate(expr.clone())?;
@@ -727,22 +725,22 @@ impl Environment {
         for expr in args {
             match self.evaluate(expr)? {
                 Value::Bool(true) => continue,
-                Value::Bool(false) => return Ok(Value::Bool(false).into()),
+                Value::Bool(false) => return Ok(Value::Bool(false)),
                 _ => return Err("Cannot \"and\" type".to_string()),
             }
         }
-        Ok(Value::Bool(true).into())
+        Ok(Value::Bool(true))
     }
 
     fn evaluate_or(&mut self, args: Vec<Value>) -> Result<Value, String> {
         for expr in args {
             match self.evaluate(expr)? {
-                Value::Bool(true) => return Ok(Value::Bool(true).into()),
+                Value::Bool(true) => return Ok(Value::Bool(true)),
                 Value::Bool(false) => continue,
                 _ => return Err("Cannot \"or\" type".to_string()),
             }
         }
-        Ok(Value::Bool(false).into())
+        Ok(Value::Bool(false))
     }
 }
 
@@ -769,7 +767,7 @@ impl UserDefinedProcedure {
         for (param, arg) in zip(params, args) {
             env.set(*param, arg);
         }
-        let mut out = MaybeValue::Just(Value::Unspecified.into());
+        let mut out = MaybeValue::Just(Value::Unspecified);
         if let Some((last, rest)) = body.split_last() {
             for expr in rest {
                 env.evaluate(expr.clone())?;
@@ -786,10 +784,10 @@ impl Callable for UserDefinedProcedure {
         loop {
             match out? {
                 MaybeValue::Just(expr) => return Ok(MaybeValue::Just(expr)),
-                MaybeValue::TailCall(Procedure::BuiltIn(proc), args) => return proc.call(args),
-                MaybeValue::TailCall(Procedure::UserDefined(proc), args) => {
-                    out = proc.call_except_tail(args)
-                }
+                MaybeValue::TailCall(rc, args) => match rc.as_ref() {
+                    Procedure::BuiltIn(proc) => return proc.call(args),
+                    Procedure::UserDefined(proc) => out = proc.call_except_tail(args),
+                },
             }
         }
     }
@@ -848,14 +846,14 @@ mod tests {
     #[test]
     fn test_environment() {
         let mut base = Environment::empty();
-        base.set(intern_str("a"), Value::Integer(42).into());
+        base.set(intern_str("a"), Value::Integer(42));
 
         let mut child = base.child();
 
         child.set(intern_str("a"), Value::Str("hello".to_string().into()));
         child.set(intern_str("b"), Value::Str("world".to_string().into()));
 
-        assert_eq!(base.get(&intern_str("a")), Some(Value::Integer(42).into()));
+        assert_eq!(base.get(&intern_str("a")), Some(Value::Integer(42)));
         assert_eq!(base.get(&intern_str("b")), None);
         assert_eq!(
             child.get(&intern_str("a")),
@@ -872,8 +870,8 @@ mod tests {
         for (code, out) in steps {
             let val = Value::from(parse(code).unwrap().remove(0));
             assert_eq!(
-                env.evaluate(val.into()),
-                Ok(out.clone().into()),
+                env.evaluate(val),
+                Ok(out.clone()),
                 "we are testing that {} gives {}",
                 code,
                 out

@@ -1,6 +1,8 @@
 use super::{BuiltInFnType, Callable, MaybeValue, Value};
 use crate::parser::{parse_expression, Tokenizer};
+use std::cell::RefCell;
 use std::io::{self, BufRead};
+use std::rc::Rc;
 
 pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 44] = [
     ("+", builtin_add),
@@ -180,15 +182,18 @@ fn builtin_not(values: Vec<Value>) -> Result<MaybeValue, String> {
 }
 
 fn builtin_list(values: Vec<Value>) -> Result<MaybeValue, String> {
-    Ok(MaybeValue::Just(Value::from_slice_ref(&values).into()))
+    Ok(MaybeValue::Just(Value::from_slice(&values)))
 }
 
 fn builtin_apply(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Apply needs exactly two arguments".to_string());
     }
-    match values[0] {
-        Value::Procedure(proc) => Ok(MaybeValue::TailCall(proc.clone(), values[1].borrow_vec()?)),
+    match &values[0] {
+        Value::Procedure(proc) => Ok(MaybeValue::TailCall(
+            proc.clone(),
+            values[1].clone().into_vec()?,
+        )),
         _ => Err("Apply needs a procedure and a list as arguments".to_string()),
     }
 }
@@ -197,8 +202,8 @@ fn builtin_length(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument".to_string());
     }
-    match values[0].borrow_vec() {
-        Ok(v) => Ok(MaybeValue::Just(Value::Integer(v.len() as i64).into())),
+    match values[0].clone().into_vec() {
+        Ok(v) => Ok(MaybeValue::Just(Value::Integer(v.len() as i64))),
         _ => Err("Cannot compute length (is it a list?)".to_string()),
     }
 }
@@ -206,113 +211,107 @@ fn builtin_length(values: Vec<Value>) -> Result<MaybeValue, String> {
 fn builtin_append(values: Vec<Value>) -> Result<MaybeValue, String> {
     let mut all = Vec::new();
     for value in values {
-        let borrowed = &*value.borrow();
-        match borrowed {
-            Value::Pair { .. } => all.extend(borrowed.borrow_vec()?),
+        match value {
+            Value::Pair(_) => all.extend(value.into_vec()?),
             Value::Null => (),
             _ => return Err("Append needs lists as arguments".to_string()),
         }
     }
-    Ok(MaybeValue::Just(Value::from_slice_ref(&all).into()))
+    Ok(MaybeValue::Just(Value::from_slice(&all)))
 }
 
 fn builtin_ispair(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Pair? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(
-        Value::Bool(matches!(&*values[0].borrow(), Value::Pair { .. })).into(),
-    ))
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Pair(_)
+    ))))
 }
 
 fn builtin_islist(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("List? needs exactly one argument".to_string());
     }
-    let mut res = true;
     let mut cur = values[0].clone();
     loop {
-        let borrowed = cur.borrow();
-        match &*borrowed {
-            Value::Null => break,
-            Value::Pair { car: _, cdr } => {
-                let next = cdr.clone();
-                drop(borrowed);
-                cur = next;
+        match cur {
+            Value::Null => return Ok(MaybeValue::Just(Value::Bool(true))),
+            Value::Pair(p) => {
+                cur = p.borrow().1.clone();
             }
-            _ => {
-                res = false;
-                break;
-            }
+            _ => return Ok(MaybeValue::Just(Value::Bool(false))),
         }
     }
-    Ok(MaybeValue::Just(Value::Bool(res).into()))
 }
 
 fn builtin_isnull(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Null? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(
-        Value::Bool(matches!(&*values[0].borrow(), Value::Null)).into(),
-    ))
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Null
+    ))))
 }
 
 fn builtin_isnumber(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Number? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(
-        Value::Bool(matches!(
-            &*values[0].borrow(),
-            Value::Float(_) | Value::Integer(_)
-        ))
-        .into(),
-    ))
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Float(_) | Value::Integer(_)
+    ))))
 }
 
 fn builtin_issymbol(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Symbol? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(
-        Value::Bool(matches!(&*values[0].borrow(), Value::Symbol(_))).into(),
-    ))
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Symbol(_)
+    ))))
 }
 
 fn builtin_isstring(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("String? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(
-        Value::Bool(matches!(&*values[0].borrow(), Value::Str(_))).into(),
-    ))
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Str(_)
+    ))))
 }
 
 fn builtin_isboolean(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Boolean? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(
-        Value::Bool(matches!(&*values[0].borrow(), Value::Bool(_))).into(),
-    ))
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Bool(_)
+    ))))
 }
 
 fn builtin_isprocedure(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Procedure? needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(
-        Value::Bool(matches!(&*values[0].borrow(), Value::Procedure(_))).into(),
-    ))
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Procedure(_)
+    ))))
 }
 
 fn builtin_iseven(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Even? needs exactly one argument".to_string());
     }
-    match &*values[0].borrow() {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v % 2 == 0).into())),
+    match values[0] {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v % 2 == 0))),
         _ => Err("Even? needs an integer argument".to_string()),
     }
 }
@@ -321,8 +320,8 @@ fn builtin_isodd(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Odd? needs exactly one argument".to_string());
     }
-    match &*values[0].borrow() {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v % 2 != 0).into())),
+    match values[0] {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v % 2 != 0))),
         _ => Err("Odd? needs an integer argument".to_string()),
     }
 }
@@ -331,9 +330,9 @@ fn builtin_ispositive(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Positive? needs exactly one argument".to_string());
     }
-    match &*values[0].borrow() {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(*v > 0).into())),
-        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(*v > 0 as f64).into())),
+    match values[0] {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v > 0))),
+        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(v > 0 as f64))),
         _ => Err("Positive? needs a number argument".to_string()),
     }
 }
@@ -342,9 +341,9 @@ fn builtin_isnegative(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Negative? needs exactly one argument".to_string());
     }
-    match &*values[0].borrow() {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(*v < 0).into())),
-        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(*v < 0 as f64).into())),
+    match values[0] {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v < 0))),
+        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(v < 0 as f64))),
         _ => Err("Negative? needs a number argument".to_string()),
     }
 }
@@ -353,9 +352,9 @@ fn builtin_iszero(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Zero? needs exactly one argument".to_string());
     }
-    match &*values[0].borrow() {
-        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(*v == 0).into())),
-        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(*v == 0 as f64).into())),
+    match values[0] {
+        Value::Integer(v) => Ok(MaybeValue::Just(Value::Bool(v == 0))),
+        Value::Float(v) => Ok(MaybeValue::Just(Value::Bool(v == 0 as f64))),
         _ => Err("Zero? needs a number argument".to_string()),
     }
 }
@@ -364,21 +363,18 @@ fn builtin_cons(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Cons needs exactly two arguments".to_string());
     }
-    Ok(MaybeValue::Just(
-        Value::Pair {
-            car: values[0].borrow().clone().into(),
-            cdr: values[1].borrow().clone().into(),
-        }
-        .into(),
-    ))
+    Ok(MaybeValue::Just(Value::Pair(Rc::new(RefCell::new((
+        values[0].clone(),
+        values[1].clone(),
+    ))))))
 }
 
 fn builtin_car(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Car needs exactly one argument".to_string());
     }
-    match &*values[0].borrow() {
-        Value::Pair { car, cdr: _ } => Ok(MaybeValue::Just(car.clone())),
+    match &values[0] {
+        Value::Pair(p) => Ok(MaybeValue::Just(p.borrow().0.clone())),
         _ => Err("Car needs a pair as argument".to_string()),
     }
 }
@@ -387,8 +383,8 @@ fn builtin_cdr(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Cdr needs exactly one argument".to_string());
     }
-    match &*values[0].borrow() {
-        Value::Pair { car: _, cdr } => Ok(MaybeValue::Just(cdr.clone())),
+    match &values[0] {
+        Value::Pair(p) => Ok(MaybeValue::Just(p.borrow().1.clone())),
         _ => Err("Cdr needs a pair as argument".to_string()),
     }
 }
@@ -397,11 +393,11 @@ fn builtin_setcar(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Set-car needs exactly two arguments".to_string());
     }
-    let first = &mut *values[0].borrow_mut();
-    match first {
-        Value::Pair { car, cdr: _ } => {
-            *car = values[1].clone();
-            Ok(MaybeValue::Just(Value::Unspecified.into()))
+    match &values[0] {
+        Value::Pair(p) => {
+            let mut borrowed = p.borrow_mut();
+            borrowed.0 = values[1].clone();
+            Ok(MaybeValue::Just(Value::Unspecified))
         }
         _ => Err("Set-car needs a pair as first argument".to_string()),
     }
@@ -411,11 +407,11 @@ fn builtin_setcdr(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Set-cdr needs exactly two arguments".to_string());
     }
-    let first = &mut *values[0].borrow_mut();
-    match first {
-        Value::Pair { car: _, cdr } => {
-            *cdr = values[1].clone();
-            Ok(MaybeValue::Just(Value::Unspecified.into()))
+    match &values[0] {
+        Value::Pair(p) => {
+            let mut borrowed = p.borrow_mut();
+            borrowed.1 = values[1].clone();
+            Ok(MaybeValue::Just(Value::Unspecified))
         }
         _ => Err("Set-cdr needs a pair as first argument".to_string()),
     }
@@ -425,15 +421,15 @@ fn builtin_filter(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Filter needs exactly two arguments".to_string());
     }
-    match &*values[0].borrow() {
+    match &values[0] {
         Value::Procedure(proc) => {
             let mut v = Vec::new();
-            for x in values[1].borrow().borrow_vec()? {
+            for x in values[1].clone().into_vec()? {
                 if proc.call(vec![x.clone()])?.materialize()? == Value::Bool(true).into() {
                     v.push(x)
                 }
             }
-            Ok(MaybeValue::Just(Value::from_slice_ref(&v).into()))
+            Ok(MaybeValue::Just(Value::from_slice(&v)))
         }
         _ => Err("Not a procedure".to_string()),
     }
@@ -443,13 +439,13 @@ fn builtin_map(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Map needs exactly two arguments".to_string());
     }
-    match &*values[0].borrow() {
+    match &values[0] {
         Value::Procedure(proc) => {
             let mut v = Vec::new();
-            for x in values[1].borrow().borrow_vec()? {
+            for x in values[1].clone().into_vec()? {
                 v.push(proc.call(vec![x])?.materialize()?)
             }
-            Ok(MaybeValue::Just(Value::from_slice_ref(&v).into()))
+            Ok(MaybeValue::Just(Value::from_slice(&v)))
         }
         _ => Err("Not a procedure".to_string()),
     }
@@ -459,9 +455,9 @@ fn builtin_reverse(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Reverse needs exactly one argument".to_string());
     }
-    let res = &mut *values[0].borrow().borrow_vec()?;
+    let mut res = values[0].clone().into_vec()?;
     res.reverse();
-    Ok(MaybeValue::Just(Value::from_slice_ref(res).into()))
+    Ok(MaybeValue::Just(Value::from_slice(&res)))
 }
 
 fn builtin_read(values: Vec<Value>) -> Result<MaybeValue, String> {
@@ -473,7 +469,7 @@ fn builtin_read(values: Vec<Value>) -> Result<MaybeValue, String> {
     loop {
         let mut tokens = Tokenizer::new(&input).peekable();
         if let Ok(expr) = parse_expression(&mut tokens) {
-            return Ok(MaybeValue::Just(Value::from(expr).into()));
+            return Ok(MaybeValue::Just(Value::from(expr)));
         }
         let _ = io::stdin().lock().read_line(&mut input);
     }
@@ -483,8 +479,8 @@ fn builtin_write(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Write needs exactly one argument".to_string());
     }
-    print!("{}", &*values[0].borrow());
-    Ok(MaybeValue::Just(Value::Unspecified.into()))
+    print!("{}", values[0]);
+    Ok(MaybeValue::Just(Value::Unspecified))
 }
 
 fn builtin_newline(values: Vec<Value>) -> Result<MaybeValue, String> {
@@ -492,14 +488,14 @@ fn builtin_newline(values: Vec<Value>) -> Result<MaybeValue, String> {
         return Err("Write takes no arguments".to_string());
     }
     println!();
-    Ok(MaybeValue::Just(Value::Unspecified.into()))
+    Ok(MaybeValue::Just(Value::Unspecified))
 }
 
 fn builtin_listtail(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("List-tail needs exactly two arguments".to_string());
     }
-    let Value::Integer(mut k) = &*values[1].borrow() else {
+    let Value::Integer(mut k) = values[1] else {
         return Err("List-tail needs integer as second argument".to_string());
     };
     let mut cur = values[0].clone();
@@ -507,16 +503,13 @@ fn builtin_listtail(values: Vec<Value>) -> Result<MaybeValue, String> {
         if k == 0 {
             return Ok(MaybeValue::Just(cur.clone()));
         }
-        let borrowed = cur.borrow();
-        match &*borrowed {
+        match cur {
             Value::Null => {
                 return Err("Exceeded list length".to_string());
             }
-            Value::Pair { car: _, cdr } => {
+            Value::Pair(p) => {
                 k -= 1;
-                let next = cdr.clone();
-                drop(borrowed);
-                cur = next;
+                cur = p.borrow().1.clone();
             }
             _ => {
                 return Err("Not a proper list".to_string());
@@ -529,10 +522,11 @@ fn builtin_listref(values: Vec<Value>) -> Result<MaybeValue, String> {
     let MaybeValue::Just(pair) = builtin_listtail(values)? else {
         return Err("List-tail did not return a value?".into());
     };
-    let Value::Pair { car, cdr: _ } = &*pair.borrow() else {
-        return Err("List-tail did not return a pair?".into());
-    };
-    Ok(MaybeValue::Just(car.clone()))
+    if let Value::Pair(p) = pair {
+        Ok(MaybeValue::Just(p.borrow().0.clone()))
+    } else {
+        Err("List-tail did not return a pair?".into())
+    }
 }
 
 #[cfg(test)]
@@ -541,24 +535,24 @@ mod tests {
 
     #[test]
     fn test_builtin_add() {
-        let values = vec![Value::Integer(10).into(), Value::Float(42.0).into()];
+        let values = vec![Value::Integer(10), Value::Float(42.0)];
 
         assert_eq!(
             builtin_add(values),
-            Ok(MaybeValue::Just(Value::Float(52.0).into()))
+            Ok(MaybeValue::Just(Value::Float(52.0)))
         );
 
-        let values = vec![Value::Float(42.0).into(), Value::Integer(13).into()];
+        let values = vec![Value::Float(42.0), Value::Integer(13)];
 
         assert_eq!(
             builtin_add(values),
-            Ok(MaybeValue::Just(Value::Float(55.0).into()))
+            Ok(MaybeValue::Just(Value::Float(55.0)))
         );
 
         let values = vec![
-            Value::Float(42.0).into(),
-            Value::Integer(13).into(),
-            Value::Str("hey, hey".to_string()).into(),
+            Value::Float(42.0),
+            Value::Integer(13),
+            Value::Str("hey, hey".to_string().into()),
         ];
 
         assert_eq!(builtin_add(values), Err("Cannot add types".to_string()));
