@@ -64,28 +64,19 @@ impl Value {
         }
     }
 
-    pub fn borrow_vec(&self) -> Result<Vec<Value>, String> {
-        match self {
-            Value::Null => Ok(vec![]),
-            Value::Pair { car, cdr } => {
-                let mut res = vec![car.clone()];
-                let mut cur = cdr.clone();
-                loop {
-                    let borrowed = cur.borrow();
-                    match &*borrowed {
-                        Value::Pair { car, cdr } => {
-                            res.push(car.clone());
-                            let next = cdr.clone();
-                            drop(borrowed);
-                            cur = next;
-                        }
-                        Value::Null => break,
-                        _ => return Err("Not a proper list".to_string()),
-                    }
+    pub fn into_vec(self) -> Result<Vec<Value>, String> {
+        let mut res = Vec::new();
+        let mut cur = self;
+        loop {
+            match cur {
+                Value::Null => return Ok(res),
+                Value::Pair(p) => {
+                    let borrowed = p.borrow();
+                    res.push(borrowed.0.clone());
+                    cur = borrowed.1.clone()
                 }
-                Ok(res)
+                _ => return Err("Not a proper list".to_string()),
             }
-            _ => Err("Not a list".to_string()),
         }
     }
 
@@ -355,7 +346,7 @@ impl fmt::Display for Value {
 #[derive(Debug, PartialEq, Clone)]
 pub enum MaybeValue {
     Just(Value),
-    TailCall(Procedure, Vec<Value>),
+    TailCall(Rc<Procedure>, Vec<Value>),
 }
 
 impl MaybeValue {

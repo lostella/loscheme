@@ -1,4 +1,4 @@
-use super::{BuiltInFnType, Callable, MaybeValue, Value, ValueRef};
+use super::{BuiltInFnType, Callable, MaybeValue, Value};
 use crate::parser::{parse_expression, Tokenizer};
 use std::io::{self, BufRead};
 
@@ -49,90 +49,86 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 44] = [
     ("list-tail", builtin_listtail),
 ];
 
-fn builtin_add(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_add(values: Vec<Value>) -> Result<MaybeValue, String> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(0), |acc, x| acc.add(&x.borrow()))?;
-    Ok(MaybeValue::Just(res.into()))
+        .try_fold(Value::Integer(0), |acc, x| acc.add(&x))?;
+    Ok(MaybeValue::Just(res))
 }
 
-fn builtin_mul(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_mul(values: Vec<Value>) -> Result<MaybeValue, String> {
     let res = values
         .into_iter()
-        .try_fold(Value::Integer(1), |acc, x| acc.mul(&x.borrow()))?;
-    Ok(MaybeValue::Just(res.into()))
+        .try_fold(Value::Integer(1), |acc, x| acc.mul(&x))?;
+    Ok(MaybeValue::Just(res))
 }
 
-fn builtin_sub(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_sub(values: Vec<Value>) -> Result<MaybeValue, String> {
     let mut values_iter = values.into_iter();
     let Some(v) = values_iter.next() else {
-        return Ok(MaybeValue::Just(Value::Integer(0).into()));
+        return Ok(MaybeValue::Just(Value::Integer(0)));
     };
-    let mut res = (*v.borrow()).clone();
+    let mut res = v.clone();
     for v in values_iter {
-        res = res.sub(&v.borrow())?
+        res = res.sub(&v)?
     }
-    Ok(MaybeValue::Just(res.into()))
+    Ok(MaybeValue::Just(res))
 }
 
-fn builtin_abs(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_abs(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Abs needs exactly one argument".to_string());
     }
     let res = match values.first() {
-        Some(value) => match &*value.borrow() {
+        Some(value) => match value {
             Value::Integer(n) => Value::Integer(if *n >= 0 { *n } else { -*n }),
             Value::Float(n) => Value::Float(if *n >= 0.0 { *n } else { -*n }),
             _ => return Err("Abs needs a number argument".to_string()),
         },
         _ => return Err("Abs needs exactly one argument".to_string()),
     };
-    Ok(MaybeValue::Just(res.into()))
+    Ok(MaybeValue::Just(res))
 }
 
-fn builtin_div(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_div(values: Vec<Value>) -> Result<MaybeValue, String> {
     let mut values_iter = values.into_iter();
     let Some(v) = values_iter.next() else {
-        return Ok(MaybeValue::Just(Value::Integer(1).into()));
+        return Ok(MaybeValue::Just(Value::Integer(1)));
     };
-    let mut res = (*v.borrow()).clone();
+    let mut res = v.clone();
     for v in values_iter {
-        res = res.div(&v.borrow())?
+        res = res.div(&v)?
     }
-    Ok(MaybeValue::Just(res.into()))
+    Ok(MaybeValue::Just(res))
 }
 
-fn builtin_quotient(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_quotient(values: Vec<Value>) -> Result<MaybeValue, String> {
     match values.as_slice() {
-        [a, b] => match (&*a.borrow(), &*b.borrow()) {
-            (Value::Integer(a), Value::Integer(b)) => {
-                Ok(MaybeValue::Just(Value::Integer(a / b).into()))
-            }
+        [a, b] => match (a, b) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(MaybeValue::Just(Value::Integer(a / b))),
             _ => Err("Quotient needs integer arguments".to_string()),
         },
         _ => Err("Quotient needs exactly two arguments".to_string()),
     }
 }
 
-fn builtin_remainder(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_remainder(values: Vec<Value>) -> Result<MaybeValue, String> {
     match values.as_slice() {
-        [a, b] => match (&*a.borrow(), &*b.borrow()) {
-            (Value::Integer(a), Value::Integer(b)) => {
-                Ok(MaybeValue::Just(Value::Integer(a % b).into()))
-            }
+        [a, b] => match (a, b) {
+            (Value::Integer(a), Value::Integer(b)) => Ok(MaybeValue::Just(Value::Integer(a % b))),
             _ => Err("Remainder needs integer arguments".to_string()),
         },
         _ => Err("Remainder needs exactly two arguments".to_string()),
     }
 }
 
-fn builtin_modulo(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_modulo(values: Vec<Value>) -> Result<MaybeValue, String> {
     match values.as_slice() {
-        [a, b] => match (&*a.borrow(), &*b.borrow()) {
+        [a, b] => match (a, b) {
             (Value::Integer(a), Value::Integer(b)) => {
                 let r = a % b;
                 let m = if a.signum() != b.signum() { r + b } else { r };
-                Ok(MaybeValue::Just(Value::Integer(m).into()))
+                Ok(MaybeValue::Just(Value::Integer(m)))
             }
             _ => Err("Modulo needs integer arguments".to_string()),
         },
@@ -142,78 +138,72 @@ fn builtin_modulo(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
 
 type CmpFnType = fn(&Value, &Value) -> Result<Value, String>;
 
-fn builtin_cmp(values: Vec<ValueRef>, method: CmpFnType) -> Result<MaybeValue, String> {
+fn builtin_cmp(values: Vec<Value>, method: CmpFnType) -> Result<MaybeValue, String> {
     for (a, b) in values.iter().zip(values.iter().skip(1)) {
-        match method(&a.borrow(), &b.borrow()) {
-            Ok(Value::Bool(false)) => return Ok(MaybeValue::Just(Value::Bool(false).into())),
+        match method(a, b) {
+            Ok(Value::Bool(false)) => return Ok(MaybeValue::Just(Value::Bool(false))),
             Err(s) => return Err(s),
             _ => (),
         }
     }
-    Ok(MaybeValue::Just(Value::Bool(true).into()))
+    Ok(MaybeValue::Just(Value::Bool(true)))
 }
 
-fn builtin_lt(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_lt(values: Vec<Value>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::lt)
 }
 
-fn builtin_gt(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_gt(values: Vec<Value>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::gt)
 }
 
-fn builtin_leq(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_leq(values: Vec<Value>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::leq)
 }
 
-fn builtin_geq(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_geq(values: Vec<Value>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::geq)
 }
 
-fn builtin_iseq(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_iseq(values: Vec<Value>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::iseq)
 }
 
-fn builtin_not(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_not(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Not needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(
-        Value::Bool(match &*values[0].borrow() {
-            Value::Bool(b) => !b,
-            _ => false,
-        })
-        .into(),
-    ))
+    Ok(MaybeValue::Just(Value::Bool(match values[0] {
+        Value::Bool(b) => !b,
+        _ => false,
+    })))
 }
 
-fn builtin_list(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_list(values: Vec<Value>) -> Result<MaybeValue, String> {
     Ok(MaybeValue::Just(Value::from_slice_ref(&values).into()))
 }
 
-fn builtin_apply(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_apply(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Apply needs exactly two arguments".to_string());
     }
-    match &*values[0].borrow() {
-        Value::Procedure(proc) => Ok(MaybeValue::TailCall(
-            proc.clone(),
-            values[1].borrow().borrow_vec()?,
-        )),
+    match values[0] {
+        Value::Procedure(proc) => Ok(MaybeValue::TailCall(proc.clone(), values[1].borrow_vec()?)),
         _ => Err("Apply needs a procedure and a list as arguments".to_string()),
     }
 }
 
-fn builtin_length(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_length(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Length needs exactly one argument".to_string());
     }
-    match values[0].borrow().borrow_vec() {
+    match values[0].borrow_vec() {
         Ok(v) => Ok(MaybeValue::Just(Value::Integer(v.len() as i64).into())),
         _ => Err("Cannot compute length (is it a list?)".to_string()),
     }
 }
 
-fn builtin_append(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_append(values: Vec<Value>) -> Result<MaybeValue, String> {
     let mut all = Vec::new();
     for value in values {
         let borrowed = &*value.borrow();
@@ -226,7 +216,7 @@ fn builtin_append(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     Ok(MaybeValue::Just(Value::from_slice_ref(&all).into()))
 }
 
-fn builtin_ispair(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_ispair(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Pair? needs exactly one argument".to_string());
     }
@@ -235,7 +225,7 @@ fn builtin_ispair(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     ))
 }
 
-fn builtin_islist(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_islist(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("List? needs exactly one argument".to_string());
     }
@@ -259,7 +249,7 @@ fn builtin_islist(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     Ok(MaybeValue::Just(Value::Bool(res).into()))
 }
 
-fn builtin_isnull(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_isnull(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Null? needs exactly one argument".to_string());
     }
@@ -268,7 +258,7 @@ fn builtin_isnull(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     ))
 }
 
-fn builtin_isnumber(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_isnumber(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Number? needs exactly one argument".to_string());
     }
@@ -281,7 +271,7 @@ fn builtin_isnumber(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     ))
 }
 
-fn builtin_issymbol(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_issymbol(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Symbol? needs exactly one argument".to_string());
     }
@@ -290,7 +280,7 @@ fn builtin_issymbol(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     ))
 }
 
-fn builtin_isstring(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_isstring(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("String? needs exactly one argument".to_string());
     }
@@ -299,7 +289,7 @@ fn builtin_isstring(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     ))
 }
 
-fn builtin_isboolean(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_isboolean(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Boolean? needs exactly one argument".to_string());
     }
@@ -308,7 +298,7 @@ fn builtin_isboolean(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     ))
 }
 
-fn builtin_isprocedure(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_isprocedure(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Procedure? needs exactly one argument".to_string());
     }
@@ -317,7 +307,7 @@ fn builtin_isprocedure(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     ))
 }
 
-fn builtin_iseven(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_iseven(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Even? needs exactly one argument".to_string());
     }
@@ -327,7 +317,7 @@ fn builtin_iseven(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_isodd(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_isodd(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Odd? needs exactly one argument".to_string());
     }
@@ -337,7 +327,7 @@ fn builtin_isodd(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_ispositive(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_ispositive(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Positive? needs exactly one argument".to_string());
     }
@@ -348,7 +338,7 @@ fn builtin_ispositive(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_isnegative(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_isnegative(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Negative? needs exactly one argument".to_string());
     }
@@ -359,7 +349,7 @@ fn builtin_isnegative(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_iszero(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_iszero(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Zero? needs exactly one argument".to_string());
     }
@@ -370,7 +360,7 @@ fn builtin_iszero(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_cons(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_cons(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Cons needs exactly two arguments".to_string());
     }
@@ -383,7 +373,7 @@ fn builtin_cons(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     ))
 }
 
-fn builtin_car(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_car(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Car needs exactly one argument".to_string());
     }
@@ -393,7 +383,7 @@ fn builtin_car(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_cdr(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_cdr(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Cdr needs exactly one argument".to_string());
     }
@@ -403,7 +393,7 @@ fn builtin_cdr(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_setcar(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_setcar(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Set-car needs exactly two arguments".to_string());
     }
@@ -417,7 +407,7 @@ fn builtin_setcar(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_setcdr(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_setcdr(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Set-cdr needs exactly two arguments".to_string());
     }
@@ -431,7 +421,7 @@ fn builtin_setcdr(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_filter(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_filter(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Filter needs exactly two arguments".to_string());
     }
@@ -449,7 +439,7 @@ fn builtin_filter(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_map(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_map(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("Map needs exactly two arguments".to_string());
     }
@@ -465,7 +455,7 @@ fn builtin_map(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_reverse(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_reverse(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Reverse needs exactly one argument".to_string());
     }
@@ -474,7 +464,7 @@ fn builtin_reverse(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     Ok(MaybeValue::Just(Value::from_slice_ref(res).into()))
 }
 
-fn builtin_read(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_read(values: Vec<Value>) -> Result<MaybeValue, String> {
     if !values.is_empty() {
         return Err("Read takes no arguments".to_string());
     }
@@ -489,7 +479,7 @@ fn builtin_read(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_write(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_write(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Write needs exactly one argument".to_string());
     }
@@ -497,7 +487,7 @@ fn builtin_write(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     Ok(MaybeValue::Just(Value::Unspecified.into()))
 }
 
-fn builtin_newline(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_newline(values: Vec<Value>) -> Result<MaybeValue, String> {
     if !values.is_empty() {
         return Err("Write takes no arguments".to_string());
     }
@@ -505,7 +495,7 @@ fn builtin_newline(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     Ok(MaybeValue::Just(Value::Unspecified.into()))
 }
 
-fn builtin_listtail(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_listtail(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 2 {
         return Err("List-tail needs exactly two arguments".to_string());
     }
@@ -535,7 +525,7 @@ fn builtin_listtail(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
     }
 }
 
-fn builtin_listref(values: Vec<ValueRef>) -> Result<MaybeValue, String> {
+fn builtin_listref(values: Vec<Value>) -> Result<MaybeValue, String> {
     let MaybeValue::Just(pair) = builtin_listtail(values)? else {
         return Err("List-tail did not return a value?".into());
     };
