@@ -14,7 +14,7 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 44] = [
     (">", builtin_gt),
     ("<=", builtin_leq),
     (">=", builtin_geq),
-    ("=", builtin_iseq),
+    ("=", builtin_isnumeq),
     ("not", builtin_not),
     ("list", builtin_list),
     ("apply", builtin_apply),
@@ -167,7 +167,7 @@ fn builtin_geq(values: Vec<Value>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::geq)
 }
 
-fn builtin_iseq(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_isnumeq(values: Vec<Value>) -> Result<MaybeValue, String> {
     builtin_cmp(values, Value::iseq)
 }
 
