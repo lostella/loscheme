@@ -2,7 +2,6 @@ use crate::rationals::simplify;
 use internment::Intern;
 use std::fmt;
 use std::iter::Peekable;
-use std::rc::Rc;
 use std::str::{Chars, FromStr};
 
 #[derive(Debug, PartialEq)]
@@ -181,12 +180,6 @@ impl fmt::Display for Keyword {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Cons {
-    pub car: Expr,
-    pub cdr: Expr,
-}
-
-#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Null,
     Integer(i64),
@@ -196,7 +189,7 @@ pub enum Expr {
     Bool(bool),
     Keyword(Keyword),
     Symbol(Intern<String>),
-    Cons(Rc<Cons>),
+    Cons(Box<(Expr, Expr)>),
 }
 
 pub fn parse_tokens(tokens: &mut Peekable<Tokenizer>) -> Result<Vec<Expr>, String> {
@@ -236,10 +229,10 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
                 }
             }
             _ => {
-                return Ok(Expr::Cons(Rc::new(Cons {
-                    car: parse_expression(tokens)?,
-                    cdr: parse_list(tokens)?,
-                })));
+                return Ok(Expr::Cons(Box::new((
+                    parse_expression(tokens)?,
+                    parse_list(tokens)?,
+                ))));
             }
         }
     }
@@ -247,33 +240,24 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
 }
 
 fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Rc::new(Cons {
-        car: Expr::Keyword(Keyword::Quote),
-        cdr: Expr::Cons(Rc::new(Cons {
-            car: parse_expression(tokens)?,
-            cdr: Expr::Null,
-        })),
-    })))
+    Ok(Expr::Cons(Box::new((
+        Expr::Keyword(Keyword::Quote),
+        Expr::Cons(Box::new((parse_expression(tokens)?, Expr::Null))),
+    ))))
 }
 
 fn parse_quasiquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Rc::new(Cons {
-        car: Expr::Keyword(Keyword::Quasiquote),
-        cdr: Expr::Cons(Rc::new(Cons {
-            car: parse_expression(tokens)?,
-            cdr: Expr::Null,
-        })),
-    })))
+    Ok(Expr::Cons(Box::new((
+        Expr::Keyword(Keyword::Quasiquote),
+        Expr::Cons(Box::new((parse_expression(tokens)?, Expr::Null))),
+    ))))
 }
 
 fn parse_unquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Rc::new(Cons {
-        car: Expr::Keyword(Keyword::Unquote),
-        cdr: Expr::Cons(Rc::new(Cons {
-            car: parse_expression(tokens)?,
-            cdr: Expr::Null,
-        })),
-    })))
+    Ok(Expr::Cons(Box::new((
+        Expr::Keyword(Keyword::Unquote),
+        Expr::Cons(Box::new((parse_expression(tokens)?, Expr::Null))),
+    ))))
 }
 
 fn parse_rational(input: &str) -> Result<(i64, i64), ()> {
@@ -341,12 +325,12 @@ impl fmt::Display for Expr {
                 write!(f, "(")?;
                 let mut cur = p;
                 loop {
-                    write!(f, "{}", cur.car)?;
-                    match &cur.cdr {
+                    write!(f, "{}", cur.0)?;
+                    match &cur.1 {
                         Expr::Null => break,
                         Expr::Cons(pp) => cur = pp,
                         _ => {
-                            write!(f, " . {}", cur.cdr)?;
+                            write!(f, " . {}", cur.1)?;
                             break;
                         }
                     }
@@ -363,10 +347,7 @@ impl Expr {
     pub fn from_slice(v: &[Expr]) -> Self {
         match v.len() {
             0 => Expr::Null,
-            _ => Expr::Cons(Rc::new(Cons {
-                car: v[0].clone(),
-                cdr: Expr::from_slice(&v[1..v.len()]),
-            })),
+            _ => Expr::Cons(Box::new((v[0].clone(), Expr::from_slice(&v[1..v.len()])))),
         }
     }
 
@@ -376,8 +357,8 @@ impl Expr {
         loop {
             match cur {
                 Expr::Cons(pair) => {
-                    res.push(pair.car.clone());
-                    cur = pair.cdr.clone();
+                    res.push(pair.0.clone());
+                    cur = pair.1.clone();
                 }
                 Expr::Null => return Ok(res),
                 _ => return Err("Not a proper list".to_string()),
@@ -466,10 +447,7 @@ mod tests {
                 symbol_from_str("x"),
                 symbol_from_str("2"),
             ]),
-            Expr::Cons(Rc::new(Cons {
-                car: Expr::Integer(-1),
-                cdr: Expr::Integer(1),
-            })),
+            Expr::Cons(Box::new((Expr::Integer(-1), Expr::Integer(1)))),
         ]);
         assert_eq!(
             expr.to_string(),

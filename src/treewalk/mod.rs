@@ -37,8 +37,8 @@ impl From<Expr> for Value {
             Expr::Keyword(x) => Value::Keyword(x),
             Expr::Symbol(x) => Value::Symbol(x),
             Expr::Cons(x) => Value::Pair(Rc::new(RefCell::new((
-                x.car.clone().into(),
-                x.cdr.clone().into(),
+                x.0.clone().into(),
+                x.1.clone().into(),
             )))),
         }
     }
@@ -441,9 +441,9 @@ impl Environment {
             Value::Rational(_, _) => Ok(MaybeValue::Just(expr)),
             Value::Str(_) => Ok(MaybeValue::Just(expr)),
             Value::Bool(_) => Ok(MaybeValue::Just(expr)),
-            Value::Pair(p) => self.maybe_evaluate_pair(&p.borrow()),
+            Value::Pair(rc) => self.maybe_evaluate_pair(&rc.borrow()),
             Value::Symbol(s) => match self.get(&s) {
-                Some(cell) => Ok(MaybeValue::Just(cell.borrow().clone())),
+                Some(rc) => Ok(MaybeValue::Just(rc.borrow().clone())),
                 None => Err(format!("Undefined symbol: {}", s)),
             },
             _ => Err("Cannot evaluate expression".to_string()),
