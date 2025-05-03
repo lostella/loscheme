@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::io::{self, BufRead};
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 46] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 47] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -22,6 +22,7 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 46] = [
     ("append", builtin_append),
     ("eqv?", builtin_iseqv),
     ("eq?", builtin_iseqv),
+    ("equal?", builtin_isequal),
     ("pair?", builtin_ispair),
     ("list?", builtin_islist),
     ("null?", builtin_isnull),
@@ -239,6 +240,20 @@ fn builtin_iseqv(values: Vec<Value>) -> Result<MaybeValue, String> {
         (Value::Procedure(a), Value::Procedure(b)) => Rc::ptr_eq(a, b),
         (Value::Symbol(a), Value::Symbol(b)) => a == b,
         _ => false,
+    };
+    Ok(MaybeValue::Just(Value::Bool(res)))
+}
+
+fn builtin_isequal(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 2 {
+        return Err("Equal? needs exactly two arguments".to_string());
+    }
+    let res = match (&values[0], &values[1]) {
+        (Value::Str(a), Value::Str(b)) => a == b,
+        (Value::Pair(_), Value::Pair(_)) => {
+            values[0].clone().into_vec() == values[1].clone().into_vec()
+        }
+        _ => return builtin_iseqv(values),
     };
     Ok(MaybeValue::Just(Value::Bool(res)))
 }
