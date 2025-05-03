@@ -1,10 +1,10 @@
-use super::{BuiltInFnType, Callable, MaybeValue, Value};
+use super::{make_rational, BuiltInFnType, Callable, MaybeValue, Value};
 use crate::parser::{parse_expression, Tokenizer};
 use std::cell::RefCell;
 use std::io::{self, BufRead};
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 44] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 45] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -20,6 +20,7 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 44] = [
     ("apply", builtin_apply),
     ("length", builtin_length),
     ("append", builtin_append),
+    ("eqv?", builtin_iseqv),
     ("pair?", builtin_ispair),
     ("list?", builtin_islist),
     ("null?", builtin_isnull),
@@ -218,6 +219,27 @@ fn builtin_append(values: Vec<Value>) -> Result<MaybeValue, String> {
         }
     }
     Ok(MaybeValue::Just(Value::from_slice(&all)))
+}
+
+fn builtin_iseqv(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 2 {
+        return Err("Eqv? needs exactly two arguments".to_string());
+    }
+    let res = match (&values[0], &values[1]) {
+        (Value::Null, Value::Null) => true,
+        (Value::Bool(a), Value::Bool(b)) => a == b,
+        (Value::Integer(a), Value::Integer(b)) => a == b,
+        (Value::Rational(na, da), Value::Rational(nb, db)) => {
+            make_rational(*na, *da) == make_rational(*nb, *db)
+        }
+        (Value::Float(a), Value::Float(b)) => a == b,
+        (Value::Str(a), Value::Str(b)) => Rc::ptr_eq(a, b),
+        (Value::Pair(a), Value::Pair(b)) => Rc::ptr_eq(a, b),
+        (Value::Procedure(a), Value::Procedure(b)) => Rc::ptr_eq(a, b),
+        (Value::Symbol(a), Value::Symbol(b)) => a == b,
+        _ => false,
+    };
+    Ok(MaybeValue::Just(Value::Bool(res)))
 }
 
 fn builtin_ispair(values: Vec<Value>) -> Result<MaybeValue, String> {
