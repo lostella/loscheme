@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::io::{self, BufRead};
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 45] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 46] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -21,6 +21,7 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 45] = [
     ("length", builtin_length),
     ("append", builtin_append),
     ("eqv?", builtin_iseqv),
+    ("eq?", builtin_iseqv),
     ("pair?", builtin_ispair),
     ("list?", builtin_islist),
     ("null?", builtin_isnull),
