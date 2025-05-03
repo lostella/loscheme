@@ -25,6 +25,15 @@ pub enum Value {
     Unspecified,
 }
 
+fn make_rational(num: i64, denom: i64) -> Value {
+    let (num1, denom1) = simplify(num, denom);
+    if denom1 == 1 {
+        Value::Integer(num1)
+    } else {
+        Value::Rational(num1, denom1)
+    }
+}
+
 impl From<Expr> for Value {
     fn from(expr: Expr) -> Self {
         match expr {
@@ -32,7 +41,7 @@ impl From<Expr> for Value {
             Expr::Bool(x) => Value::Bool(x),
             Expr::Integer(x) => Value::Integer(x),
             Expr::Float(x) => Value::Float(x),
-            Expr::Rational(x, y) => Value::Rational(x, y),
+            Expr::Rational(x, y) => make_rational(x, y),
             Expr::Str(x) => Value::Str(x.into()),
             Expr::Keyword(x) => Value::Keyword(x),
             Expr::Symbol(x) => Value::Symbol(x),
@@ -41,15 +50,6 @@ impl From<Expr> for Value {
                 x.1.clone().into(),
             )))),
         }
-    }
-}
-
-fn make_rational(num: i64, denom: i64) -> Value {
-    let (num1, denom1) = simplify(num, denom);
-    if denom1 == 1 {
-        Value::Integer(num1)
-    } else {
-        Value::Rational(num1, denom1)
     }
 }
 

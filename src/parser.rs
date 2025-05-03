@@ -1,4 +1,3 @@
-use crate::rationals::simplify;
 use internment::Intern;
 use std::fmt;
 use std::iter::Peekable;
@@ -276,22 +275,13 @@ fn parse_rational(input: &str) -> Result<(i64, i64), ()> {
     Ok((num, denom))
 }
 
-fn make_rational(num: i64, denom: i64) -> Expr {
-    let (num1, denom1) = simplify(num, denom);
-    if denom1 == 1 {
-        Expr::Integer(num1)
-    } else {
-        Expr::Rational(num1, denom1)
-    }
-}
-
 fn parse_atom(s: String) -> Result<Expr, String> {
     if let Ok(int) = s.parse::<i64>() {
         Ok(Expr::Integer(int))
     } else if let Ok(float) = s.parse::<f64>() {
         Ok(Expr::Float(float))
     } else if let Ok((num, denom)) = parse_rational(&s) {
-        Ok(make_rational(num, denom))
+        Ok(Expr::Rational(num, denom))
     } else if s == "#t" {
         Ok(Expr::Bool(true))
     } else if s == "#f" {
