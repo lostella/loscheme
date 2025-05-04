@@ -400,6 +400,16 @@ fn test_language_features() {
 }
 
 #[test]
+fn test_countdown() {
+    let code = r#"
+        (define (countdown n)
+          (if (= n 0) 'done (countdown (- n 1))))
+        (countdown 100000)
+    "#;
+    assert_eq!("done", format!("{}", run_standard(code).unwrap()))
+}
+
+#[test]
 fn test_factorial() {
     let code = r#"
         (define fact
