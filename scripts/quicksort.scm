@@ -8,6 +8,21 @@
           (list pivot)
           (quicksort (filter (lambda (x) (>= x pivot)) rest))))))
 
+(define (quicksort-cps lst)
+  (define (qs lst cont)
+    (if (null? lst)
+        (cont '())
+        (let* ((pivot (car lst))
+               (rest (cdr lst))
+               (smaller (filter (lambda (x) (< x pivot)) rest))
+               (larger  (filter (lambda (x) (>= x pivot)) rest)))
+          (qs smaller
+              (lambda (sorted-smaller)
+                (qs larger
+                    (lambda (sorted-larger)
+                      (cont (append sorted-smaller (list pivot) sorted-larger)))))))))
+  (qs lst (lambda (x) x)))
+
 (define (build-random-list n)
   (define (rand n) (remainder (+ (* n 22695477) 1) 4294967296))
   (define (iter i seed acc)
@@ -24,9 +39,12 @@
 
 (define test-list (build-random-list 1000))
 (define sorted (quicksort test-list))
+(define sorted-cps (quicksort-cps test-list))
 (write (length sorted))
 (newline)
 (write (car sorted))
 (newline)
 (write (last sorted))
+(newline)
+(write (equal? sorted sorted-cps))
 (newline)
