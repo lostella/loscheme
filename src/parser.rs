@@ -149,7 +149,7 @@ impl FromStr for Keyword {
             "unless" => Ok(Keyword::Unless),
             "cond" => Ok(Keyword::Cond),
             "let" => Ok(Keyword::Let),
-            "let*" => Ok(Keyword::LetStart),
+            "let*" => Ok(Keyword::LetStar),
             "set!" => Ok(Keyword::Set),
             "begin" => Ok(Keyword::Begin),
             "and" => Ok(Keyword::And),
