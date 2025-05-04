@@ -465,8 +465,8 @@ impl Environment {
             Value::Keyword(Keyword::Cond) => self.evaluate_cond(args),
             Value::Keyword(Keyword::When) => self.evaluate_when(args),
             Value::Keyword(Keyword::Unless) => self.evaluate_unless(args),
-            Value::Keyword(Keyword::Let) => self.evaluate_let(args),
-            Value::Keyword(Keyword::LetStar) => self.evaluate_let(args),
+            Value::Keyword(Keyword::Let) => self.evaluate_let(args, false),
+            Value::Keyword(Keyword::LetStar) => self.evaluate_let(args, true),
             Value::Keyword(Keyword::Begin) => self.evaluate_begin(args),
             Value::Keyword(Keyword::And) => Ok(MaybeValue::Just(self.evaluate_and(args)?)),
             Value::Keyword(Keyword::Or) => Ok(MaybeValue::Just(self.evaluate_or(args)?)),
@@ -677,7 +677,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_let(&mut self, mut args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn evaluate_let(&mut self, mut args: Vec<Value>, star: bool) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("Let needs at least one argument".to_string());
         }
@@ -692,7 +692,11 @@ impl Environment {
                             if inner_borrowed.1 != Value::Null {
                                 return Err("Not a 2-list".to_string());
                             }
-                            let value = child.evaluate(inner_borrowed.0.clone())?;
+                            let value = if star {
+                                child.evaluate(inner_borrowed.0.clone())?;
+                            } else {
+                                self.evaluate(inner_borrowed.0.clone())?;
+                            }
                             child.set(s, value);
                         }
                         _ => return Err("Not a symbol".to_string()),
