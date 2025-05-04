@@ -61,3 +61,13 @@
 
 (write (count-or limit))
 (newline)
+
+(define (count-mutual-rec n)
+  (define (count-even n)
+      (if (positive? n) (count-odd (- n 1)) n))
+  (define (count-odd n)
+      (if (positive? n) (count-even (- n 1)) n))
+  (count-even n))
+
+(write (count-mutual-rec limit))
+(newline)
