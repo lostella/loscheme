@@ -693,10 +693,10 @@ impl Environment {
                                 return Err("Not a 2-list".to_string());
                             }
                             let value = if star {
-                                child.evaluate(inner_borrowed.0.clone())?;
+                                child.evaluate(inner_borrowed.0.clone())?
                             } else {
-                                self.evaluate(inner_borrowed.0.clone())?;
-                            }
+                                self.evaluate(inner_borrowed.0.clone())?
+                            };
                             child.set(s, value);
                         }
                         _ => return Err("Not a symbol".to_string()),
