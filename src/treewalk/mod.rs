@@ -466,6 +466,7 @@ impl Environment {
             Value::Keyword(Keyword::When) => self.evaluate_when(args),
             Value::Keyword(Keyword::Unless) => self.evaluate_unless(args),
             Value::Keyword(Keyword::Let) => self.evaluate_let(args),
+            Value::Keyword(Keyword::LetStar) => self.evaluate_let(args),
             Value::Keyword(Keyword::Begin) => self.evaluate_begin(args),
             Value::Keyword(Keyword::And) => Ok(MaybeValue::Just(self.evaluate_and(args)?)),
             Value::Keyword(Keyword::Or) => Ok(MaybeValue::Just(self.evaluate_or(args)?)),
