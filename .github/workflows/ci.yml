@@ -66,10 +66,26 @@ jobs:
         with:
           command: test
 
+  examples:
+    name: Example Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - run: |
+          for script in scripts/*.scm; do
+            echo "Running $script"
+            cargo run "$script"
+          done
+
   deploy:
     name: Deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [fmt, clippy, build, test]
+    needs: [fmt, clippy, build, test, examples]
     permissions:
       pages: write
       id-token: write
