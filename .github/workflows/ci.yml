@@ -79,7 +79,7 @@ jobs:
       - run: |
           for script in scripts/*.scm; do
             echo "Running $script"
-            cargo run "$script"
+            cargo run --release "$script"
           done
 
   deploy:
