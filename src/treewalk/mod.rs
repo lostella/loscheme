@@ -468,8 +468,8 @@ impl Environment {
             Value::Keyword(Keyword::Let) => self.evaluate_let(args, false),
             Value::Keyword(Keyword::LetStar) => self.evaluate_let(args, true),
             Value::Keyword(Keyword::Begin) => self.evaluate_begin(args),
-            Value::Keyword(Keyword::And) => Ok(MaybeValue::Just(self.evaluate_and(args)?)),
-            Value::Keyword(Keyword::Or) => Ok(MaybeValue::Just(self.evaluate_or(args)?)),
+            Value::Keyword(Keyword::And) => self.evaluate_and(args),
+            Value::Keyword(Keyword::Or) => self.evaluate_or(args),
             _ => match self.evaluate(pair.0.clone())? {
                 Value::Procedure(proc) => {
                     let mut args_values = Vec::new();
@@ -705,47 +705,48 @@ impl Environment {
                 _ => return Err("Not a 2-list".to_string()),
             }
         }
-        let mut out = MaybeValue::Just(Value::Unspecified);
         if let Some((last, rest)) = args.split_off(1).split_last() {
             for expr in rest {
                 child.evaluate(expr.clone())?;
             }
-            out = child.maybe_evaluate(last.clone())?;
+            return child.maybe_evaluate(last.clone());
         }
-        Ok(out)
+        Ok(MaybeValue::Just(Value::Unspecified))
     }
 
     fn evaluate_begin(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
-        let mut out = MaybeValue::Just(Value::Unspecified);
         if let Some((last, rest)) = args.split_last() {
             for expr in rest {
                 self.evaluate(expr.clone())?;
             }
-            out = self.maybe_evaluate(last.clone())?;
+            return self.maybe_evaluate(last.clone());
         }
-        Ok(out)
+        Ok(MaybeValue::Just(Value::Unspecified))
     }
 
-    fn evaluate_and(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        for expr in args {
-            match self.evaluate(expr)? {
-                Value::Bool(true) => continue,
-                Value::Bool(false) => return Ok(Value::Bool(false)),
-                _ => return Err("Cannot \"and\" type".to_string()),
+    fn evaluate_and(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
+        if let Some((last, rest)) = args.split_last() {
+            for expr in rest {
+                if self.evaluate(expr.clone())? == Value::Bool(false) {
+                    return Ok(MaybeValue::Just(Value::Bool(false)));
+                }
             }
+            return self.maybe_evaluate(last.clone());
         }
-        Ok(Value::Bool(true))
+        Ok(MaybeValue::Just(Value::Bool(true)))
     }
 
-    fn evaluate_or(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        for expr in args {
-            match self.evaluate(expr)? {
-                Value::Bool(true) => return Ok(Value::Bool(true)),
-                Value::Bool(false) => continue,
-                _ => return Err("Cannot \"or\" type".to_string()),
+    fn evaluate_or(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
+        if let Some((last, rest)) = args.split_last() {
+            for expr in rest {
+                let val = self.evaluate(expr.clone())?;
+                if val != Value::Bool(false) {
+                    return Ok(MaybeValue::Just(val));
+                }
             }
+            return self.maybe_evaluate(last.clone());
         }
-        Ok(Value::Bool(false))
+        Ok(MaybeValue::Just(Value::Bool(false)))
     }
 }
 
