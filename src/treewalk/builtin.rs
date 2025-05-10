@@ -223,11 +223,8 @@ fn builtin_append(values: Vec<Value>) -> Result<MaybeValue, String> {
     Ok(MaybeValue::Just(Value::from_slice(&all)))
 }
 
-fn builtin_iseqv(values: Vec<Value>) -> Result<MaybeValue, String> {
-    if values.len() != 2 {
-        return Err("Eqv? needs exactly two arguments".to_string());
-    }
-    let res = match (&values[0], &values[1]) {
+pub fn eqv(first: &Value, second: &Value) -> bool {
+    match (first, second) {
         (Value::Null, Value::Null) => true,
         (Value::Bool(a), Value::Bool(b)) => a == b,
         (Value::Integer(a), Value::Integer(b)) => a == b,
@@ -240,8 +237,14 @@ fn builtin_iseqv(values: Vec<Value>) -> Result<MaybeValue, String> {
         (Value::Procedure(a), Value::Procedure(b)) => Rc::ptr_eq(a, b),
         (Value::Symbol(a), Value::Symbol(b)) => a == b,
         _ => false,
-    };
-    Ok(MaybeValue::Just(Value::Bool(res)))
+    }
+}
+
+fn builtin_iseqv(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 2 {
+        return Err("Eqv? needs exactly two arguments".to_string());
+    }
+    Ok(MaybeValue::Just(Value::Bool(eqv(&values[0], &values[1]))))
 }
 
 fn builtin_isequal(values: Vec<Value>) -> Result<MaybeValue, String> {

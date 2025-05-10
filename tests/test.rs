@@ -96,6 +96,10 @@ fn test_language_features() {
         ("(let ((a 14) (b 7)) (+ a b) (- a b))", "7"),
         ("(let* ((x 2) (y (+ x 3))) y)", "5"),
         (
+            "(letrec ((fact (lambda (n) (if (= n 0) 1 (* n (fact (- n 1))))))) (fact 4))",
+            "24",
+        ),
+        (
             "(letrec ((even? (lambda (n)
                           (if (zero? n) #t (odd? (- n 1)))))
                       (odd?  (lambda (n)
@@ -378,25 +382,8 @@ fn test_language_features() {
         ("(let ((x (cons 1 2))) (let ((y x)) (eq? x y)))", "#t"),
         ("(let ((x (cons 1 2))) (let ((y x)) (eqv? x y)))", "#t"),
         ("(let ((x (cons 1 2))) (let ((y x)) (equal? x y)))", "#t"),
-        // ("(eq? 'a 'a)", "#t"),
-        // ("(eq? '(1 2) '(1 2))", "#f"),
-        // ("(eqv? 0 0.0)", "#f"),
-        // ("(eqv? '(a) '(a))", "#f"),
-        // ("(equal? '(1 2) '(1 2))", "#t"),
-        // ("(equal? '(a . b) '(a b))", "#f"),
-        // (
-        //     "(case 2 ((1) 'one) ((2) 'two) (else 'other))",
-        //     symbol_from_str("two"),
-        // ),
-        // (
-        //     "(case 3 ((1) 'one) ((2) 'two) (else 'other))",
-        //     symbol_from_str("other"),
-        // ),
-        // ("(let* ((x 2) (y (+ x 3))) y)", "5"),
-        // (
-        //     "(letrec ((fact (lambda (n) (if (= n 0) 1 (* n (fact (- n 1))))))) (fact 4))",
-        //     "24",
-        // ),
+        ("(case 2 ((1) 'one) ((2) 'two) (else 'other))", "two"),
+        ("(case 3 ((1) 'one) ((2) 'two) (else 'other))", "other"),
         // ("(define (f . a) (* 2 (sum a)))", ""),
         // ("(f . (1 2 3))", "12"),
         // ("(define g (lambda a (* 3 (sum a))))", ""),

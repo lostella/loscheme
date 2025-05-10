@@ -463,6 +463,7 @@ impl Environment {
             Value::Keyword(Keyword::Set) => Ok(MaybeValue::Just(self.evaluate_set(args)?)),
             Value::Keyword(Keyword::If) => self.evaluate_if(args),
             Value::Keyword(Keyword::Cond) => self.evaluate_cond(args),
+            Value::Keyword(Keyword::Case) => self.evaluate_case(args),
             Value::Keyword(Keyword::When) => self.evaluate_when(args),
             Value::Keyword(Keyword::Unless) => self.evaluate_unless(args),
             Value::Keyword(Keyword::Let) => self.evaluate_let(args, false),
@@ -651,6 +652,29 @@ impl Environment {
                     }
                 }
                 _ => return Err("Not a list".to_string()),
+            }
+        }
+        Ok(MaybeValue::Just(Value::Unspecified))
+    }
+
+    fn evaluate_case(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
+        let val = self.evaluate(args[0].clone())?;
+        for clause in &args[1..] {
+            match clause {
+                Value::Pair(p) => {
+                    let seq = p.borrow().1.clone().into_vec()?;
+                    if let Value::Symbol(s) = p.borrow().0 {
+                        if *s == "else" {
+                            return self.evaluate_begin(seq);
+                        }
+                    }
+                    for datum in p.borrow().0.clone().into_vec()? {
+                        if builtin::eqv(&val, &datum) {
+                            return self.evaluate_begin(seq);
+                        }
+                    }
+                }
+                _ => return Err(format!("Not a list: {}", clause)),
             }
         }
         Ok(MaybeValue::Just(Value::Unspecified))
