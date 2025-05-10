@@ -11,6 +11,7 @@ pub enum Token {
     Quasiquote,
     Unquote,
     Dot,
+    Pound,
     Atom(String),
 }
 
@@ -85,6 +86,10 @@ impl Iterator for Tokenizer<'_> {
                 ')' => {
                     self.input.next();
                     return Some(Token::RParen);
+                }
+                '#' => {
+                    self.input.next();
+                    return Some(Token::Pound);
                 }
                 '\'' => {
                     self.input.next();
@@ -197,7 +202,8 @@ pub enum Expr {
     Bool(bool),
     Keyword(Keyword),
     Symbol(Intern<String>),
-    Cons(Box<(Expr, Expr)>),
+    List(Box<(Expr, Expr)>),
+    Vector(Vec<Expr>),
 }
 
 pub fn parse_tokens(tokens: &mut Peekable<Tokenizer>) -> Result<Vec<Expr>, String> {
@@ -211,6 +217,14 @@ pub fn parse_tokens(tokens: &mut Peekable<Tokenizer>) -> Result<Vec<Expr>, Strin
 pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     match tokens.next() {
         Some(Token::LParen) => parse_list(tokens),
+        Some(Token::Pound) => {
+            if let Some(Token::LParen) = tokens.peek() {
+                tokens.next();
+                parse_vector(tokens)
+            } else {
+                Err("Unexpected token after pound (#)".to_string())
+            }
+        }
         Some(Token::Quote) => parse_quote(tokens),
         Some(Token::Quasiquote) => parse_quasiquote(tokens),
         Some(Token::Unquote) => parse_unquote(tokens),
@@ -237,7 +251,7 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
                 }
             }
             _ => {
-                return Ok(Expr::Cons(Box::new((
+                return Ok(Expr::List(Box::new((
                     parse_expression(tokens)?,
                     parse_list(tokens)?,
                 ))));
@@ -247,24 +261,43 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     Err("Unterminated list".to_string())
 }
 
+fn parse_vector(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
+    let mut vec = vec![];
+    loop {
+        if let Some(token) = tokens.peek() {
+            match token {
+                Token::RParen => {
+                    tokens.next();
+                    return Ok(Expr::Vector(vec));
+                }
+                _ => {
+                    vec.push(parse_expression(tokens)?);
+                }
+            }
+        } else {
+            return Err("Unterminated vector".to_string());
+        }
+    }
+}
+
 fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Box::new((
+    Ok(Expr::List(Box::new((
         Expr::Keyword(Keyword::Quote),
-        Expr::Cons(Box::new((parse_expression(tokens)?, Expr::Null))),
+        Expr::List(Box::new((parse_expression(tokens)?, Expr::Null))),
     ))))
 }
 
 fn parse_quasiquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Box::new((
+    Ok(Expr::List(Box::new((
         Expr::Keyword(Keyword::Quasiquote),
-        Expr::Cons(Box::new((parse_expression(tokens)?, Expr::Null))),
+        Expr::List(Box::new((parse_expression(tokens)?, Expr::Null))),
     ))))
 }
 
 fn parse_unquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::Cons(Box::new((
+    Ok(Expr::List(Box::new((
         Expr::Keyword(Keyword::Unquote),
-        Expr::Cons(Box::new((parse_expression(tokens)?, Expr::Null))),
+        Expr::List(Box::new((parse_expression(tokens)?, Expr::Null))),
     ))))
 }
 
@@ -320,20 +353,28 @@ impl fmt::Display for Expr {
             Expr::Str(v) => write!(f, "\"{}\"", v),
             Expr::Keyword(k) => write!(f, "{}", k),
             Expr::Symbol(s) => write!(f, "{}", s),
-            Expr::Cons(p) => {
+            Expr::List(p) => {
                 write!(f, "(")?;
                 let mut cur = p;
                 loop {
                     write!(f, "{}", cur.0)?;
                     match &cur.1 {
                         Expr::Null => break,
-                        Expr::Cons(pp) => cur = pp,
+                        Expr::List(pp) => cur = pp,
                         _ => {
                             write!(f, " . {}", cur.1)?;
                             break;
                         }
                     }
                     write!(f, " ")?;
+                }
+                write!(f, ")")?;
+                Ok(())
+            }
+            Expr::Vector(v) => {
+                write!(f, "#(")?;
+                for el in v.iter() {
+                    write!(f, "{}", el)?;
                 }
                 write!(f, ")")?;
                 Ok(())
@@ -346,7 +387,7 @@ impl Expr {
     pub fn from_slice(v: &[Expr]) -> Self {
         match v.len() {
             0 => Expr::Null,
-            _ => Expr::Cons(Box::new((v[0].clone(), Expr::from_slice(&v[1..v.len()])))),
+            _ => Expr::List(Box::new((v[0].clone(), Expr::from_slice(&v[1..v.len()])))),
         }
     }
 
@@ -355,7 +396,7 @@ impl Expr {
         let mut cur = self;
         loop {
             match cur {
-                Expr::Cons(pair) => {
+                Expr::List(pair) => {
                     res.push(pair.0.clone());
                     cur = pair.1.clone();
                 }
@@ -446,7 +487,7 @@ mod tests {
                 symbol_from_str("x"),
                 symbol_from_str("2"),
             ]),
-            Expr::Cons(Box::new((Expr::Integer(-1), Expr::Integer(1)))),
+            Expr::List(Box::new((Expr::Integer(-1), Expr::Integer(1)))),
         ]);
         assert_eq!(
             expr.to_string(),
