@@ -94,6 +94,15 @@ fn test_language_features() {
         ),
         ("(begin (+ 4 7) (- 5 2) (* 7 3))", "21"),
         ("(let ((a 14) (b 7)) (+ a b) (- a b))", "7"),
+        ("(let* ((x 2) (y (+ x 3))) y)", "5"),
+        (
+            "(letrec ((even? (lambda (n)
+                          (if (zero? n) #t (odd? (- n 1)))))
+                      (odd?  (lambda (n)
+                          (if (zero? n) #f (even? (- n 1))))))
+                     (even? 4))",
+            "#t",
+        ),
         ("(length '())", "0"),
         ("(length '(4 5 6))", "3"),
         ("(append '(1 2) '(3) '() '(4))", "(1 2 3 4)"),
