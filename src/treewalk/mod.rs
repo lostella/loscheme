@@ -20,6 +20,7 @@ pub enum Value {
     Keyword(Keyword),
     Symbol(Intern<String>),
     Pair(Rc<RefCell<(Value, Value)>>),
+    Vector(Rc<RefCell<Vec<Value>>>),
     Procedure(Rc<Procedure>),
     #[default]
     Unspecified,
@@ -45,10 +46,16 @@ impl From<Expr> for Value {
             Expr::Str(x) => Value::Str(x.into()),
             Expr::Keyword(x) => Value::Keyword(x),
             Expr::Symbol(x) => Value::Symbol(x),
-            Expr::Cons(x) => Value::Pair(Rc::new(RefCell::new((
+            Expr::List(x) => Value::Pair(Rc::new(RefCell::new((
                 x.0.clone().into(),
                 x.1.clone().into(),
             )))),
+            Expr::Vector(v) => Value::Vector(Rc::new(
+                v.into_iter()
+                    .map(|el| el.into())
+                    .collect::<Vec<Value>>()
+                    .into(),
+            )),
         }
     }
 }
@@ -335,6 +342,19 @@ impl fmt::Display for Value {
                         }
                     }
                 }
+                Ok(())
+            }
+            Value::Vector(v) => {
+                write!(f, "#(")?;
+                let mut first = true;
+                for el in v.borrow().iter() {
+                    if !first {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{}", el)?;
+                    first = false;
+                }
+                write!(f, ")")?;
                 Ok(())
             }
             Value::Procedure(proc) => write!(f, "{}", proc),

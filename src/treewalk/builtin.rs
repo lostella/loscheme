@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::io::{self, BufRead};
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 47] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 53] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -52,6 +52,12 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 47] = [
     ("modulo", builtin_modulo),
     ("list-ref", builtin_listref),
     ("list-tail", builtin_listtail),
+    ("vector", builtin_vector),
+    ("vector?", builtin_isvector),
+    ("vector-length", builtin_vectorlength),
+    ("make-vector", builtin_makevector),
+    ("vector-ref", builtin_vectorref),
+    ("vector-set!", builtin_vectorset),
 ];
 
 fn builtin_add(values: Vec<Value>) -> Result<MaybeValue, String> {
@@ -567,6 +573,76 @@ fn builtin_listref(values: Vec<Value>) -> Result<MaybeValue, String> {
         Ok(MaybeValue::Just(p.borrow().0.clone()))
     } else {
         Err("List-tail did not return a pair?".into())
+    }
+}
+
+fn builtin_vector(values: Vec<Value>) -> Result<MaybeValue, String> {
+    Ok(MaybeValue::Just(Value::Vector(Rc::new(values.into()))))
+}
+
+fn builtin_isvector(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Vector? needs exactly one argument".to_string());
+    }
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Vector(_)
+    ))))
+}
+
+fn builtin_vectorlength(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Vector-length needs exactly one argument".to_string());
+    }
+    let Value::Vector(v) = &values[0] else {
+        return Err("Vector-length expects a vector as argument".to_string());
+    };
+    Ok(MaybeValue::Just(Value::Integer(v.borrow().len() as i64)))
+}
+
+fn builtin_makevector(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let fill = if values.len() == 1 {
+        Value::Unspecified
+    } else if values.len() == 2 {
+        values[1].clone()
+    } else {
+        return Err("Make-vector expects one or two arguments".to_string());
+    };
+    let Value::Integer(qty) = values[0] else {
+        return Err("Make-vector expects an integer as first argument".to_string());
+    };
+    Ok(MaybeValue::Just(Value::Vector(Rc::new(
+        vec![fill; qty as usize].into(),
+    ))))
+}
+
+fn builtin_vectorref(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 2 {
+        return Err("Vector-ref needs exactly two argument".to_string());
+    }
+    let Value::Vector(v) = &values[0] else {
+        return Err("Vector-ref expects a vector as first argument".to_string());
+    };
+    let Value::Integer(k) = &values[1] else {
+        return Err("Vector-ref expects an integer as second argument".to_string());
+    };
+    Ok(MaybeValue::Just(v.borrow()[*k as usize].clone()))
+}
+
+fn builtin_vectorset(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 3 {
+        return Err("Vector-set! needs exactly three argument".to_string());
+    }
+    let (fst, snd) = values.split_at_mut(1);
+    let Value::Integer(k) = &snd[0] else {
+        return Err("Vector-set! expects an integer as second argument".to_string());
+    };
+    match &mut fst[0] {
+        Value::Vector(rc) => {
+            rc.borrow_mut()[*k as usize] = snd[1].clone();
+            Ok(MaybeValue::Just(Value::Unspecified))
+        }
+        _ => Err("Vector-set! expects a vector as first argument".to_string()),
     }
 }
 
