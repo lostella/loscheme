@@ -247,25 +247,6 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     Err("Unterminated list".to_string())
 }
 
-fn parse_vector(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    let mut vec = vec![];
-    loop {
-        if let Some(token) = tokens.peek() {
-            match token {
-                Token::RParen => {
-                    tokens.next();
-                    return Ok(Expr::Vector(vec));
-                }
-                _ => {
-                    vec.push(parse_expression(tokens)?);
-                }
-            }
-        } else {
-            return Err("Unterminated vector".to_string());
-        }
-    }
-}
-
 fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     Ok(Expr::List(Box::new((
         Expr::Keyword(Keyword::Quote),
