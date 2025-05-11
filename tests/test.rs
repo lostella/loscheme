@@ -392,6 +392,8 @@ fn test_language_features() {
         // ("(f . (1 2 3))", "12"),
         // ("(define g (lambda a (* 3 (sum a))))", ""),
         // ("(g . (1 2 3))", "18"),
+        ("(make-vector 3)", "#(0 0 0)"),
+        ("(make-vector 3 42)", "#(42 42 42)"),
     ];
 
     let mut env = Environment::standard().child();
