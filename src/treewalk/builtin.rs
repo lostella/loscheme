@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::io::{self, BufRead};
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 48] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 51] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -52,7 +52,12 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 48] = [
     ("modulo", builtin_modulo),
     ("list-ref", builtin_listref),
     ("list-tail", builtin_listtail),
+    ("vector", builtin_vector),
+    ("vector?", builtin_isvector),
+    ("vector-length", builtin_vectorlength),
     ("make-vector", builtin_makevector),
+    // ("vector-ref", builtin_vectorref),
+    // ("vector-set!", builtin_vectorset),
 ];
 
 fn builtin_add(values: Vec<Value>) -> Result<MaybeValue, String> {
@@ -568,6 +573,31 @@ fn builtin_listref(values: Vec<Value>) -> Result<MaybeValue, String> {
         Ok(MaybeValue::Just(p.borrow().0.clone()))
     } else {
         Err("List-tail did not return a pair?".into())
+    }
+}
+
+fn builtin_vector(values: Vec<Value>) -> Result<MaybeValue, String> {
+    Ok(MaybeValue::Just(Value::Vector(values)))
+}
+
+fn builtin_isvector(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Vector? needs exactly one argument".to_string());
+    }
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Vector
+    ))))
+}
+
+fn builtin_vectorlength(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Vector-length needs exactly one argument".to_string());
+    }
+    if let Value::Vector(vec) = values[0] {
+        Ok(MaybeValue::Just(Value::Integer(vec.len().into())))
+    } else {
+        Err("Argument to vector-length must be a vector".to_string())
     }
 }
 
