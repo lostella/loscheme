@@ -580,7 +580,7 @@ fn builtin_makevector(values: Vec<Value>) -> Result<MaybeValue, String> {
     let Value::Integer(n) = values[0] else {
         return Err("Make-vector needs integer as first argument".to_string()),
     };
-    let res = Value::Vector(vec![fill; n]);
+    let res = Value::Vector(vec![fill; n.try_into().unwrap()]);
     Ok(MaybeValue::Just(res))
 }
 
