@@ -574,7 +574,7 @@ fn builtin_listref(values: Vec<Value>) -> Result<MaybeValue, String> {
 fn builtin_makevector(values: Vec<Value>) -> Result<MaybeValue, String> {
     let fill = match values.len() {
         1 => Value::Integer(0),
-        2 => values[1],
+        2 => values[1].clone(),
         _ => return Err("Make-vector takes 1 or 2 arguments".to_string()),
     };
     let Value::Integer(n) = values[0] else {
