@@ -341,8 +341,13 @@ impl fmt::Display for Value {
             }
             Value::Vector(v) => {
                 write!(f, "#(")?;
+                let mut first = true;
                 for el in v.iter() {
+                    if !first {
+                        write!(f, " ")?;
+                    }
                     write!(f, "{}", el)?;
+                    first = false;
                 }
                 write!(f, ")")?;
                 Ok(())
