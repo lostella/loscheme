@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::io::{self, BufRead};
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 47] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 48] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -52,6 +52,7 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 47] = [
     ("modulo", builtin_modulo),
     ("list-ref", builtin_listref),
     ("list-tail", builtin_listtail),
+    ("make-vector", builtin_makevector),
 ];
 
 fn builtin_add(values: Vec<Value>) -> Result<MaybeValue, String> {
@@ -568,6 +569,19 @@ fn builtin_listref(values: Vec<Value>) -> Result<MaybeValue, String> {
     } else {
         Err("List-tail did not return a pair?".into())
     }
+}
+
+fn builtin_makevector(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let fill = match values.len() {
+        1 => Value::Integer(0),
+        2 => values[1],
+        _ => return Err("Make-vector takes 1 or 2 arguments".to_string()),
+    };
+    let Value::Integer(n) = values[0] else {
+        return Err("Make-vector needs integer as first argument".to_string()),
+    };
+    let res = Value::Vector(vec![fill; n]);
+    Ok(MaybeValue::Just(res))
 }
 
 #[cfg(test)]
