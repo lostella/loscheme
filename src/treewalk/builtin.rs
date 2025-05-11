@@ -586,7 +586,7 @@ fn builtin_isvector(values: Vec<Value>) -> Result<MaybeValue, String> {
     }
     Ok(MaybeValue::Just(Value::Bool(matches!(
         values[0],
-        Value::Vector
+        Value::Vector(_)
     ))))
 }
 
@@ -595,7 +595,7 @@ fn builtin_vectorlength(values: Vec<Value>) -> Result<MaybeValue, String> {
         return Err("Vector-length needs exactly one argument".to_string());
     }
     if let Value::Vector(vec) = values[0] {
-        Ok(MaybeValue::Just(Value::Integer(vec.len().into())))
+        Ok(MaybeValue::Just(Value::Integer(vec.len() as i64)))
     } else {
         Err("Argument to vector-length must be a vector".to_string())
     }
