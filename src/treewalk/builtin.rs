@@ -594,7 +594,7 @@ fn builtin_vectorlength(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Vector-length needs exactly one argument".to_string());
     }
-    if let Value::Vector(vec) = values[0] {
+    if let Value::Vector(vec) = &values[0] {
         Ok(MaybeValue::Just(Value::Integer(vec.len() as i64)))
     } else {
         Err("Argument to vector-length must be a vector".to_string())
