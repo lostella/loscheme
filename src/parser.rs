@@ -11,7 +11,6 @@ pub enum Token {
     Quasiquote,
     Unquote,
     Dot,
-    Pound,
     Atom(String),
 }
 
@@ -87,10 +86,6 @@ impl Iterator for Tokenizer<'_> {
                     self.input.next();
                     return Some(Token::RParen);
                 }
-                '#' => {
-                    self.input.next();
-                    return Some(Token::Pound);
-                }
                 '\'' => {
                     self.input.next();
                     return Some(Token::Quote);
@@ -138,7 +133,6 @@ pub enum Keyword {
     Begin,
     And,
     Or,
-    // TODO add more special forms here
 }
 
 impl FromStr for Keyword {
@@ -217,14 +211,6 @@ pub fn parse_tokens(tokens: &mut Peekable<Tokenizer>) -> Result<Vec<Expr>, Strin
 pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     match tokens.next() {
         Some(Token::LParen) => parse_list(tokens),
-        Some(Token::Pound) => {
-            if let Some(Token::LParen) = tokens.peek() {
-                tokens.next();
-                parse_vector(tokens)
-            } else {
-                Err("Unexpected token after pound (#)".to_string())
-            }
-        }
         Some(Token::Quote) => parse_quote(tokens),
         Some(Token::Quasiquote) => parse_quasiquote(tokens),
         Some(Token::Unquote) => parse_unquote(tokens),
@@ -261,24 +247,24 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     Err("Unterminated list".to_string())
 }
 
-fn parse_vector(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    let mut vec = vec![];
-    loop {
-        if let Some(token) = tokens.peek() {
-            match token {
-                Token::RParen => {
-                    tokens.next();
-                    return Ok(Expr::Vector(vec));
-                }
-                _ => {
-                    vec.push(parse_expression(tokens)?);
-                }
-            }
-        } else {
-            return Err("Unterminated vector".to_string());
-        }
-    }
-}
+// fn parse_vector(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
+//     let mut vec = vec![];
+//     loop {
+//         if let Some(token) = tokens.peek() {
+//             match token {
+//                 Token::RParen => {
+//                     tokens.next();
+//                     return Ok(Expr::Vector(vec));
+//                 }
+//                 _ => {
+//                     vec.push(parse_expression(tokens)?);
+//                 }
+//             }
+//         } else {
+//             return Err("Unterminated vector".to_string());
+//         }
+//     }
+// }
 
 fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     Ok(Expr::List(Box::new((
