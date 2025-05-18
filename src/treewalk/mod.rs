@@ -577,8 +577,8 @@ impl Environment {
     }
 
     fn evaluate_define(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        if args.is_empty() {
-            return Err("Define needs at least one argument".to_string());
+        if args.len() < 2 {
+            return Err("Define needs at least two arguments".to_string());
         }
         let first = args[0].clone();
         let rest = &args[1..args.len()];
@@ -1325,7 +1325,7 @@ mod tests {
     #[test]
     fn test_define_unspecified() {
         let steps = vec![
-            ("(define (g) (define h))", Value::Unspecified),
+            ("(define (g) (define h 0))", Value::Unspecified),
             ("(define a (g))", Value::Unspecified),
             ("a", Value::Unspecified),
         ];

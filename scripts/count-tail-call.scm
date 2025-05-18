@@ -32,7 +32,7 @@
 (write (count-cond-2 limit))
 (newline)
 
-(define (no-op))
+(define (no-op) (begin))
 
 (define (count-begin n)
   (begin
