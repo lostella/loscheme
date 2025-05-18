@@ -106,7 +106,7 @@ jobs:
 
       - name: Build
         run: |
-          wasm-pack build --target web --features web
+          wasm-pack build --enable-bulk-memory --target web --features web
           cp web/index.html pkg/
 
       - name: Setup Pages
