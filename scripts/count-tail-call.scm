@@ -1,4 +1,4 @@
-(define limit 10000)
+(define limit 100000)
 
 (define (count-if-1 n)
   (if (not (zero? n))
