@@ -402,6 +402,8 @@ fn test_language_features() {
         ("(vector-ref v 3)", "42"),
         ("(vector-set! v 3 '(4 . 2))", ""),
         ("v", "#(42 42 42 (4 . 2) 42 42)"),
+        ("(list->vector '(1 2 (3 4) 5))", "#(1 2 (3 4) 5)"),
+        ("(vector->list (vector 1 2 '(3 4) 5))", "(1 2 (3 4) 5)"),
         // ("(define (f . a) (* 2 (sum a)))", ""),
         // ("(f . (1 2 3))", "12"),
         // ("(define g (lambda a (* 3 (sum a))))", ""),

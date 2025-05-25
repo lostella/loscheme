@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::io::{self, BufRead};
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 53] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 55] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -58,6 +58,8 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 53] = [
     ("make-vector", builtin_makevector),
     ("vector-ref", builtin_vectorref),
     ("vector-set!", builtin_vectorset),
+    ("list->vector", builtin_listvector),
+    ("vector->list", builtin_vectorlist),
 ];
 
 fn builtin_add(values: Vec<Value>) -> Result<MaybeValue, String> {
@@ -644,6 +646,25 @@ fn builtin_vectorset(mut values: Vec<Value>) -> Result<MaybeValue, String> {
         }
         _ => Err("Vector-set! expects a vector as first argument".to_string()),
     }
+}
+
+fn builtin_listvector(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("List->vector needs exactly one argument".to_string());
+    }
+    Ok(MaybeValue::Just(Value::Vector(Rc::new(
+        values[0].clone().into_vec()?.into(),
+    ))))
+}
+
+fn builtin_vectorlist(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Vector->list needs exactly one argument".to_string());
+    }
+    let Value::Vector(rc) = &values[0] else {
+        return Err("Vector->list needs vectir as argument".to_string());
+    };
+    Ok(MaybeValue::Just(Value::from_slice(&rc.borrow())))
 }
 
 #[cfg(test)]
