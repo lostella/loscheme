@@ -662,7 +662,7 @@ fn builtin_vectorlist(values: Vec<Value>) -> Result<MaybeValue, String> {
         return Err("Vector->list needs exactly one argument".to_string());
     }
     let Value::Vector(rc) = &values[0] else {
-        return Err("Vector->list needs vectir as argument".to_string());
+        return Err("Vector->list needs a vector as argument".to_string());
     };
     Ok(MaybeValue::Just(Value::from_slice(&rc.borrow())))
 }
