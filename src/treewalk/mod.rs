@@ -87,6 +87,20 @@ impl Value {
         }
     }
 
+    pub fn car(self) -> Result<Value, String> {
+        match self {
+            Value::Pair(p) => Ok(p.borrow().0.clone()),
+            _ => Err("Car needs a pair as argument".to_string()),
+        }
+    }
+
+    pub fn cdr(self) -> Result<Value, String> {
+        match self {
+            Value::Pair(p) => Ok(p.borrow().1.clone()),
+            _ => Err("Car needs a pair as argument".to_string()),
+        }
+    }
+
     pub fn add(&self, other: &Value) -> Result<Value, String> {
         match (self, other) {
             (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
@@ -375,6 +389,12 @@ impl MaybeValue {
             Self::Just(value) => Ok(value),
             Self::TailCall(proc, args) => proc.call(args)?.materialize(),
         }
+    }
+}
+
+impl From<Value> for MaybeValue {
+    fn from(value: Value) -> Self {
+        Self::Just(value)
     }
 }
 

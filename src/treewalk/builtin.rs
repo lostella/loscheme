@@ -2,9 +2,10 @@ use super::{make_rational, BuiltInFnType, Callable, MaybeValue, Value};
 use crate::parser::{parse_expression, Tokenizer};
 use std::cell::RefCell;
 use std::io::{self, BufRead};
+use std::mem::take;
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 55] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 59] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -39,6 +40,10 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 55] = [
     ("cons", builtin_cons),
     ("car", builtin_car),
     ("cdr", builtin_cdr),
+    ("caar", builtin_caar),
+    ("cadr", builtin_cadr),
+    ("cdar", builtin_cdar),
+    ("cddr", builtin_cddr),
     ("set-car!", builtin_setcar),
     ("set-cdr!", builtin_setcdr),
     ("filter", builtin_filter),
@@ -418,24 +423,46 @@ fn builtin_cons(values: Vec<Value>) -> Result<MaybeValue, String> {
     ))))))
 }
 
-fn builtin_car(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_car(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Car needs exactly one argument".to_string());
     }
-    match &values[0] {
-        Value::Pair(p) => Ok(MaybeValue::Just(p.borrow().0.clone())),
-        _ => Err("Car needs a pair as argument".to_string()),
-    }
+    Ok(take(&mut values[0]).car()?.into())
 }
 
-fn builtin_cdr(values: Vec<Value>) -> Result<MaybeValue, String> {
+fn builtin_cdr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Cdr needs exactly one argument".to_string());
     }
-    match &values[0] {
-        Value::Pair(p) => Ok(MaybeValue::Just(p.borrow().1.clone())),
-        _ => Err("Cdr needs a pair as argument".to_string()),
+    Ok(take(&mut values[0]).cdr()?.into())
+}
+
+fn builtin_caar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Car needs exactly one argument".to_string());
     }
+    Ok(take(&mut values[0]).car()?.car()?.into())
+}
+
+fn builtin_cadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Cdr needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).cdr()?.car()?.into())
+}
+
+fn builtin_cdar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Car needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).car()?.cdr()?.into())
+}
+
+fn builtin_cddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Cdr needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).cdr()?.cdr()?.into())
 }
 
 fn builtin_setcar(values: Vec<Value>) -> Result<MaybeValue, String> {
