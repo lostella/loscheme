@@ -5,7 +5,7 @@ use std::io::{self, BufRead};
 use std::mem::take;
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 59] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 67] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -44,6 +44,14 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 59] = [
     ("cadr", builtin_cadr),
     ("cdar", builtin_cdar),
     ("cddr", builtin_cddr),
+    ("caaar", builtin_caaar),
+    ("caadr", builtin_caadr),
+    ("cadar", builtin_cadar),
+    ("caddr", builtin_caddr),
+    ("cdaar", builtin_cdaar),
+    ("cdadr", builtin_cdadr),
+    ("cddar", builtin_cddar),
+    ("cdddr", builtin_cdddr),
     ("set-car!", builtin_setcar),
     ("set-cdr!", builtin_setcdr),
     ("filter", builtin_filter),
@@ -463,6 +471,62 @@ fn builtin_cddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
         return Err("Cdr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.cdr()?.into())
+}
+
+fn builtin_caaar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Car needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).car()?.car()?.car()?.into())
+}
+
+fn builtin_caadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Cdr needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).cdr()?.car()?.car()?.into())
+}
+
+fn builtin_cadar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Car needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).car()?.cdr()?.car()?.into())
+}
+
+fn builtin_caddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Cdr needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).cdr()?.cdr()?.car()?.into())
+}
+
+fn builtin_cdaar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Car needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).car()?.car()?.cdr()?.into())
+}
+
+fn builtin_cdadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Cdr needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).cdr()?.car()?.cdr()?.into())
+}
+
+fn builtin_cddar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Car needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).car()?.cdr()?.cdr()?.into())
+}
+
+fn builtin_cdddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Cdr needs exactly one argument".to_string());
+    }
+    Ok(take(&mut values[0]).cdr()?.cdr()?.cdr()?.into())
 }
 
 fn builtin_setcar(values: Vec<Value>) -> Result<MaybeValue, String> {

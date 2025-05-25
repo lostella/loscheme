@@ -268,6 +268,33 @@ fn test_language_features() {
         ("(cadr l)", "3"),
         ("(cdar l)", "(2)"),
         ("(cddr l)", "(4)"),
+        (
+            "(define l '(
+                (
+                    (1 2)
+                    (3 4)
+                    cddar
+                )
+                (
+                    (5 6)
+                    (7 8)
+                )
+                (
+                    (9 10)
+                    (11 12)
+                )
+                cdddr
+            ))",
+            "",
+        ),
+        ("(caaar l)", "1"),
+        ("(caadr l)", "(5 6)"),
+        ("(cadar l)", "(3 4)"),
+        ("(caddr l)", "((9 10) (11 12))"),
+        ("(cdaar l)", "(2)"),
+        ("(cdadr l)", "((7 8))"),
+        ("(cddar l)", "(cddar)"),
+        ("(cdddr l)", "(cdddr)"),
         ("(define endless '(1))", ""),
         ("(set-cdr! endless endless)", ""),
         ("(car endless)", "1"),
