@@ -97,7 +97,7 @@ impl Value {
     pub fn cdr(self) -> Result<Value, String> {
         match self {
             Value::Pair(p) => Ok(p.borrow().1.clone()),
-            _ => Err("Car needs a pair as argument".to_string()),
+            _ => Err("Cdr needs a pair as argument".to_string()),
         }
     }
 
