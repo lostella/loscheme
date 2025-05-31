@@ -1,3 +1,4 @@
+#[must_use]
 pub fn gcd(mut a: i64, mut b: i64) -> i64 {
     while b != 0 {
         let t = b;
@@ -7,10 +8,12 @@ pub fn gcd(mut a: i64, mut b: i64) -> i64 {
     a
 }
 
+#[must_use]
 pub fn lcm(a: i64, b: i64) -> i64 {
     (a * b).abs() / gcd(a, b)
 }
 
+#[must_use]
 pub fn simplify(numerator: i64, denominator: i64) -> (i64, i64) {
     let d = gcd(numerator, denominator);
     (numerator / d, denominator / d)

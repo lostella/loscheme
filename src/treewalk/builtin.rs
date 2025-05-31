@@ -112,7 +112,7 @@ fn builtin_sub(values: Vec<Value>) -> Result<MaybeValue, String> {
     };
     let mut res = v.clone();
     for v in values_iter {
-        res = res.sub(&v)?
+        res = res.sub(&v)?;
     }
     Ok(MaybeValue::Just(res))
 }
@@ -139,7 +139,7 @@ fn builtin_div(values: Vec<Value>) -> Result<MaybeValue, String> {
     };
     let mut res = v.clone();
     for v in values_iter {
-        res = res.div(&v)?
+        res = res.div(&v)?;
     }
     Ok(MaybeValue::Just(res))
 }
@@ -169,7 +169,7 @@ fn builtin_modulo(values: Vec<Value>) -> Result<MaybeValue, String> {
         [a, b] => match (a, b) {
             (Value::Integer(a), Value::Integer(b)) => {
                 let r = a % b;
-                let m = if a.signum() != b.signum() { r + b } else { r };
+                let m = if a.signum() == b.signum() { r } else { r + b };
                 Ok(MaybeValue::Just(Value::Integer(m)))
             }
             _ => Err("Modulo needs integer arguments".to_string()),
@@ -215,10 +215,12 @@ fn builtin_not(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Not needs exactly one argument".to_string());
     }
-    Ok(MaybeValue::Just(Value::Bool(match values[0] {
-        Value::Bool(b) => !b,
+    let res = match values.get(0) {
+        Some(Value::Bool(b)) => !b,
+        None => return Err("Unreachable reached".to_string()),
         _ => false,
-    })))
+    };
+    Ok(MaybeValue::Just(Value::Bool(res)))
 }
 
 fn builtin_list(values: Vec<Value>) -> Result<MaybeValue, String> {

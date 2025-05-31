@@ -19,6 +19,7 @@ pub struct Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
+    #[must_use]
     pub fn new(input: &'a str) -> Self {
         Tokenizer {
             input: input.chars().peekable(),
@@ -31,10 +32,9 @@ impl<'a> Tokenizer<'a> {
         while let Some(&c) = self.input.peek() {
             if c.is_whitespace() || c == '(' || c == ')' || c == '\'' || c == '`' || c == ',' {
                 break;
-            } else {
-                result.push(c);
-                self.input.next();
             }
+            result.push(c);
+            self.input.next();
         }
 
         result
@@ -157,7 +157,7 @@ impl FromStr for Keyword {
             "begin" => Ok(Keyword::Begin),
             "and" => Ok(Keyword::And),
             "or" => Ok(Keyword::Or),
-            _ => Err(format!("Not a keyword: {}", s)),
+            _ => Err(format!("Not a keyword: {s}")),
         }
     }
 }
@@ -214,7 +214,7 @@ pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String
         Some(Token::Quote) => parse_quote(tokens),
         Some(Token::Quasiquote) => parse_quasiquote(tokens),
         Some(Token::Unquote) => parse_unquote(tokens),
-        Some(Token::Atom(s)) => parse_atom(s),
+        Some(Token::Atom(s)) => Ok(parse_atom(s)),
         Some(Token::Dot) => Err("Unexpected dot".to_string()),
         Some(Token::RParen) => Err("Unexpected closing parenthesis".to_string()),
         None => Err("Unexpected end of input".to_string()),
@@ -303,23 +303,23 @@ fn parse_rational(input: &str) -> Result<(i64, i64), ()> {
     Ok((num, denom))
 }
 
-fn parse_atom(s: String) -> Result<Expr, String> {
+fn parse_atom(s: String) -> Expr {
     if let Ok(int) = s.parse::<i64>() {
-        Ok(Expr::Integer(int))
+        Expr::Integer(int)
     } else if let Ok(float) = s.parse::<f64>() {
-        Ok(Expr::Float(float))
+        Expr::Float(float)
     } else if let Ok((num, denom)) = parse_rational(&s) {
-        Ok(Expr::Rational(num, denom))
+        Expr::Rational(num, denom)
     } else if s == "#t" {
-        Ok(Expr::Bool(true))
+        Expr::Bool(true)
     } else if s == "#f" {
-        Ok(Expr::Bool(false))
+        Expr::Bool(false)
     } else if s.starts_with('"') && s.ends_with('"') {
-        Ok(Expr::Str(s[1..s.len() - 1].to_string()))
+        Expr::Str(s[1..s.len() - 1].to_string())
     } else if let Ok(keyword) = Keyword::from_str(&s) {
-        Ok(Expr::Keyword(keyword))
+        Expr::Keyword(keyword)
     } else {
-        Ok(Expr::Symbol(Intern::new(s)))
+        Expr::Symbol(Intern::new(s))
     }
 }
 
@@ -333,12 +333,12 @@ impl fmt::Display for Expr {
         match self {
             Expr::Null => write!(f, "()"),
             Expr::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
-            Expr::Integer(v) => write!(f, "{}", v),
-            Expr::Float(v) => write!(f, "{}", v),
-            Expr::Rational(n, d) => write!(f, "{}/{}", n, d),
-            Expr::Str(v) => write!(f, "\"{}\"", v),
-            Expr::Keyword(k) => write!(f, "{}", k),
-            Expr::Symbol(s) => write!(f, "{}", s),
+            Expr::Integer(v) => write!(f, "{v}"),
+            Expr::Float(v) => write!(f, "{v}"),
+            Expr::Rational(n, d) => write!(f, "{n}/{d}"),
+            Expr::Str(v) => write!(f, "\"{v}\""),
+            Expr::Keyword(k) => write!(f, "{k}"),
+            Expr::Symbol(s) => write!(f, "{s}"),
             Expr::List(p) => {
                 write!(f, "(")?;
                 let mut cur = p;
@@ -359,8 +359,8 @@ impl fmt::Display for Expr {
             }
             Expr::Vector(v) => {
                 write!(f, "#(")?;
-                for el in v.iter() {
-                    write!(f, "{}", el)?;
+                for el in v {
+                    write!(f, "{el}")?;
                 }
                 write!(f, ")")?;
                 Ok(())
@@ -370,6 +370,7 @@ impl fmt::Display for Expr {
 }
 
 impl Expr {
+    #[must_use]
     pub fn from_slice(v: &[Expr]) -> Self {
         match v.len() {
             0 => Expr::Null,

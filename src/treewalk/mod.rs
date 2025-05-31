@@ -52,7 +52,7 @@ impl From<Expr> for Value {
             )))),
             Expr::Vector(v) => Value::Vector(Rc::new(
                 v.into_iter()
-                    .map(|el| el.into())
+                    .map(std::convert::Into::into)
                     .collect::<Vec<Value>>()
                     .into(),
             )),
@@ -80,7 +80,7 @@ impl Value {
                 Value::Pair(p) => {
                     let borrowed = p.borrow();
                     res.push(borrowed.0.clone());
-                    cur = borrowed.1.clone()
+                    cur = borrowed.1.clone();
                 }
                 _ => return Err("Not a proper list".to_string()),
             }
@@ -324,12 +324,12 @@ impl fmt::Display for Value {
         match self {
             Value::Null => write!(f, "()"),
             Value::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
-            Value::Integer(v) => write!(f, "{}", v),
-            Value::Float(v) => write!(f, "{}", v),
-            Value::Rational(n, d) => write!(f, "{}/{}", n, d),
-            Value::Str(v) => write!(f, "\"{}\"", v),
-            Value::Keyword(k) => write!(f, "{}", k),
-            Value::Symbol(s) => write!(f, "{}", s),
+            Value::Integer(v) => write!(f, "{v}"),
+            Value::Float(v) => write!(f, "{v}"),
+            Value::Rational(n, d) => write!(f, "{n}/{d}"),
+            Value::Str(v) => write!(f, "\"{v}\""),
+            Value::Keyword(k) => write!(f, "{k}"),
+            Value::Symbol(s) => write!(f, "{s}"),
             Value::Pair(_) => {
                 write!(f, "(")?;
                 let mut current = self.clone();
@@ -351,7 +351,7 @@ impl fmt::Display for Value {
                             break;
                         }
                         other => {
-                            write!(f, " . {})", other)?;
+                            write!(f, " . {other})")?;
                             break;
                         }
                     }
@@ -365,13 +365,13 @@ impl fmt::Display for Value {
                     if !first {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}", el)?;
+                    write!(f, "{el}")?;
                     first = false;
                 }
                 write!(f, ")")?;
                 Ok(())
             }
-            Value::Procedure(proc) => write!(f, "{}", proc),
+            Value::Procedure(proc) => write!(f, "{proc}"),
             Value::Unspecified => Ok(()),
         }
     }
@@ -405,12 +405,11 @@ pub struct EnvironmentNode {
 }
 
 impl EnvironmentNode {
-    #[inline(always)]
     pub fn set(&mut self, key: Intern<String>, value: Value) {
         self.data.insert(key, Rc::new(RefCell::new(value)));
     }
 
-    #[inline(always)]
+    #[must_use]
     pub fn get(&self, key: &Intern<String>) -> Option<Rc<RefCell<Value>>> {
         match self.data.get(key) {
             Some(value) => Some(value.clone()),
@@ -428,6 +427,7 @@ pub struct Environment {
 }
 
 impl Environment {
+    #[must_use]
     pub fn empty() -> Self {
         let node = EnvironmentNode {
             data: FxHashMap::default(),
@@ -438,6 +438,7 @@ impl Environment {
         }
     }
 
+    #[must_use]
     pub fn child(&self) -> Self {
         let node = EnvironmentNode {
             data: FxHashMap::default(),
@@ -448,6 +449,7 @@ impl Environment {
         }
     }
 
+    #[must_use]
     pub fn standard() -> Self {
         let mut env = Self::empty();
 
@@ -460,12 +462,11 @@ impl Environment {
         env
     }
 
-    #[inline(always)]
     pub fn set(&mut self, key: Intern<String>, value: Value) {
         self.head.borrow_mut().set(key, value);
     }
 
-    #[inline(always)]
+    #[must_use]
     pub fn get(&self, key: &Intern<String>) -> Option<Rc<RefCell<Value>>> {
         self.head.borrow().get(key)
     }
@@ -476,15 +477,15 @@ impl Environment {
 
     fn maybe_evaluate(&mut self, expr: Value) -> Result<MaybeValue, String> {
         match expr {
-            Value::Integer(_) => Ok(MaybeValue::Just(expr)),
-            Value::Float(_) => Ok(MaybeValue::Just(expr)),
-            Value::Rational(_, _) => Ok(MaybeValue::Just(expr)),
-            Value::Str(_) => Ok(MaybeValue::Just(expr)),
-            Value::Bool(_) => Ok(MaybeValue::Just(expr)),
+            Value::Integer(_)
+            | Value::Float(_)
+            | Value::Rational(_, _)
+            | Value::Str(_)
+            | Value::Bool(_) => Ok(MaybeValue::Just(expr)),
             Value::Pair(rc) => self.maybe_evaluate_pair(&rc.borrow()),
             Value::Symbol(s) => match self.get(&s) {
                 Some(rc) => Ok(MaybeValue::Just(rc.borrow().clone())),
-                None => Err(format!("Undefined symbol: {}", s)),
+                None => Err(format!("Undefined symbol: {s}")),
             },
             _ => Err("Cannot evaluate expression".to_string()),
         }
@@ -507,8 +508,7 @@ impl Environment {
             Value::Keyword(Keyword::When) => self.evaluate_when(args),
             Value::Keyword(Keyword::Unless) => self.evaluate_unless(args),
             Value::Keyword(Keyword::Let) => self.evaluate_let(args, false),
-            Value::Keyword(Keyword::Letstar) => self.evaluate_let(args, true),
-            Value::Keyword(Keyword::Letrec) => self.evaluate_let(args, true),
+            Value::Keyword(Keyword::Letstar | Keyword::Letrec) => self.evaluate_let(args, true),
             Value::Keyword(Keyword::Begin) => self.evaluate_begin(args),
             Value::Keyword(Keyword::And) => self.evaluate_and(args),
             Value::Keyword(Keyword::Or) => self.evaluate_or(args),
@@ -516,16 +516,16 @@ impl Environment {
                 Value::Procedure(proc) => {
                     let mut args_values = Vec::new();
                     for arg in args {
-                        args_values.push(self.evaluate(arg)?)
+                        args_values.push(self.evaluate(arg)?);
                     }
                     Ok(MaybeValue::TailCall(proc.clone(), args_values))
                 }
-                stuff => Err(format!("Not a procedure call: {}", stuff)),
+                stuff => Err(format!("Not a procedure call: {stuff}")),
             },
         }
     }
 
-    fn evaluate_quote(&mut self, args: Vec<Value>) -> Result<Value, String> {
+    fn evaluate_quote(&self, args: Vec<Value>) -> Result<Value, String> {
         if args.len() != 1 {
             return Err(format!(
                 "Quote needs exactly one argument, got {}",
@@ -545,12 +545,11 @@ impl Environment {
                     return Err("Unquote takes a single argument".to_string());
                 };
                 return self.evaluate(p.borrow().0.clone());
-            } else {
-                return Ok(Value::Pair(Rc::new(RefCell::new((
-                    self.do_quasiquote(p.borrow().0.clone())?,
-                    self.do_quasiquote(p.borrow().1.clone())?,
-                )))));
             }
+            return Ok(Value::Pair(Rc::new(RefCell::new((
+                self.do_quasiquote(p.borrow().0.clone())?,
+                self.do_quasiquote(p.borrow().1.clone())?,
+            )))));
         }
         Ok(expr.clone())
     }
@@ -577,7 +576,7 @@ impl Environment {
                 for val in first.into_vec()? {
                     match val {
                         Value::Symbol(s) => params.push(s),
-                        _ => return Err(format!("Not a symbol: {}", val)),
+                        _ => return Err(format!("Not a symbol: {val}")),
                     }
                 }
             }
@@ -586,7 +585,7 @@ impl Environment {
         };
         let mut body = Vec::new();
         for expr in rest {
-            body.push((*expr).clone())
+            body.push((*expr).clone());
         }
         let proc = UserDefinedProcedure {
             params,
@@ -621,12 +620,12 @@ impl Environment {
                 for val in p.borrow().1.clone().into_vec()? {
                     match val {
                         Value::Symbol(s) => params.push(s),
-                        _ => return Err(format!("Not a symbol: {}", val)),
+                        _ => return Err(format!("Not a symbol: {val}")),
                     }
                 }
                 let mut body = Vec::new();
                 for expr in rest {
-                    body.push((*expr).clone())
+                    body.push((*expr).clone());
                 }
                 let proc = UserDefinedProcedure {
                     params,
@@ -644,9 +643,9 @@ impl Environment {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments".to_string());
         }
-        match args[0] {
-            Value::Symbol(s) => {
-                let Some(cell) = self.get(&s) else {
+        match args.first() {
+            Some(Value::Symbol(s)) => {
+                let Some(cell) = self.get(s) else {
                     return Err("Symbol is not bound".to_string());
                 };
                 let val = self.evaluate(args[1].clone())?;
@@ -714,7 +713,7 @@ impl Environment {
                         }
                     }
                 }
-                _ => return Err(format!("Not a list: {}", clause)),
+                _ => return Err(format!("Not a list: {clause}")),
             }
         }
         Ok(MaybeValue::Just(Value::Unspecified))
@@ -827,7 +826,6 @@ pub struct UserDefinedProcedure {
 }
 
 impl UserDefinedProcedure {
-    #[inline(always)]
     fn call_except_tail(&self, args: Vec<Value>) -> Result<MaybeValue, String> {
         let params = &self.params;
         let body = &self.body;

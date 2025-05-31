@@ -9,68 +9,57 @@
 
 use std::collections::HashMap;
 
-#[inline(always)]
 fn set_bits(word: u32, start_index: u8, num_bits: u8) -> u32 {
-    (!(0xFFFFFFFFu32 << num_bits) & word) << start_index
+    (!(0xFFFF_FFFF_u32 << num_bits) & word) << start_index
 }
 
-#[inline(always)]
 fn sign_extend(word: u32, sign_index: u8) -> u32 {
-    ((word & (0xFFFFFFFF >> (31 - sign_index))) ^ (1 << sign_index)).wrapping_sub(1 << sign_index)
+    ((word & (0xFFFF_FFFF >> (31 - sign_index))) ^ (1 << sign_index)).wrapping_sub(1 << sign_index)
 }
 
-#[inline(always)]
 fn decode_rd(word: u32) -> usize {
     ((word & 0xF80) >> 7) as usize
 }
 
-#[inline(always)]
 fn decode_rs1(word: u32) -> usize {
     ((word & 0xF8000) >> 15) as usize
 }
 
-#[inline(always)]
 fn decode_rs2(word: u32) -> usize {
-    ((word & 0x1F00000) >> 20) as usize
+    ((word & 0x01F0_0000) >> 20) as usize
 }
 
-#[inline(always)]
 fn decode_funct3(word: u32) -> u32 {
     (word & 0x7000) >> 12
 }
 
-#[inline(always)]
 fn decode_funct7(word: u32) -> u32 {
-    (word & 0xFE000000) >> 25
+    (word & 0xFE00_0000) >> 25
 }
 
-#[inline(always)]
 fn decode_imm_i_type(word: u32) -> u32 {
-    let pre = (word & 0xFFF00000) >> 20;
+    let pre = (word & 0xFFF0_0000) >> 20;
     sign_extend(pre, 11)
 }
 
-#[inline(always)]
 fn decode_imm_s_type(word: u32) -> u32 {
-    let pre = ((word & 0xFE000000) >> 20) | ((word & 0xF80) >> 7);
+    let pre = ((word & 0xFE00_0000) >> 20) | ((word & 0xF80) >> 7);
     sign_extend(pre, 11)
 }
 
-#[inline(always)]
 fn decode_imm_b_type(word: u32) -> u32 {
     let pre = ((word & 0xF00) >> 7)
-        | ((word & 0x7E000000) >> 20)
+        | ((word & 0x7E00_0000) >> 20)
         | ((word & 0x80) << 4)
-        | ((word & 0x80000000) >> 19);
+        | ((word & 0x8000_0000) >> 19);
     sign_extend(pre, 12)
 }
 
-#[inline(always)]
 fn decode_imm_j_type(word: u32) -> u32 {
-    let pre = ((word & 0x7FE00000) >> 20)
-        | ((word & 0x100000) >> 9)
+    let pre = ((word & 0x7FE0_0000) >> 20)
+        | ((word & 0x0010_0000) >> 9)
         | (word & 0xFF000)
-        | ((word & 0x80000000) >> 11);
+        | ((word & 0x8000_0000) >> 11);
     sign_extend(pre, 20)
 }
 
@@ -84,11 +73,11 @@ fn parse_register_index(name: &str) -> Result<u8, String> {
     if let Some(stripped) = name.to_lowercase().strip_prefix("x") {
         if let Ok(idx) = stripped.parse::<u8>() {
             if idx >= 32 {
-                return Err(format!("Invalid register index: {}", name));
+                return Err(format!("Invalid register index: {name}"));
             }
             return Ok(idx);
         }
-        return Err(format!("Cannot parse register index: {}", name));
+        return Err(format!("Cannot parse register index: {name}"));
     };
     if name == "fp" {
         return Ok(8);
@@ -99,7 +88,7 @@ fn parse_register_index(name: &str) -> Result<u8, String> {
     {
         Ok(idx as u8)
     } else {
-        Err(format!("Uknown register: {}", name))
+        Err(format!("Uknown register: {name}"))
     }
 }
 
@@ -137,68 +126,68 @@ const INSTRUCTION_TEMPLATES: [(u32, &str); 29] = [
 
 fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Result<u32, String> {
     let Some((opname, args)) = instr.split_once(char::is_whitespace) else {
-        return Err(format!("No arguments in instruction: {}", instr));
+        return Err(format!("No arguments in instruction: {instr}"));
     };
 
-    let split_args = args.split(",").map(|s| s.trim()).collect::<Vec<&str>>();
+    let split_args = args.split(',').map(str::trim).collect::<Vec<&str>>();
 
     let Some((template, _)) = INSTRUCTION_TEMPLATES
         .iter()
         .find(|(_, name)| *name == opname)
     else {
-        return Err(format!("Unsupported operation: {}", opname));
+        return Err(format!("Unsupported operation: {opname}"));
     };
 
     if ["lui", "auipc"].contains(&opname) {
-        let rd = parse_register_index(split_args[0])? as u32;
+        let rd = u32::from(parse_register_index(split_args[0])?);
         let imm = split_args[2]
             .parse::<u32>()
             .ok()
-            .ok_or(format!("Cannot parse immediate: {}", instr))?;
-        Ok(template | set_bits(rd, 7, 5) | (imm & 0xFFFFF000))
+            .ok_or(format!("Cannot parse immediate: {instr}"))?;
+        Ok(template | set_bits(rd, 7, 5) | (imm & 0xFFFF_F000))
     } else if ["lw", "lh", "lb", "lhu", "lbu"].contains(&opname) {
         let memloc: Vec<&str> = split_args[1]
-            .split(")")
+            .split(')')
             .next()
-            .ok_or(format!("Malformed memory location: {}", instr))?
-            .split("(")
+            .ok_or(format!("Malformed memory location: {instr}"))?
+            .split('(')
             .collect();
         let imm = memloc[0]
             .parse::<i32>()
             .ok()
-            .ok_or(format!("Cannot parse immediate: {}", instr))? as u32;
-        let rd = parse_register_index(split_args[0])? as u32;
-        let rs1 = parse_register_index(memloc[1])? as u32;
+            .ok_or(format!("Cannot parse immediate: {instr}"))? as u32;
+        let rd = u32::from(parse_register_index(split_args[0])?);
+        let rs1 = u32::from(parse_register_index(memloc[1])?);
         Ok(template | set_bits(rd, 7, 5) | set_bits(rs1, 15, 5) | set_bits(imm, 20, 12))
     } else if ["sw", "sh", "sb"].contains(&opname) {
         let memloc: Vec<&str> = split_args[1]
-            .split(")")
+            .split(')')
             .next()
-            .ok_or(format!("Malformed memory location: {}", instr))?
-            .split("(")
+            .ok_or(format!("Malformed memory location: {instr}"))?
+            .split('(')
             .collect();
         let imm = memloc[0]
             .parse::<i32>()
             .ok()
-            .ok_or(format!("Cannot parse immediate: {}", instr))? as u32;
-        let rs2 = parse_register_index(split_args[0])? as u32;
-        let rs1 = parse_register_index(memloc[1])? as u32;
+            .ok_or(format!("Cannot parse immediate: {instr}"))? as u32;
+        let rs2 = u32::from(parse_register_index(split_args[0])?);
+        let rs1 = u32::from(parse_register_index(memloc[1])?);
         Ok(template
             | set_bits(rs1, 15, 5)
             | set_bits(rs2, 20, 5)
             | set_bits(imm & 0b0000_0001_1111, 7, 5)
             | set_bits((imm & 0b1111_1110_0000) >> 5, 25, 7))
     } else if ["add", "sub", "xor", "or", "and"].contains(&opname) {
-        let rd = parse_register_index(split_args[0])? as u32;
-        let rs1 = parse_register_index(split_args[1])? as u32;
-        let rs2 = parse_register_index(split_args[2])? as u32;
+        let rd = u32::from(parse_register_index(split_args[0])?);
+        let rs1 = u32::from(parse_register_index(split_args[1])?);
+        let rs2 = u32::from(parse_register_index(split_args[2])?);
         Ok(template | set_bits(rd, 7, 5) | set_bits(rs1, 15, 5) | set_bits(rs2, 20, 5))
     } else if ["beq", "bne", "blt", "bge", "bltu", "bgeu"].contains(&opname) {
-        let rs1 = parse_register_index(split_args[0])? as u32;
-        let rs2 = parse_register_index(split_args[1])? as u32;
+        let rs1 = u32::from(parse_register_index(split_args[0])?);
+        let rs2 = u32::from(parse_register_index(split_args[1])?);
         let dest = *labels
             .get(split_args[2])
-            .ok_or(format!("Label not found: {}", instr))?;
+            .ok_or(format!("Label not found: {instr}"))?;
         let imm = dest.wrapping_sub(ip);
         Ok(template
             | set_bits(rs1, 15, 5)
@@ -214,18 +203,18 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
                 7,
             ))
     } else if ["addi", "jalr", "slti", "sltiu", "xori", "ori", "andi"].contains(&opname) {
-        let rd = parse_register_index(split_args[0])? as u32;
-        let rs1 = parse_register_index(split_args[1])? as u32;
+        let rd = u32::from(parse_register_index(split_args[0])?);
+        let rs1 = u32::from(parse_register_index(split_args[1])?);
         let imm = split_args[2]
             .parse::<i16>()
             .ok()
-            .ok_or(format!("Cannot parse immediate: {}", instr))? as u32;
+            .ok_or(format!("Cannot parse immediate: {instr}"))? as u32;
         Ok(template | set_bits(rd, 7, 5) | set_bits(rs1, 15, 5) | set_bits(imm, 20, 12))
     } else if "jal" == opname {
-        let rd = parse_register_index(split_args[0])? as u32;
+        let rd = u32::from(parse_register_index(split_args[0])?);
         let dest = *labels
             .get(split_args[1])
-            .ok_or(format!("Label not found: {}", instr))?;
+            .ok_or(format!("Label not found: {instr}"))?;
         let imm = dest.wrapping_sub(ip);
         Ok(template
             | set_bits(rd, 7, 5)
@@ -238,7 +227,7 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
                 20,
             ))
     } else {
-        Err(format!("Unknown instruction: {}", instr))
+        Err(format!("Unknown instruction: {instr}"))
     }
 }
 
@@ -248,17 +237,16 @@ pub fn assemble(asm: &str) -> Result<Vec<u32>, String> {
     let mut instructions_code: Vec<&str> = vec![];
     let mut instructions = vec![];
     for line in asm.lines() {
-        let blocks = line.split("#").collect::<Vec<&str>>();
+        let blocks = line.split('#').collect::<Vec<&str>>();
         let Some(code) = blocks.first() else { continue };
         let trimmed = code.trim();
         if trimmed.is_empty() {
             continue;
         }
-        if let Some((label, instr)) = trimmed.split_once(":") {
+        if let Some((label, instr)) = trimmed.split_once(':') {
             if let Some(loc) = labels.get(label) {
                 return Err(format!(
-                    "Ambiguous label: {} (occurs at {} and {})",
-                    label, ip, loc
+                    "Ambiguous label: {label} (occurs at {ip} and {loc})"
                 ));
             }
             labels.insert(label.to_string(), ip);
@@ -286,17 +274,18 @@ pub struct VM {
     memory: Vec<u8>,
 }
 
-const OPCODE_LUI: u32 = 0b0110111;
-const OPCODE_AUIPC: u32 = 0b0010111;
-const OPCODE_JAL: u32 = 0b1101111;
-const OPCODE_JALR: u32 = 0b1100111;
-const OPCODE_BRANCH: u32 = 0b1100011;
-const OPCODE_LOAD: u32 = 0b0000011;
-const OPCODE_STORE: u32 = 0b0100011;
-const OPCODE_IMM: u32 = 0b0010011;
-const OPCODE_ARLOG: u32 = 0b0110011;
+const OPCODE_LUI: u32 = 0b011_0111;
+const OPCODE_AUIPC: u32 = 0b001_0111;
+const OPCODE_JAL: u32 = 0b110_1111;
+const OPCODE_JALR: u32 = 0b110_0111;
+const OPCODE_BRANCH: u32 = 0b110_0011;
+const OPCODE_LOAD: u32 = 0b000_0011;
+const OPCODE_STORE: u32 = 0b010_0011;
+const OPCODE_IMM: u32 = 0b001_0011;
+const OPCODE_ARLOG: u32 = 0b011_0011;
 
 impl VM {
+    #[must_use]
     pub fn new(code: Vec<u32>, memory_size: usize) -> Self {
         let mut regs = [0; 32];
         regs[1] = 4 * (code.len() as u32); // initialize return address
@@ -315,49 +304,42 @@ impl VM {
         }
     }
 
+    #[must_use]
     pub fn read_register(&self, idx: usize) -> u32 {
         self.regs[idx]
     }
 
-    #[inline(always)]
     fn load_byte(&self, address: usize) -> u32 {
         self.memory[address] as i8 as i32 as u32
     }
 
-    #[inline(always)]
     fn load_half(&self, address: usize) -> u32 {
         let value = u16::from_le_bytes([self.memory[address], self.memory[address + 1]]);
         value as i16 as i32 as u32
     }
 
-    #[inline(always)]
     fn load_byte_unsigned(&self, address: usize) -> u32 {
-        self.memory[address] as u32
+        u32::from(self.memory[address])
     }
 
-    #[inline(always)]
     fn load_half_unsigned(&self, address: usize) -> u32 {
         u16::from_le_bytes([self.memory[address], self.memory[address + 1]]) as u32
     }
 
-    #[inline(always)]
     fn load_word(&self, address: usize) -> u32 {
         let bytes = &self.memory[address..address + 4];
         u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
     }
 
-    #[inline(always)]
     fn store_byte(&mut self, address: usize, value: u32) {
         self.memory[address] = value as u8;
     }
 
-    #[inline(always)]
     fn store_half(&mut self, address: usize, value: u32) {
         let bytes = (value as u16).to_le_bytes();
         self.memory[address..address + 2].copy_from_slice(&bytes);
     }
 
-    #[inline(always)]
     fn store_word(&mut self, address: usize, value: u32) {
         let bytes = value.to_le_bytes();
         self.memory[address..address + 4].copy_from_slice(&bytes);
@@ -369,11 +351,11 @@ impl VM {
         let (funct3, funct7) = (decode_funct3(word), decode_funct7(word));
         let (op1, op2) = (self.regs[rs1], self.regs[rs2]);
         self.regs[rd] = match (funct3, funct7) {
-            (0b000, 0b0000000) => op1.wrapping_add(op2), // add
-            (0b000, 0b0100000) => op1.wrapping_sub(op2), // sub
-            (0b100, 0b0000000) => op1 ^ op2,             // xor
-            (0b110, 0b0000000) => op1 | op2,             // or
-            (0b111, 0b0000000) => op1 & op2,             // and
+            (0b000, 0b000_0000) => op1.wrapping_add(op2), // add
+            (0b000, 0b010_0000) => op1.wrapping_sub(op2), // sub
+            (0b100, 0b000_0000) => op1 ^ op2,             // xor
+            (0b110, 0b000_0000) => op1 | op2,             // or
+            (0b111, 0b000_0000) => op1 & op2,             // and
             _ => todo!("funct3 = 0b{:03b}, funct7 = 0b{:07b}", funct3, funct7),
         };
         self.ip = self.ip.wrapping_add(4);
@@ -482,11 +464,11 @@ impl VM {
             }
             OPCODE_LUI => {
                 let rd = decode_rd(word);
-                self.regs[rd] = word & 0xFFFFF000;
+                self.regs[rd] = word & 0xFFFF_F000;
             }
             OPCODE_AUIPC => {
                 let rd = decode_rd(word);
-                let imm = word & 0xFFFFF000;
+                let imm = word & 0xFFFF_F000;
                 self.regs[rd] = self.ip.wrapping_add(imm);
             }
             _ => todo!("opcode = 0b{:07b}", opcode),
@@ -500,9 +482,10 @@ impl VM {
             if self.ip >= code_length {
                 break;
             }
-            if self.ip % 4 != 0 {
-                panic!("instruction pointer is not word-aligned")
-            }
+            assert!(
+                !(self.ip % 4 != 0),
+                "instruction pointer is not word-aligned"
+            );
             self.execute(self.code[(self.ip / 4) as usize]);
         }
     }
