@@ -482,10 +482,7 @@ impl VM {
             if self.ip >= code_length {
                 break;
             }
-            assert!(
-                self.ip % 4 == 0,
-                "instruction pointer is not word-aligned"
-            );
+            assert!(self.ip % 4 == 0, "instruction pointer is not word-aligned");
             self.execute(self.code[(self.ip / 4) as usize]);
         }
     }
