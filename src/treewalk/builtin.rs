@@ -215,7 +215,7 @@ fn builtin_not(values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
         return Err("Not needs exactly one argument".to_string());
     }
-    let res = match values.get(0) {
+    let res = match values.first() {
         Some(Value::Bool(b)) => !b,
         None => return Err("Unreachable reached".to_string()),
         _ => false,
