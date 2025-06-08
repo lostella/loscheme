@@ -69,9 +69,9 @@ const REGISTER_ABI_NAMES: [&str; 32] = [
     "t5", "t6",
 ];
 
-fn parse_register_index(name: &str) -> Result<u8, String> {
+fn parse_register_index(name: &str) -> Result<u32, String> {
     if let Some(stripped) = name.to_lowercase().strip_prefix("x") {
-        if let Ok(idx) = stripped.parse::<u8>() {
+        if let Ok(idx) = stripped.parse::<u32>() {
             if idx >= 32 {
                 return Err(format!("Invalid register index: {name}"));
             }
@@ -86,7 +86,7 @@ fn parse_register_index(name: &str) -> Result<u8, String> {
         .iter()
         .position(|&abi_name| abi_name == name.to_lowercase())
     {
-        Ok(idx as u8)
+        u32::try_from(idx).map_err(|_| "Invalid register index".into())
     } else {
         Err(format!("Uknown register: {name}"))
     }
@@ -139,7 +139,7 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
     };
 
     if ["lui", "auipc"].contains(&opname) {
-        let rd = u32::from(parse_register_index(split_args[0])?);
+        let rd = parse_register_index(split_args[0])?;
         let imm = split_args[2]
             .parse::<u32>()
             .ok()
@@ -156,8 +156,8 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
             .parse::<i32>()
             .ok()
             .ok_or(format!("Cannot parse immediate: {instr}"))? as u32;
-        let rd = u32::from(parse_register_index(split_args[0])?);
-        let rs1 = u32::from(parse_register_index(memloc[1])?);
+        let rd = parse_register_index(split_args[0])?;
+        let rs1 = parse_register_index(memloc[1])?;
         Ok(template | set_bits(rd, 7, 5) | set_bits(rs1, 15, 5) | set_bits(imm, 20, 12))
     } else if ["sw", "sh", "sb"].contains(&opname) {
         let memloc: Vec<&str> = split_args[1]
@@ -170,21 +170,21 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
             .parse::<i32>()
             .ok()
             .ok_or(format!("Cannot parse immediate: {instr}"))? as u32;
-        let rs2 = u32::from(parse_register_index(split_args[0])?);
-        let rs1 = u32::from(parse_register_index(memloc[1])?);
+        let rs2 = parse_register_index(split_args[0])?;
+        let rs1 = parse_register_index(memloc[1])?;
         Ok(template
             | set_bits(rs1, 15, 5)
             | set_bits(rs2, 20, 5)
             | set_bits(imm & 0b0000_0001_1111, 7, 5)
             | set_bits((imm & 0b1111_1110_0000) >> 5, 25, 7))
     } else if ["add", "sub", "xor", "or", "and"].contains(&opname) {
-        let rd = u32::from(parse_register_index(split_args[0])?);
-        let rs1 = u32::from(parse_register_index(split_args[1])?);
-        let rs2 = u32::from(parse_register_index(split_args[2])?);
+        let rd = parse_register_index(split_args[0])?;
+        let rs1 = parse_register_index(split_args[1])?;
+        let rs2 = parse_register_index(split_args[2])?;
         Ok(template | set_bits(rd, 7, 5) | set_bits(rs1, 15, 5) | set_bits(rs2, 20, 5))
     } else if ["beq", "bne", "blt", "bge", "bltu", "bgeu"].contains(&opname) {
-        let rs1 = u32::from(parse_register_index(split_args[0])?);
-        let rs2 = u32::from(parse_register_index(split_args[1])?);
+        let rs1 = parse_register_index(split_args[0])?;
+        let rs2 = parse_register_index(split_args[1])?;
         let dest = *labels
             .get(split_args[2])
             .ok_or(format!("Label not found: {instr}"))?;
@@ -203,15 +203,15 @@ fn encode_instruction(ip: u32, instr: &str, labels: &HashMap<String, u32>) -> Re
                 7,
             ))
     } else if ["addi", "jalr", "slti", "sltiu", "xori", "ori", "andi"].contains(&opname) {
-        let rd = u32::from(parse_register_index(split_args[0])?);
-        let rs1 = u32::from(parse_register_index(split_args[1])?);
+        let rd = parse_register_index(split_args[0])?;
+        let rs1 = parse_register_index(split_args[1])?;
         let imm = split_args[2]
             .parse::<i16>()
             .ok()
             .ok_or(format!("Cannot parse immediate: {instr}"))? as u32;
         Ok(template | set_bits(rd, 7, 5) | set_bits(rs1, 15, 5) | set_bits(imm, 20, 12))
     } else if "jal" == opname {
-        let rd = u32::from(parse_register_index(split_args[0])?);
+        let rd = parse_register_index(split_args[0])?;
         let dest = *labels
             .get(split_args[1])
             .ok_or(format!("Label not found: {instr}"))?;

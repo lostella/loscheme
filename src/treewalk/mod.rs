@@ -495,23 +495,23 @@ impl Environment {
         let args = pair.1.clone().into_vec()?;
 
         match pair.0 {
-            Value::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(args)?)),
+            Value::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(&args)?)),
             Value::Keyword(Keyword::Quasiquote) => {
-                Ok(MaybeValue::Just(self.evaluate_quasiquote(args)?))
+                Ok(MaybeValue::Just(self.evaluate_quasiquote(&args)?))
             }
-            Value::Keyword(Keyword::Lambda) => Ok(MaybeValue::Just(self.evaluate_lambda(args)?)),
-            Value::Keyword(Keyword::Define) => Ok(MaybeValue::Just(self.evaluate_define(args)?)),
-            Value::Keyword(Keyword::Set) => Ok(MaybeValue::Just(self.evaluate_set(args)?)),
-            Value::Keyword(Keyword::If) => self.evaluate_if(args),
-            Value::Keyword(Keyword::Cond) => self.evaluate_cond(args),
-            Value::Keyword(Keyword::Case) => self.evaluate_case(args),
-            Value::Keyword(Keyword::When) => self.evaluate_when(args),
-            Value::Keyword(Keyword::Unless) => self.evaluate_unless(args),
-            Value::Keyword(Keyword::Let) => self.evaluate_let(args, false),
-            Value::Keyword(Keyword::Letstar | Keyword::Letrec) => self.evaluate_let(args, true),
-            Value::Keyword(Keyword::Begin) => self.evaluate_begin(args),
-            Value::Keyword(Keyword::And) => self.evaluate_and(args),
-            Value::Keyword(Keyword::Or) => self.evaluate_or(args),
+            Value::Keyword(Keyword::Lambda) => Ok(MaybeValue::Just(self.evaluate_lambda(&args)?)),
+            Value::Keyword(Keyword::Define) => Ok(MaybeValue::Just(self.evaluate_define(&args)?)),
+            Value::Keyword(Keyword::Set) => Ok(MaybeValue::Just(self.evaluate_set(&args)?)),
+            Value::Keyword(Keyword::If) => self.evaluate_if(&args),
+            Value::Keyword(Keyword::Cond) => self.evaluate_cond(&args),
+            Value::Keyword(Keyword::Case) => self.evaluate_case(&args),
+            Value::Keyword(Keyword::When) => self.evaluate_when(&args),
+            Value::Keyword(Keyword::Unless) => self.evaluate_unless(&args),
+            Value::Keyword(Keyword::Let) => self.evaluate_let(&args, false),
+            Value::Keyword(Keyword::Letstar | Keyword::Letrec) => self.evaluate_let(&args, true),
+            Value::Keyword(Keyword::Begin) => self.evaluate_begin(&args),
+            Value::Keyword(Keyword::And) => self.evaluate_and(&args),
+            Value::Keyword(Keyword::Or) => self.evaluate_or(&args),
             _ => match self.evaluate(pair.0.clone())? {
                 Value::Procedure(proc) => {
                     let mut args_values = Vec::new();
@@ -525,7 +525,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_quote(&self, args: Vec<Value>) -> Result<Value, String> {
+    fn evaluate_quote(&self, args: &[Value]) -> Result<Value, String> {
         if args.len() != 1 {
             return Err(format!(
                 "Quote needs exactly one argument, got {}",
@@ -554,7 +554,7 @@ impl Environment {
         Ok(expr.clone())
     }
 
-    fn evaluate_quasiquote(&mut self, args: Vec<Value>) -> Result<Value, String> {
+    fn evaluate_quasiquote(&mut self, args: &[Value]) -> Result<Value, String> {
         if args.len() != 1 {
             return Err(format!(
                 "Quasiquote needs exactly one argument, got {}",
@@ -564,7 +564,7 @@ impl Environment {
         self.do_quasiquote(args[0].clone())
     }
 
-    fn evaluate_lambda(&mut self, args: Vec<Value>) -> Result<Value, String> {
+    fn evaluate_lambda(&mut self, args: &[Value]) -> Result<Value, String> {
         if args.is_empty() {
             return Err("Lambda needs at least one argument".to_string());
         }
@@ -595,7 +595,7 @@ impl Environment {
         Ok(Value::Procedure(Rc::new(Procedure::UserDefined(proc))))
     }
 
-    fn evaluate_define(&mut self, args: Vec<Value>) -> Result<Value, String> {
+    fn evaluate_define(&mut self, args: &[Value]) -> Result<Value, String> {
         if args.len() < 2 {
             return Err("Define needs at least two arguments".to_string());
         }
@@ -639,7 +639,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_set(&mut self, args: Vec<Value>) -> Result<Value, String> {
+    fn evaluate_set(&mut self, args: &[Value]) -> Result<Value, String> {
         if args.len() != 2 {
             return Err("Set! needs exactly two arguments".to_string());
         }
@@ -656,7 +656,7 @@ impl Environment {
         }
     }
 
-    fn evaluate_if(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn evaluate_if(&mut self, args: &[Value]) -> Result<MaybeValue, String> {
         if args.len() < 2 || args.len() > 3 {
             return Err("If accepts two or three arguments".to_string());
         }
@@ -673,19 +673,19 @@ impl Environment {
         }
     }
 
-    fn evaluate_cond(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn evaluate_cond(&mut self, args: &[Value]) -> Result<MaybeValue, String> {
         for clause in args {
             match clause {
                 Value::Pair(p) => {
                     let seq = p.borrow().1.clone().into_vec()?;
                     if let Value::Symbol(s) = p.borrow().0 {
                         if *s == "else" {
-                            return self.evaluate_begin(seq);
+                            return self.evaluate_begin(&seq);
                         }
                     }
                     let val = self.evaluate(p.borrow().0.clone())?;
                     match val {
-                        Value::Bool(true) => return self.evaluate_begin(seq),
+                        Value::Bool(true) => return self.evaluate_begin(&seq),
                         Value::Bool(false) => continue,
                         _ => return Err("Clause did not evaluate to a boolean".to_string()),
                     }
@@ -696,7 +696,7 @@ impl Environment {
         Ok(MaybeValue::Just(Value::Unspecified))
     }
 
-    fn evaluate_case(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn evaluate_case(&mut self, args: &[Value]) -> Result<MaybeValue, String> {
         let val = self.evaluate(args[0].clone())?;
         for clause in &args[1..] {
             match clause {
@@ -704,12 +704,12 @@ impl Environment {
                     let seq = p.borrow().1.clone().into_vec()?;
                     if let Value::Symbol(s) = p.borrow().0 {
                         if *s == "else" {
-                            return self.evaluate_begin(seq);
+                            return self.evaluate_begin(&seq);
                         }
                     }
                     for datum in p.borrow().0.clone().into_vec()? {
                         if builtin::eqv(&val, &datum) {
-                            return self.evaluate_begin(seq);
+                            return self.evaluate_begin(&seq);
                         }
                     }
                 }
@@ -719,29 +719,29 @@ impl Environment {
         Ok(MaybeValue::Just(Value::Unspecified))
     }
 
-    fn evaluate_when(&mut self, mut args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn evaluate_when(&mut self, args: &[Value]) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("When needs at least one argument".to_string());
         }
         match self.evaluate(args[0].clone())? {
-            Value::Bool(true) => self.evaluate_begin(args.split_off(1)),
+            Value::Bool(true) => self.evaluate_begin(&args[1..]),
             Value::Bool(false) => Ok(MaybeValue::Just(Value::Unspecified)),
             _ => Err("First argument to when did not evaluate to a boolean".to_string()),
         }
     }
 
-    fn evaluate_unless(&mut self, mut args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn evaluate_unless(&mut self, args: &[Value]) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("Unless needs at least one argument".to_string());
         }
         match self.evaluate(args[0].clone())? {
             Value::Bool(true) => Ok(MaybeValue::Just(Value::Unspecified)),
-            Value::Bool(false) => self.evaluate_begin(args.split_off(1)),
+            Value::Bool(false) => self.evaluate_begin(&args[1..]),
             _ => Err("First argument to unless did not evaluate to a boolean".to_string()),
         }
     }
 
-    fn evaluate_let(&mut self, mut args: Vec<Value>, star: bool) -> Result<MaybeValue, String> {
+    fn evaluate_let(&mut self, args: &[Value], star: bool) -> Result<MaybeValue, String> {
         if args.is_empty() {
             return Err("Let needs at least one argument".to_string());
         }
@@ -769,7 +769,7 @@ impl Environment {
                 _ => return Err("Not a 2-list".to_string()),
             }
         }
-        if let Some((last, rest)) = args.split_off(1).split_last() {
+        if let Some((last, rest)) = args[1..].split_last() {
             for expr in rest {
                 child.evaluate(expr.clone())?;
             }
@@ -778,7 +778,7 @@ impl Environment {
         Ok(MaybeValue::Just(Value::Unspecified))
     }
 
-    fn evaluate_begin(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn evaluate_begin(&mut self, args: &[Value]) -> Result<MaybeValue, String> {
         if let Some((last, rest)) = args.split_last() {
             for expr in rest {
                 self.evaluate(expr.clone())?;
@@ -788,7 +788,7 @@ impl Environment {
         Ok(MaybeValue::Just(Value::Unspecified))
     }
 
-    fn evaluate_and(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn evaluate_and(&mut self, args: &[Value]) -> Result<MaybeValue, String> {
         if let Some((last, rest)) = args.split_last() {
             for expr in rest {
                 if self.evaluate(expr.clone())? == Value::Bool(false) {
@@ -800,7 +800,7 @@ impl Environment {
         Ok(MaybeValue::Just(Value::Bool(true)))
     }
 
-    fn evaluate_or(&mut self, args: Vec<Value>) -> Result<MaybeValue, String> {
+    fn evaluate_or(&mut self, args: &[Value]) -> Result<MaybeValue, String> {
         if let Some((last, rest)) = args.split_last() {
             for expr in rest {
                 let val = self.evaluate(expr.clone())?;
