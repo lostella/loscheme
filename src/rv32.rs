@@ -286,16 +286,20 @@ const OPCODE_ARLOG: u32 = 0b011_0011;
 
 impl VM {
     #[must_use]
-    pub fn new(code: Vec<u32>, memory_size: usize) -> Self {
+    pub fn new(memory_size: usize) -> Self {
         let mut regs = [0; 32];
-        regs[1] = 4 * (code.len() as u32); // initialize return address
         regs[2] = memory_size as u32; // initialize stack pointer
         Self {
             regs,
-            code,
+            code: vec![],
             ip: 0,
             memory: vec![0; memory_size],
         }
+    }
+
+    pub fn reset_code(&mut self, code: &[u32]) {
+        self.code = code.to_vec();
+        self.regs[1] = 4 * (code.len() as u32); // initialize return address
     }
 
     pub fn write_register(&mut self, idx: usize, value: u32) {
@@ -547,26 +551,24 @@ mod tests {
 
     #[test]
     fn test_write_to_zero() {
-        let mut vm = VM::new(
-            vec![
-                0x00100013, // addi x0, x0, 1
-            ],
-            0,
-        );
+        let mut vm = VM::new(0);
+        vm.reset_code(&[
+            0x00100013, // addi x0, x0, 1
+        ]);
         vm.run();
         assert_eq!(vm.regs[0], 0)
     }
 
     #[test]
     fn test_store_word_load_word() {
-        let mut vm = VM::new(vec![], 1024);
+        let mut vm = VM::new(1024);
         vm.store_word(512, 0x12345678);
         assert_eq!(vm.load_word(512), 0x12345678)
     }
 
     #[test]
     fn test_store_half_load_half() {
-        let mut vm = VM::new(vec![], 1024);
+        let mut vm = VM::new(1024);
         vm.store_half(256, 0x7654);
         assert_eq!(vm.load_half(256), 0x7654);
         vm.store_half(256, 0x8654);
@@ -575,7 +577,7 @@ mod tests {
 
     #[test]
     fn test_store_byte_load_byte() {
-        let mut vm = VM::new(vec![], 1024);
+        let mut vm = VM::new(1024);
         vm.store_byte(256, 0x7F);
         assert_eq!(vm.load_byte(256), 0x7F);
         vm.store_byte(256, 0x8F);
@@ -584,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_store_byte_load_half() {
-        let mut vm = VM::new(vec![], 1024);
+        let mut vm = VM::new(1024);
 
         vm.store_byte(256, 0x12);
         vm.store_byte(257, 0x34);
@@ -596,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_store_half_load_word() {
-        let mut vm = VM::new(vec![], 1024);
+        let mut vm = VM::new(1024);
 
         vm.store_half(256, 0x1234);
         vm.store_half(258, 0x5678);
@@ -649,7 +651,8 @@ loop:
 
     #[test]
     fn test_fib_iter_run() {
-        let mut vm = VM::new(FIB_ITER_BIN.to_vec(), 0);
+        let mut vm = VM::new(0);
+        vm.reset_code(&FIB_ITER_BIN);
         vm.write_register(10, 17);
         vm.run();
         assert_eq!(vm.read_register(10), 1597)
@@ -717,7 +720,8 @@ recurse:
 
     #[test]
     fn test_fib_recur_run() {
-        let mut vm = VM::new(FIB_RECUR_BIN.to_vec(), 1024);
+        let mut vm = VM::new(1024);
+        vm.reset_code(&FIB_RECUR_BIN);
         vm.write_register(10, 13);
         vm.run();
         assert_eq!(vm.read_register(10), 233)
