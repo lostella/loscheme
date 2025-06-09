@@ -133,6 +133,7 @@ pub enum Keyword {
     Begin,
     And,
     Or,
+    Dot,
 }
 
 impl FromStr for Keyword {
@@ -157,6 +158,7 @@ impl FromStr for Keyword {
             "begin" => Ok(Keyword::Begin),
             "and" => Ok(Keyword::And),
             "or" => Ok(Keyword::Or),
+            "." => Ok(Keyword::Dot),
             _ => Err(format!("Not a keyword: {s}")),
         }
     }
@@ -182,13 +184,13 @@ impl fmt::Display for Keyword {
             Keyword::Begin => write!(f, "begin"),
             Keyword::And => write!(f, "and"),
             Keyword::Or => write!(f, "or"),
+            Keyword::Dot => write!(f, "."),
         }
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
-    Null,
     Integer(i64),
     Float(f64),
     Rational(i64, i64),
@@ -196,7 +198,7 @@ pub enum Expr {
     Bool(bool),
     Keyword(Keyword),
     Symbol(Intern<String>),
-    List(Box<(Expr, Expr)>),
+    List(Vec<Expr>),
     Vector(Vec<Expr>),
 }
 
@@ -215,32 +217,43 @@ pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String
         Some(Token::Quasiquote) => parse_quasiquote(tokens),
         Some(Token::Unquote) => parse_unquote(tokens),
         Some(Token::Atom(s)) => Ok(parse_atom(s)),
-        Some(Token::Dot) => Err("Unexpected dot".to_string()),
+        Some(Token::Dot) => Ok(Expr::Keyword(Keyword::Dot)),
         Some(Token::RParen) => Err("Unexpected closing parenthesis".to_string()),
         None => Err("Unexpected end of input".to_string()),
     }
 }
 
 fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    if let Some(token) = tokens.peek() {
+    let mut v = vec![];
+    let mut dot_found = false;
+    let mut last_expression_parsed = false;
+    while let Some(token) = tokens.peek() {
         match token {
             Token::RParen => {
+                if dot_found && !last_expression_parsed {
+                    return Err("No expression following dot".to_string());
+                }
                 tokens.next();
-                return Ok(Expr::Null);
+                return Ok(Expr::List(v));
             }
             Token::Dot => {
-                tokens.next();
-                let res = parse_expression(tokens);
-                match tokens.next() {
-                    Some(Token::RParen) => return res,
-                    _ => return Err("Expected closing parenthesis".to_string()),
+                if v.is_empty() {
+                    return Err("No expressions preceeding dot".to_string());
                 }
+                if dot_found {
+                    return Err("Multiple dots".to_string());
+                }
+                dot_found = true;
+                v.push(parse_expression(tokens)?);
             }
             _ => {
-                return Ok(Expr::List(Box::new((
-                    parse_expression(tokens)?,
-                    parse_list(tokens)?,
-                ))));
+                if last_expression_parsed {
+                    return Err("Multiple expressions following dot".to_string());
+                }
+                v.push(parse_expression(tokens)?);
+                if dot_found {
+                    last_expression_parsed = true;
+                }
             }
         }
     }
@@ -267,24 +280,24 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
 // }
 
 fn parse_quote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::List(Box::new((
+    Ok(Expr::List(vec![
         Expr::Keyword(Keyword::Quote),
-        Expr::List(Box::new((parse_expression(tokens)?, Expr::Null))),
-    ))))
+        parse_expression(tokens)?,
+    ]))
 }
 
 fn parse_quasiquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::List(Box::new((
+    Ok(Expr::List(vec![
         Expr::Keyword(Keyword::Quasiquote),
-        Expr::List(Box::new((parse_expression(tokens)?, Expr::Null))),
-    ))))
+        parse_expression(tokens)?,
+    ]))
 }
 
 fn parse_unquote(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    Ok(Expr::List(Box::new((
+    Ok(Expr::List(vec![
         Expr::Keyword(Keyword::Unquote),
-        Expr::List(Box::new((parse_expression(tokens)?, Expr::Null))),
-    ))))
+        parse_expression(tokens)?,
+    ]))
 }
 
 fn parse_rational(input: &str) -> Result<(i64, i64), ()> {
@@ -331,7 +344,6 @@ pub fn parse(code: &str) -> Result<Vec<Expr>, String> {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Null => write!(f, "()"),
             Expr::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
             Expr::Integer(v) => write!(f, "{v}"),
             Expr::Float(v) => write!(f, "{v}"),
@@ -339,20 +351,13 @@ impl fmt::Display for Expr {
             Expr::Str(v) => write!(f, "\"{v}\""),
             Expr::Keyword(k) => write!(f, "{k}"),
             Expr::Symbol(s) => write!(f, "{s}"),
-            Expr::List(p) => {
+            Expr::List(v) => {
                 write!(f, "(")?;
-                let mut cur = p;
-                loop {
-                    write!(f, "{}", cur.0)?;
-                    match &cur.1 {
-                        Expr::Null => break,
-                        Expr::List(pp) => cur = pp,
-                        _ => {
-                            write!(f, " . {}", cur.1)?;
-                            break;
-                        }
+                if let Some((first, rest)) = v.split_first() {
+                    write!(f, "{first}")?;
+                    for el in rest {
+                        write!(f, " {el}")?;
                     }
-                    write!(f, " ")?;
                 }
                 write!(f, ")")?;
                 Ok(())
@@ -372,24 +377,13 @@ impl fmt::Display for Expr {
 impl Expr {
     #[must_use]
     pub fn from_slice(v: &[Expr]) -> Self {
-        match v.len() {
-            0 => Expr::Null,
-            _ => Expr::List(Box::new((v[0].clone(), Expr::from_slice(&v[1..v.len()])))),
-        }
+        Expr::List(v.to_vec())
     }
 
     pub fn into_vec(self) -> Result<Vec<Expr>, String> {
-        let mut res = Vec::new();
-        let mut cur = self;
-        loop {
-            match cur {
-                Expr::List(pair) => {
-                    res.push(pair.0.clone());
-                    cur = pair.1.clone();
-                }
-                Expr::Null => return Ok(res),
-                _ => return Err("Not a proper list".to_string()),
-            }
+        match self {
+            Expr::List(vec) => Ok(vec.clone()),
+            _ => Err("Not a proper list".to_string()),
         }
     }
 }
@@ -474,7 +468,11 @@ mod tests {
                 symbol_from_str("x"),
                 symbol_from_str("2"),
             ]),
-            Expr::List(Box::new((Expr::Integer(-1), Expr::Integer(1)))),
+            Expr::List(vec![
+                Expr::Integer(-1),
+                Expr::Keyword(Keyword::Dot),
+                Expr::Integer(1),
+            ]),
         ]);
         assert_eq!(
             expr.to_string(),

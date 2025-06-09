@@ -38,7 +38,6 @@ fn make_rational(num: i64, denom: i64) -> Value {
 impl From<Expr> for Value {
     fn from(expr: Expr) -> Self {
         match expr {
-            Expr::Null => Value::Null,
             Expr::Bool(x) => Value::Bool(x),
             Expr::Integer(x) => Value::Integer(x),
             Expr::Float(x) => Value::Float(x),
@@ -46,10 +45,24 @@ impl From<Expr> for Value {
             Expr::Str(x) => Value::Str(x.into()),
             Expr::Keyword(x) => Value::Keyword(x),
             Expr::Symbol(x) => Value::Symbol(x),
-            Expr::List(x) => Value::Pair(Rc::new(RefCell::new((
-                x.0.clone().into(),
-                x.1.clone().into(),
-            )))),
+            Expr::List(v) => {
+                let Some((first, rest)) = v.split_first() else {
+                    return Value::Null;
+                };
+                match first {
+                    Expr::Keyword(Keyword::Dot) => {
+                        if let Some(last) = rest.first() {
+                            Value::from(last.clone())
+                        } else {
+                            Value::Null
+                        }
+                    }
+                    _ => Value::Pair(Rc::new(RefCell::new((
+                        Value::from(first.clone()),
+                        Value::from(Expr::List(rest.to_vec())),
+                    )))),
+                }
+            }
             Expr::Vector(v) => Value::Vector(Rc::new(
                 v.into_iter()
                     .map(std::convert::Into::into)
