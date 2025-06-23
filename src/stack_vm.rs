@@ -1,27 +1,27 @@
 use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Pointer(usize),
     Bool(bool),
     Int(i64),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
     Push(Value),
     Pop,
     Add,
     Sub,
     JumpLessThan(i16),
-    Call(usize, usize), // target address, number of arguments
+    Call(usize, usize),
     LoadArg(usize),
     Ret,
     Print,
     Halt,
 }
 
-struct VM {
+pub struct VM {
     code: Vec<Instruction>,
     stack: Vec<Value>,
     sp: usize,
@@ -43,7 +43,7 @@ impl fmt::Display for VM {
 }
 
 impl VM {
-    fn new(code: Vec<Instruction>) -> Self {
+    pub fn new(code: Vec<Instruction>) -> Self {
         Self {
             code,
             stack: Vec::with_capacity(1024),
@@ -67,7 +67,7 @@ impl VM {
         self.stack[self.sp].clone()
     }
 
-    fn step(&mut self) -> Result<(), &'static str> {
+    pub fn step(&mut self) -> Result<(), &'static str> {
         let instr = self.code[self.ip].clone();
         self.ip += 1;
         match instr {
@@ -98,10 +98,10 @@ impl VM {
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => {
                         if x < y {
-                            if offset > 0 {
-                                self.ip += offset as usize - 1
+                            if offset >= 0 {
+                                self.ip = self.ip.wrapping_add(offset as usize) - 1;
                             } else {
-                                self.ip -= offset as usize - 1
+                                self.ip = self.ip.wrapping_add((-offset) as usize) - 1;
                             }
                         }
                     }
@@ -118,10 +118,12 @@ impl VM {
                 while let Some(value) = args.pop() {
                     self.push(value);
                 }
+                // the 2 here accounts for fp and ip on the stack
                 self.fp = self.sp - nargs - 2;
                 self.ip = addr;
             }
             Instruction::LoadArg(offset) => {
+                // the 2 here accounts for fp and ip on the stack
                 self.push(self.stack[self.fp + offset + 2].clone());
             }
             Instruction::Ret => {
@@ -146,7 +148,7 @@ impl VM {
         Ok(())
     }
 
-    fn run(&mut self, debug: bool) -> Result<Value, &'static str> {
+    pub fn run(&mut self, debug: bool) -> Result<Value, &'static str> {
         while self.ip < self.code.len() {
             if debug {
                 println!("{}", self)
@@ -157,30 +159,36 @@ impl VM {
     }
 }
 
-fn main() {
-    let code = vec![
-        // main:
-        Instruction::Push(Value::Int(6)), // argument for fib
-        Instruction::Call(3, 1),          // call fib(20)
-        Instruction::Halt,                // halt
-        // fib:
-        Instruction::Push(Value::Int(1)), // push 1
-        Instruction::LoadArg(0),          // put n on the stack
-        Instruction::JumpLessThan(3),     // if 1 < n, jump to recursive case
-        Instruction::LoadArg(0),          // put n on the stack
-        Instruction::Ret,                 // return n
-        Instruction::LoadArg(0),
-        Instruction::Push(Value::Int(1)),
-        Instruction::Sub,
-        Instruction::Call(3, 1), // fib(n - 1)
-        Instruction::LoadArg(0),
-        Instruction::Push(Value::Int(2)),
-        Instruction::Sub,
-        Instruction::Call(3, 1), // fib(n - 2)
-        Instruction::Add,
-        Instruction::Ret,
-    ];
+#[cfg(test)]
+mod tests {
+    use super::{Instruction::*, Value::*, VM};
 
-    let mut vm = VM::new(code);
-    println!("{:?}", vm.run(true));
+    #[test]
+    fn test_fib() {
+        let code = vec![
+            // main:
+            Push(Int(6)), // argument for fib
+            Call(3, 1),   // call fib(20)
+            Halt,         // halt
+            // fib:
+            Push(Int(1)),    // push 1
+            LoadArg(0),      // put n on the stack
+            JumpLessThan(3), // if 1 < n, jump to recursive case
+            LoadArg(0),      // put n on the stack
+            Ret,             // return n
+            LoadArg(0),
+            Push(Int(1)),
+            Sub,
+            Call(3, 1), // fib(n - 1)
+            LoadArg(0),
+            Push(Int(2)),
+            Sub,
+            Call(3, 1), // fib(n - 2)
+            Add,
+            Ret,
+        ];
+
+        let mut vm = VM::new(code);
+        assert_eq!(vm.run(false), Ok(Int(8)));
+    }
 }

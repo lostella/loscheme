@@ -3,6 +3,7 @@ pub mod parser;
 pub mod rationals;
 pub mod run;
 pub mod rv32;
+pub mod stack_vm;
 pub mod treewalk;
 
 #[cfg(all(target_arch = "wasm32", feature = "web"))]
