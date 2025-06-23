@@ -4,6 +4,7 @@ pub mod parser;
 pub mod rationals;
 pub mod run;
 pub mod rv32;
+pub mod stack_vm;
 pub mod treewalk;
 pub mod utils;
 
