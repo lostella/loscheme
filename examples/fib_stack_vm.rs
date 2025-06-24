@@ -1,27 +1,27 @@
-use loscheme::stack_vm::{Instruction, Value, VM};
+use loscheme::stack_vm::{Instruction::*, Value::*, VM};
 
 fn main() {
     let code = vec![
         // main:
-        Instruction::Push(Value::Int(30)), // argument for fib
-        Instruction::Call(3, 1),           // call fib
-        Instruction::Halt,                 // halt
+        Push { value: Int(30) },    // argument for fib
+        Call { addr: 3, nargs: 1 }, // call fib(20)
+        Halt,                       // halt
         // fib:
-        Instruction::Push(Value::Int(1)), // push 1
-        Instruction::LoadArg(0),          // put n on the stack
-        Instruction::JumpLessThan(3),     // if 1 < n, jump to recursive case
-        Instruction::LoadArg(0),          // put n on the stack
-        Instruction::Ret,                 // return n
-        Instruction::LoadArg(0),
-        Instruction::Push(Value::Int(1)),
-        Instruction::Sub,
-        Instruction::Call(3, 1), // fib(n - 1)
-        Instruction::LoadArg(0),
-        Instruction::Push(Value::Int(2)),
-        Instruction::Sub,
-        Instruction::Call(3, 1), // fib(n - 2)
-        Instruction::Add,
-        Instruction::Ret,
+        Push { value: Int(1) },     // push 1
+        LoadArg { narg: 0 },        // put n on the stack
+        JumpLessThan { offset: 3 }, // if 1 < n, jump to recursive case
+        LoadArg { narg: 0 },        // put n on the stack
+        Ret,                        // return n
+        LoadArg { narg: 0 },
+        Push { value: Int(1) },
+        Sub,
+        Call { addr: 3, nargs: 1 }, // fib(n - 1)
+        LoadArg { narg: 0 },
+        Push { value: Int(2) },
+        Sub,
+        Call { addr: 3, nargs: 1 }, // fib(n - 2)
+        Add,
+        Ret,
     ];
 
     let mut vm = VM::new(code);
