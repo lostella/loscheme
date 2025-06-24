@@ -9,13 +9,13 @@ pub enum Value {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
-    Push(Value),
+    Push { value: Value },
     Pop,
     Add,
     Sub,
-    JumpLessThan(i16),
-    Call(usize, u8),
-    LoadArg(u8),
+    JumpLessThan { offset: i16 },
+    Call { addr: usize, nargs: u8 },
+    LoadArg { narg: u8 },
     Ret,
     Print,
     Halt,
@@ -72,7 +72,7 @@ impl VM {
         self.ip += 1;
         match instr {
             Instruction::Halt => self.ip = self.code.len(),
-            Instruction::Push(v) => self.push(v),
+            Instruction::Push { value } => self.push(v),
             Instruction::Pop => {
                 self.pop();
             }
@@ -92,7 +92,7 @@ impl VM {
                     _ => return Err("Invalid operands for Sub"),
                 }
             }
-            Instruction::JumpLessThan(offset) => {
+            Instruction::JumpLessThan { offset } => {
                 let b = self.pop();
                 let a = self.pop();
                 match (a, b) {
@@ -108,7 +108,7 @@ impl VM {
                     _ => return Err("Invalid operands for JumpLessThan"),
                 }
             }
-            Instruction::Call(addr, nargs) => {
+            Instruction::Call { addr, nargs } => {
                 self.push(Value::Pointer(self.fp));
                 self.push(Value::Pointer(self.ip));
                 // the 2 here accounts for fp and ip on the stack
@@ -116,9 +116,9 @@ impl VM {
                 self.ip = addr;
                 self.stack[self.fp..self.sp].rotate_right(2);
             }
-            Instruction::LoadArg(offset) => {
+            Instruction::LoadArg { narg } => {
                 // the 2 here accounts for fp and ip on the stack
-                self.push(self.stack[self.fp + (offset as usize) + 2].clone());
+                self.push(self.stack[self.fp + (narg as usize) + 2].clone());
             }
             Instruction::Ret => {
                 let ret = self.pop();
@@ -159,23 +159,23 @@ mod tests {
     fn test_fib() {
         let code = vec![
             // main:
-            Push(Int(6)), // argument for fib
-            Call(3, 1),   // call fib(20)
+            Push { value: Int(6) }, // argument for fib
+            Call { addr: 3, nargs: 1 },   // call fib(20)
             Halt,         // halt
             // fib:
-            Push(Int(1)),    // push 1
-            LoadArg(0),      // put n on the stack
-            JumpLessThan(3), // if 1 < n, jump to recursive case
-            LoadArg(0),      // put n on the stack
+            Push { value: Int(1) },    // push 1
+            LoadArg { narg: 0 },      // put n on the stack
+            JumpLessThan { offset: 3 }, // if 1 < n, jump to recursive case
+            LoadArg { narg: 0 },      // put n on the stack
             Ret,             // return n
-            LoadArg(0),
-            Push(Int(1)),
+            LoadArg { narg: 0 },
+            Push { value: Int(1) },
             Sub,
-            Call(3, 1), // fib(n - 1)
-            LoadArg(0),
-            Push(Int(2)),
+            Call { addr: 3, nargs: 1 }, // fib(n - 1)
+            LoadArg { narg: 0 },
+            Push { value: Int(2) },
             Sub,
-            Call(3, 1), // fib(n - 2)
+            Call { addr: 3, nargs: 1 }, // fib(n - 2)
             Add,
             Ret,
         ];
