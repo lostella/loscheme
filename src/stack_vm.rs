@@ -128,6 +128,7 @@ impl VM {
             }
             Instruction::Ret => {
                 let ret = self.pop();
+                self.sp = self.fp;
                 self.ip = match self.stack[self.fp + 1] {
                     Value::Pointer(i) => i,
                     _ => return Err("Invalid return address"),
@@ -136,7 +137,6 @@ impl VM {
                     Value::Pointer(i) => i,
                     _ => return Err("Invalid frame pointer"),
                 };
-                self.sp = self.fp;
                 self.push(ret);
             }
             Instruction::Print => {
