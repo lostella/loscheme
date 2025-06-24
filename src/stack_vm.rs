@@ -14,8 +14,8 @@ pub enum Instruction {
     Add,
     Sub,
     JumpLessThan(i16),
-    Call(usize, usize),
-    LoadArg(usize),
+    Call(usize, u8),
+    LoadArg(u8),
     Ret,
     Print,
     Halt,
@@ -109,22 +109,16 @@ impl VM {
                 }
             }
             Instruction::Call(addr, nargs) => {
-                let mut args = vec![];
-                for _ in 0..nargs {
-                    args.push(self.pop());
-                }
                 self.push(Value::Pointer(self.fp));
                 self.push(Value::Pointer(self.ip));
-                while let Some(value) = args.pop() {
-                    self.push(value);
-                }
                 // the 2 here accounts for fp and ip on the stack
-                self.fp = self.sp - nargs - 2;
+                self.fp = self.sp - (nargs as usize) - 2;
                 self.ip = addr;
+                self.stack[self.fp..self.sp].rotate_right(2);
             }
             Instruction::LoadArg(offset) => {
                 // the 2 here accounts for fp and ip on the stack
-                self.push(self.stack[self.fp + offset + 2].clone());
+                self.push(self.stack[self.fp + (offset as usize) + 2].clone());
             }
             Instruction::Ret => {
                 let ret = self.pop();
