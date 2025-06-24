@@ -72,7 +72,7 @@ impl VM {
         self.ip += 1;
         match instr {
             Instruction::Halt => self.ip = self.code.len(),
-            Instruction::Push { value } => self.push(v),
+            Instruction::Push { value } => self.push(value),
             Instruction::Pop => {
                 self.pop();
             }
