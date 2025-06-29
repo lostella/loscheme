@@ -143,7 +143,7 @@ impl VM {
     pub fn run(&mut self, debug: bool) -> Result<Value, &'static str> {
         while self.ip < self.code.len() {
             if debug {
-                println!("{}", self)
+                println!("{self}")
             }
             self.step()?
         }
