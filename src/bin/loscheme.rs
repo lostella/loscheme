@@ -29,7 +29,7 @@ fn repl_loop() {
     let mut env = Environment::standard().child();
 
     loop {
-        print!("{} ", REPL_PROMPT);
+        print!("{REPL_PROMPT} ");
         stdout.flush().unwrap();
 
         let mut input = String::new();
@@ -49,12 +49,12 @@ fn repl_loop() {
                     input
                 };
                 match run(&to_be_run, &mut env) {
-                    Ok(v) => println!("{}", v),
-                    Err(err) => eprintln!("{}", err),
+                    Ok(v) => println!("{v}"),
+                    Err(err) => eprintln!("{err}"),
                 }
             }
             Err(err) => {
-                eprintln!("{}", err);
+                eprintln!("{err}");
             }
         }
     }
@@ -64,7 +64,7 @@ fn script_loop(filename: &str) {
     let code = read_code_file(filename);
     let output = run_standard(&code);
     if let Err(err) = output {
-        eprintln!("{}", err)
+        eprintln!("{err}")
     }
 }
 
@@ -74,6 +74,6 @@ fn main() {
     match args.len() - 1 {
         0 => repl_loop(),
         1 => script_loop(&args[1]),
-        x => eprintln!("Error: need one argument at most, got {}", x),
+        x => eprintln!("Error: need one argument at most, got {x}"),
     }
 }
