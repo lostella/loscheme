@@ -7,11 +7,12 @@ fn main() {
         Call { addr: 3, nargs: 1 }, // call fib(20)
         Halt,                       // halt
         // fib:
-        Push { value: Int(1) },     // push 1
-        LoadArg { narg: 0 },        // put n on the stack
-        JumpLessThan { offset: 3 }, // if 1 < n, jump to recursive case
-        LoadArg { narg: 0 },        // put n on the stack
-        Ret,                        // return n
+        Push { value: Int(1) }, // push 1
+        LoadArg { narg: 0 },    // put n on the stack
+        LessThan,
+        JumpIfTrue { offset: 3 }, // if 1 < n, jump to recursive case
+        LoadArg { narg: 0 },      // put n on the stack
+        Ret,                      // return n
         LoadArg { narg: 0 },
         Push { value: Int(1) },
         Sub,
@@ -25,6 +26,6 @@ fn main() {
     ];
 
     let mut vm = VM::new(code);
-    let _ = vm.run(false);
-    // println!("{:?}", res);
+    let res = vm.run();
+    println!("{:?}", res);
 }

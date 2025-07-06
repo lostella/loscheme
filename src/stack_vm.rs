@@ -13,7 +13,9 @@ pub enum Instruction {
     Pop,
     Add,
     Sub,
-    JumpLessThan { offset: i16 },
+    LessThan,
+    Jump { offset: i16 },
+    JumpIfTrue { offset: i16 },
     Call { addr: usize, nargs: u8 },
     LoadArg { narg: u8 },
     Ret,
@@ -92,12 +94,26 @@ impl VM {
                     _ => return Err("Invalid operands for Sub"),
                 }
             }
-            Instruction::JumpLessThan { offset } => {
+            Instruction::LessThan => {
                 let b = self.pop();
                 let a = self.pop();
                 match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => {
-                        if x < y {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x < y)),
+                    _ => return Err("Invalid operands for LessThan"),
+                }
+            }
+            Instruction::Jump { offset } => {
+                if offset >= 0 {
+                    self.ip = self.ip.wrapping_add(offset as usize) - 1;
+                } else {
+                    self.ip = self.ip.wrapping_add((-offset) as usize) - 1;
+                }
+            }
+            Instruction::JumpIfTrue { offset } => {
+                let cond = self.pop();
+                match cond {
+                    Value::Bool(b) => {
+                        if b {
                             if offset >= 0 {
                                 self.ip = self.ip.wrapping_add(offset as usize) - 1;
                             } else {
@@ -105,7 +121,7 @@ impl VM {
                             }
                         }
                     }
-                    _ => return Err("Invalid operands for JumpLessThan"),
+                    _ => return Err("Invalid operand for JumpIfTrue"),
                 }
             }
             Instruction::Call { addr, nargs } => {
@@ -140,7 +156,7 @@ impl VM {
         Ok(())
     }
 
-    pub fn run(&mut self, debug: bool) -> Result<Value, &'static str> {
+    fn _run(&mut self, debug: bool) -> Result<Value, &'static str> {
         while self.ip < self.code.len() {
             if debug {
                 println!("{self}")
@@ -148,6 +164,14 @@ impl VM {
             self.step()?
         }
         Ok(self.stack[self.sp - 1].clone())
+    }
+
+    pub fn run(&mut self) -> Result<Value, &'static str> {
+        self._run(false)
+    }
+
+    pub fn debug(&mut self) -> Result<Value, &'static str> {
+        self._run(true)
     }
 }
 
@@ -160,14 +184,15 @@ mod tests {
         let code = vec![
             // main:
             Push { value: Int(6) },     // argument for fib
-            Call { addr: 3, nargs: 1 }, // call fib(20)
+            Call { addr: 3, nargs: 1 }, // call fib
             Halt,                       // halt
             // fib:
-            Push { value: Int(1) },     // push 1
-            LoadArg { narg: 0 },        // put n on the stack
-            JumpLessThan { offset: 3 }, // if 1 < n, jump to recursive case
-            LoadArg { narg: 0 },        // put n on the stack
-            Ret,                        // return n
+            Push { value: Int(1) }, // push 1
+            LoadArg { narg: 0 },    // put n on the stack
+            LessThan,
+            JumpIfTrue { offset: 3 }, // if 1 < n, jump to recursive case
+            LoadArg { narg: 0 },      // put n on the stack
+            Ret,                      // return n
             LoadArg { narg: 0 },
             Push { value: Int(1) },
             Sub,
@@ -181,6 +206,6 @@ mod tests {
         ];
 
         let mut vm = VM::new(code);
-        assert_eq!(vm.run(false), Ok(Int(8)));
+        assert_eq!(vm.run(), Ok(Int(8)));
     }
 }
