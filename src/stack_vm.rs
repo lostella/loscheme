@@ -42,7 +42,7 @@ impl fmt::Display for VM {
             "ip: {}, fp: {}, stack: {:?}, instr: {:?}",
             self.ip,
             self.fp,
-            self.stack[..self.sp].to_vec(),
+            self.clone_stack(),
             self.code[self.ip],
         )
     }
@@ -59,18 +59,14 @@ impl VM {
         }
     }
 
-    pub fn clone_stack(self) -> Vec<Value> {
+    pub fn clone_stack(&self) -> Vec<Value> {
         // pop does not actually shrink the stack
         // we clone only up to sp, to omit the "garbage"
-        self.stack[0..self.sp].to_vec()
+        self.stack[..self.sp].to_vec()
     }
 
     fn push(&mut self, val: Value) {
-        // if self.sp < self.stack.len() {
         self.stack[self.sp] = val;
-        // } else {
-        //     self.stack.push(val);
-        // }
         self.sp += 1;
     }
 
