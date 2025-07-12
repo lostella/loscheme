@@ -17,8 +17,11 @@ pub enum Instruction {
     LessThan,
     Jump { offset: i16 },
     JumpIfTrue { offset: i16 },
-    Call { addr: usize, nargs: u8 },
-    LoadLocal { idx: u8 },
+    Call { addr: usize },
+    StackAlloc { size: u8 },
+    LoadArg { idx: u8 },
+    LoadLocal { offset: u8 },
+    StoreLocal { offset: u8 },
     Ret,
     Print,
     Halt,
@@ -49,7 +52,7 @@ impl VM {
     pub fn new(code: Vec<Instruction>) -> Self {
         Self {
             code,
-            stack: Vec::with_capacity(1024),
+            stack: vec![Value::Int(0); 1024],
             sp: 0,
             fp: 0,
             ip: 0,
@@ -63,11 +66,11 @@ impl VM {
     }
 
     fn push(&mut self, val: Value) {
-        if self.sp < self.stack.len() {
-            self.stack[self.sp] = val;
-        } else {
-            self.stack.push(val);
-        }
+        // if self.sp < self.stack.len() {
+        self.stack[self.sp] = val;
+        // } else {
+        //     self.stack.push(val);
+        // }
         self.sp += 1;
     }
 
@@ -134,15 +137,23 @@ impl VM {
             Instruction::Print => {
                 println!("{:?}", self.pop());
             }
-            Instruction::Call { addr, nargs } => {
+            Instruction::Call { addr } => {
                 self.push(Value::Pointer(self.fp));
                 self.push(Value::Pointer(self.ip));
-                self.fp = self.sp - (nargs as usize);
+                self.fp = self.sp;
                 self.ip = addr;
-                self.stack[self.fp - 2..self.sp].rotate_right(2);
             }
-            Instruction::LoadLocal { idx } => {
-                self.push(self.stack[self.fp + (idx as usize)].clone());
+            Instruction::StackAlloc { size } => {
+                self.sp += size as usize;
+            }
+            Instruction::LoadArg { idx } => {
+                self.push(self.stack[self.fp - 3 - idx as usize].clone());
+            }
+            Instruction::LoadLocal { offset } => {
+                self.push(self.stack[self.fp + offset as usize].clone());
+            }
+            Instruction::StoreLocal { offset } => {
+                self.stack[self.fp + offset as usize] = self.pop();
             }
             Instruction::Ret => {
                 let ret = self.pop();
@@ -326,24 +337,27 @@ mod tests {
     fn test_fib() {
         let code = vec![
             // main:
-            Push { value: Int(6) },     // argument for fib
-            Call { addr: 3, nargs: 1 }, // call fib
-            Halt,                       // halt
+            Push { value: Int(6) }, // argument for fib
+            Call { addr: 3 },       // call fib
+            Halt,                   // halt
             // fib:
+            StackAlloc { size: 1 },
             Push { value: Int(1) }, // push 1
-            LoadLocal { idx: 0 },   // put n on the stack
+            LoadArg { idx: 0 },     // put n on the stack
             LessThan,
             JumpIfTrue { offset: 3 }, // if 1 < n, jump to recursive case
-            LoadLocal { idx: 0 },     // put n on the stack
+            LoadArg { idx: 0 },       // put n on the stack
             Ret,                      // return n
-            LoadLocal { idx: 0 },
+            LoadArg { idx: 0 },
             Push { value: Int(1) },
             Sub,
-            Call { addr: 3, nargs: 1 }, // fib(n - 1)
-            LoadLocal { idx: 0 },
+            Call { addr: 3 }, // fib(n - 1)
+            StoreLocal { offset: 0 },
+            LoadArg { idx: 0 },
             Push { value: Int(2) },
             Sub,
-            Call { addr: 3, nargs: 1 }, // fib(n - 2)
+            Call { addr: 3 }, // fib(n - 2)
+            LoadLocal { offset: 0 },
             Add,
             Ret,
         ];
