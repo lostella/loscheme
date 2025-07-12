@@ -8,16 +8,16 @@ fn main() {
         Halt,                       // halt
         // fib:
         Push { value: Int(1) }, // push 1
-        LoadArg { narg: 0 },    // put n on the stack
+        LoadLocal { idx: 0 },   // put n on the stack
         LessThan,
         JumpIfTrue { offset: 3 }, // if 1 < n, jump to recursive case
-        LoadArg { narg: 0 },      // put n on the stack
+        LoadLocal { idx: 0 },     // put n on the stack
         Ret,                      // return n
-        LoadArg { narg: 0 },
+        LoadLocal { idx: 0 },
         Push { value: Int(1) },
         Sub,
         Call { addr: 3, nargs: 1 }, // fib(n - 1)
-        LoadArg { narg: 0 },
+        LoadLocal { idx: 0 },
         Push { value: Int(2) },
         Sub,
         Call { addr: 3, nargs: 1 }, // fib(n - 2)
