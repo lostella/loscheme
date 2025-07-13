@@ -262,7 +262,7 @@ impl Compiler {
                 let instr = match info.kind {
                     SymbolKind::Global => Instruction::LoadGlobal { offset: info.index },
                     SymbolKind::Local => Instruction::LoadLocal {
-                        offset: info.index as i8
+                        offset: info.index as i8,
                     },
                 };
                 Ok(vec![instr])
@@ -349,7 +349,7 @@ impl Compiler {
         let last_instr = match info.kind {
             SymbolKind::Global => Instruction::StoreGlobal { offset: info.index },
             SymbolKind::Local => Instruction::StoreLocal {
-                offset: info.index as i8
+                offset: info.index as i8,
             },
         };
         instr.push(last_instr);
