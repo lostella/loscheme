@@ -9,9 +9,9 @@ fn run_example(name: &str, code: &str) {
     let instr = compile(&exprs).unwrap();
     println!("instr: {instr:?}");
     let mut vm = VM::new(instr);
-    let res = vm.run();
+    vm.run().unwrap();
     println!("stack: {:?}", vm.clone_stack());
-    println!("  res: {res:?}");
+    println!("  res: {:?}", vm.clone_stack_top());
 }
 
 fn main() {
@@ -21,6 +21,7 @@ fn main() {
     run_example("if", "(if #t 1 0)");
     run_example("if_cmp", "(if (< 3 2) 1 0)");
     run_example("if_cmp_add_sub", "(if (< 3 2) (+ 1 4) (- 3 7))");
+    run_example("begin_add_sub_if", "(begin (+ 3 4) (- 7 (if (< 4 5) 1 0)))");
     run_example("begin_define", "(begin (define x 3) x)");
     run_example("lambda", "(lambda (x) (+ x 1))");
     run_example(
