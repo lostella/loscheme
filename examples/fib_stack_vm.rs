@@ -29,6 +29,6 @@ fn main() {
     ];
 
     let mut vm = VM::new(code);
-    let res = vm.run();
-    println!("{:?}", res);
+    vm.run().unwrap();
+    println!("{:?}", vm.clone_stack_top().unwrap());
 }
