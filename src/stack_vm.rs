@@ -19,7 +19,6 @@ pub enum Instruction {
     JumpIfTrue { offset: i16 },
     Call { addr: usize },
     StackAlloc { size: u8 },
-    LoadArg { idx: u8 },
     LoadLocal { offset: u8 },
     StoreLocal { offset: u8 },
     LoadGlobal { offset: u8 },
@@ -143,9 +142,6 @@ impl VM {
             }
             Instruction::StackAlloc { size } => {
                 self.sp += size as usize;
-            }
-            Instruction::LoadArg { idx } => {
-                self.push(self.stack[self.fp - 3 - idx as usize].clone());
             }
             Instruction::LoadLocal { offset } => {
                 self.push(self.stack[self.fp + offset as usize].clone());
@@ -418,18 +414,18 @@ mod tests {
             Halt,                   // halt
             // fib:
             StackAlloc { size: 1 },
-            Push { value: Int(1) }, // push 1
-            LoadArg { idx: 0 },     // put n on the stack
+            Push { value: Int(1) },   // push 1
+            LoadLocal { offset: -3 }, // put n on the stack
             LessThan,
             JumpIfTrue { offset: 3 }, // if 1 < n, jump to recursive case
-            LoadArg { idx: 0 },       // put n on the stack
+            LoadLocal { offset: -3 }, // put n on the stack
             Ret,                      // return n
-            LoadArg { idx: 0 },
+            LoadLocal { offset: -3 },
             Push { value: Int(1) },
             Sub,
             Call { addr: 3 }, // fib(n - 1)
             StoreLocal { offset: 0 },
-            LoadArg { idx: 0 },
+            LoadLocal { offset: -3 },
             Push { value: Int(2) },
             Sub,
             Call { addr: 3 }, // fib(n - 2)
