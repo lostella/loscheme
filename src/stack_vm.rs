@@ -144,7 +144,12 @@ impl VM {
                 self.sp += size as usize;
             }
             Instruction::LoadLocal { offset } => {
-                self.push(self.stack[self.fp + offset as usize].clone());
+                let src = if offset >= 0 {
+                    self.fp + offset as usize
+                } else {
+                    self.fp - (-offset as usize)
+                };
+                self.push(self.stack[src].clone());
             }
             Instruction::StoreLocal { offset } => {
                 self.stack[self.fp + offset as usize] = self.pop()?;
@@ -256,7 +261,9 @@ impl Compiler {
                 };
                 let instr = match info.kind {
                     SymbolKind::Global => Instruction::LoadGlobal { offset: info.index },
-                    SymbolKind::Local => Instruction::LoadLocal { offset: info.index as i8 },
+                    SymbolKind::Local => Instruction::LoadLocal {
+                        offset: info.index as i8
+                    },
                 };
                 Ok(vec![instr])
             }
@@ -341,7 +348,9 @@ impl Compiler {
         };
         let last_instr = match info.kind {
             SymbolKind::Global => Instruction::StoreGlobal { offset: info.index },
-            SymbolKind::Local => Instruction::StoreLocal { offset: info.index as i8 },
+            SymbolKind::Local => Instruction::StoreLocal {
+                offset: info.index as i8
+            },
         };
         instr.push(last_instr);
         Ok(instr)
