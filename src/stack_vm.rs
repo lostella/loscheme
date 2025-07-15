@@ -464,7 +464,10 @@ mod tests {
             ("(define x 3)", None),
             ("(begin (define x 3) x)", Some(Int(3))),
             ("(begin (define x 3) (define x 4) x)", Some(Int(4))),
+            ("(begin (define y #t) (define x 6) y)", Some(Bool(true))),
             ("(define x 3) (define x 4) x", Some(Int(4))),
+            ("(define y #f) (define x 6) y", Some(Bool(false))),
+            ("(define y #f) (define x 6) (define y 42) y", Some(Int(42))),
         ];
 
         for (code, expected_res) in cases {
