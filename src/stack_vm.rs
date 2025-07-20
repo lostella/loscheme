@@ -358,7 +358,6 @@ impl Compiler {
     }
 
     fn compile_let(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
-        // todo!("let");
         let Some((Expr::List(bindings), body)) = args.split_first() else {
             return Err("`let`: needs at least 1 argument (a list of bindings)".to_string());
         };
@@ -376,7 +375,7 @@ impl Compiler {
             let Expr::Symbol(s) = v[0] else {
                 return Err("`let`: first element of each binding must be a symbol".to_string());
             };
-            // add binding variables to local scope
+            // add binding variable to local scope
             local_scope.insert(
                 s.to_string(),
                 SymbolInfo {
@@ -384,7 +383,7 @@ impl Compiler {
                     index: idx as i8,
                 },
             );
-            // compile binding expressions
+            // compile binding expression
             instr.append(&mut self.compile_expr(&v[1])?);
         }
         // enter scope, compile body, exit scope
