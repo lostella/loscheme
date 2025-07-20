@@ -23,6 +23,8 @@ fn main() {
     run_example("if_cmp_add_sub", "(if (< 3 2) (+ 1 4) (- 3 7))");
     run_example("begin_add_sub_if", "(begin (+ 3 4) (- 7 (if (< 4 5) 1 0)))");
     run_example("begin_define", "(begin (define x 3) x)");
+    run_example("let_1", "(let ((a 3)) (+ a 1))");
+    run_example("let_2", "(let ((a 3) (b 4)) (+ a b))");
     run_example("lambda", "(lambda (x) (+ x 1))");
     run_example(
         "fib",
