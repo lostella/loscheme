@@ -387,10 +387,10 @@ impl Compiler {
             // compile binding expressions
             instr.append(&mut self.compile_expr(&v[1])?);
         }
-        // enter local scope to compile the body
+        // enter scope, compile body, exit scope
         self.local_scopes.push(local_scope);
-        // compile let body using compile_begin
         let mut body = self.compile_begin(body)?;
+        self.local_scopes.pop();
         instr.append(&mut body);
         Ok(instr)
     }
@@ -506,6 +506,7 @@ mod tests {
             ("(define y #f) (define x 6) (define y 42) y", Some(Int(42))),
             ("(let ((a 3)) (+ a 1))", Some(Int(4))),
             ("(let ((a 3) (b 4)) (+ a b))", Some(Int(7))),
+            ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", Some(Int(46))),
         ];
 
         for (code, expected_res) in cases {
@@ -518,6 +519,19 @@ mod tests {
                 expected_res,
                 "we are testing `{code}`"
             )
+        }
+    }
+
+    #[test]
+    fn test_compilation_errors() {
+        let cases = vec![(
+            "(let ((a 3) (b 4)) (+ a b)) a",
+            Err("Not found in scope: a".into()),
+        )];
+
+        for (code, expected_res) in cases {
+            let exprs = parse(code).unwrap();
+            assert_eq!(compile(&exprs), expected_res);
         }
     }
 }
