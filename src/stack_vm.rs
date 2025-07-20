@@ -223,7 +223,7 @@ enum SymbolKind {
 #[derive(Clone)]
 struct SymbolInfo {
     kind: SymbolKind,
-    index: u8,
+    index: i8,
 }
 
 impl Compiler {
@@ -260,10 +260,10 @@ impl Compiler {
                     return Err(format!("Not found in scope: {s}"));
                 };
                 let instr = match info.kind {
-                    SymbolKind::Global => Instruction::LoadGlobal { offset: info.index },
-                    SymbolKind::Local => Instruction::LoadLocal {
-                        offset: info.index as i8,
+                    SymbolKind::Global => Instruction::LoadGlobal {
+                        offset: info.index as u8,
                     },
+                    SymbolKind::Local => Instruction::LoadLocal { offset: info.index },
                 };
                 Ok(vec![instr])
             }
@@ -279,6 +279,7 @@ impl Compiler {
             Expr::Keyword(Keyword::If) => self.compile_if(rest),
             Expr::Keyword(Keyword::Begin) => self.compile_begin(rest),
             Expr::Keyword(Keyword::Define) => self.compile_define(rest),
+            Expr::Keyword(Keyword::Let) => self.compile_let(rest),
             Expr::Keyword(Keyword::Lambda) => self.compile_lambda(rest),
             Expr::Symbol(s) => {
                 let s = s.as_str();
@@ -339,7 +340,7 @@ impl Compiler {
                 key.clone(),
                 SymbolInfo {
                     kind,
-                    index: env.len() as u8,
+                    index: env.len() as i8,
                 },
             );
         }
@@ -347,19 +348,54 @@ impl Compiler {
             return Err("Cannot find symbol in environment, this should not happen".to_string());
         };
         let last_instr = match info.kind {
-            SymbolKind::Global => Instruction::StoreGlobal { offset: info.index },
-            SymbolKind::Local => Instruction::StoreLocal {
-                offset: info.index as i8,
+            SymbolKind::Global => Instruction::StoreGlobal {
+                offset: info.index as u8,
             },
+            SymbolKind::Local => Instruction::StoreLocal { offset: info.index },
         };
         instr.push(last_instr);
         Ok(instr)
     }
 
-    fn compile_lambda(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
-        if args.is_empty() {
-            return Err("`lambda` takes at least 1 argument".to_string());
+    fn compile_let(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
+        // todo!("let");
+        let Some((Expr::List(bindings), body)) = args.split_first() else {
+            return Err("`let`: needs at least 1 argument (a list of bindings)".to_string());
+        };
+        // create local scope
+        let mut local_scope = HashMap::<String, SymbolInfo>::new();
+        let mut instr = vec![];
+        // compile bindings
+        for (idx, binding) in bindings.iter().enumerate() {
+            let Expr::List(v) = binding else {
+                return Err("`let`: each binding must be a list of two elements".to_string());
+            };
+            if v.len() != 2 {
+                return Err("`let`: each binding must be a list of two elements".to_string());
+            };
+            let Expr::Symbol(s) = v[0] else {
+                return Err("`let`: first element of each binding must be a symbol".to_string());
+            };
+            // add binding variables to local scope
+            local_scope.insert(
+                s.to_string(),
+                SymbolInfo {
+                    kind: SymbolKind::Local,
+                    index: idx as i8,
+                },
+            );
+            // compile binding expressions
+            instr.append(&mut self.compile_expr(&v[1])?);
         }
+        // enter local scope to compile the body
+        self.local_scopes.push(local_scope);
+        // compile let body using compile_begin
+        let mut body = self.compile_begin(body)?;
+        instr.append(&mut body);
+        Ok(instr)
+    }
+
+    fn compile_lambda(&mut self, _: &[Expr]) -> Result<Vec<Instruction>, String> {
         todo!("lambda")
         // TODO:
         // - lambda pushes new environment onto the compiler stack
@@ -468,6 +504,8 @@ mod tests {
             ("(define x 3) (define x 4) x", Some(Int(4))),
             ("(define y #f) (define x 6) y", Some(Bool(false))),
             ("(define y #f) (define x 6) (define y 42) y", Some(Int(42))),
+            ("(let ((a 3)) (+ a 1))", Some(Int(4))),
+            ("(let ((a 3) (b 4)) (+ a b))", Some(Int(7))),
         ];
 
         for (code, expected_res) in cases {
