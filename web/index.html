@@ -136,10 +136,9 @@
             
             const runButton = document.getElementById("runButton");
             const outputDiv = document.getElementById("output");
-            let editorView;
 
             // Initialize CodeMirror 6
-            editorView = new EditorView({
+            let editorView = new EditorView({
                 state: EditorState.create({
                     doc: "",
                     extensions: [
@@ -147,6 +146,10 @@
                     ]
                 }),
                 parent: document.getElementById("editor")
+            });
+
+            window.addEventListener("DOMContentLoaded", () => {
+                editorView
             });
 
             // Initialization function
