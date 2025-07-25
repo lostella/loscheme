@@ -4,8 +4,6 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>loscheme</title>
-        <!-- CodeMirror 6 CSS via jsDelivr CDN -->
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@codemirror/view@6.26.1/style.min.css" />
         <style>
             html, body {
                 height: 100%;
@@ -134,17 +132,8 @@
         </div>
         <script type="module">
             import init, { run_standard } from "./loscheme.js";
-
-            // CodeMirror 6 imports via jsDelivr CDN
-            import { EditorView, basicSetup } from "https://cdn.jsdelivr.net/npm/@codemirror/basic-setup@0.20.2/dist/index.js";
-            import { EditorState } from "https://cdn.jsdelivr.net/npm/@codemirror/state@6.4.0/dist/index.js";
-            import { defaultHighlightStyle } from "https://cdn.jsdelivr.net/npm/@codemirror/highlight@6.11.1/dist/index.js";
-            import { bracketMatching } from "https://cdn.jsdelivr.net/npm/@codemirror/matchbrackets@6.4.4/dist/index.js";
-            import { oneDark } from "https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6.2.0/dist/index.js";
-            // Use a close language since no official Scheme support yet:
-            import { StreamLanguage } from "https://cdn.jsdelivr.net/npm/@codemirror/language@6.10.1/dist/index.js";
-            import { scheme } from "https://cdn.jsdelivr.net/npm/@codemirror/legacy-modes@6.2.2/dist/index.js";
-
+            import { EditorView, basicSetup } from "https://esm.sh/@codemirror/basic-setup@0.20.0";
+            
             const runButton = document.getElementById("runButton");
             const outputDiv = document.getElementById("output");
             let editorView;
@@ -154,15 +143,7 @@
                 state: EditorState.create({
                     doc: "",
                     extensions: [
-                        basicSetup,
-                        StreamLanguage.define(scheme),
-                        bracketMatching(),
-                        defaultHighlightStyle,
-                        oneDark, // Optionally, for dark theme
-                        EditorView.lineWrapping,
-                        EditorView.updateListener.of(update => {
-                            // You can add custom logic here if needed
-                        })
+                        basicSetup
                     ]
                 }),
                 parent: document.getElementById("editor")
