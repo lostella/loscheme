@@ -5,7 +5,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>loscheme</title>
         <style>
-            html, body {
+            html,
+            body {
                 height: 100%;
                 width: 100%;
                 margin: 0;
@@ -39,6 +40,7 @@
                 border: 1px solid #ccc;
                 border-radius: 5px;
                 width: 100%;
+                height: 100%;
                 font-size: 1rem;
                 font-family: monospace;
             }
@@ -132,8 +134,18 @@
         </div>
         <script type="module">
             import init, { run_standard } from "./loscheme.js";
-            import { EditorView, basicSetup } from "https://esm.sh/@codemirror/basic-setup@0.20.0";
-            
+            import {
+                EditorView,
+                basicSetup,
+            } from "https://esm.sh/codemirror@6.0.1";
+            import { EditorState } from "https://esm.sh/@codemirror/state@6.5.2";
+            import {
+                StreamLanguage,
+                bracketMatching,
+                indentUnit,
+            } from "https://esm.sh/@codemirror/language@6.10.2";
+            import { scheme } from "https://esm.sh/@codemirror/legacy-modes@6.4.0/mode/scheme";
+
             const runButton = document.getElementById("runButton");
             const outputDiv = document.getElementById("output");
 
@@ -142,14 +154,13 @@
                 state: EditorState.create({
                     doc: "",
                     extensions: [
-                        basicSetup
-                    ]
+                        basicSetup,
+                        StreamLanguage.define(scheme),
+                        bracketMatching(),
+                        indentUnit.of("  "),
+                    ],
                 }),
-                parent: document.getElementById("editor")
-            });
-
-            window.addEventListener("DOMContentLoaded", () => {
-                editorView
+                parent: document.getElementById("editor"),
             });
 
             // Initialization function
