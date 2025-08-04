@@ -5,7 +5,7 @@ use std::io::{self, BufRead};
 use std::mem::take;
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 83] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 84] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -89,6 +89,13 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 83] = [
     ("vector-set!", builtin_vectorset),
     ("list->vector", builtin_listvector),
     ("vector->list", builtin_vectorlist),
+    ("sqrt", builtin_sqrt),
+    //("sin", builtin_sin),
+    //("cos", builtin_cos),
+    //("tan", builtin_tan),
+    //("asin", builtin_asin),
+    //("acos", builtin_acos),
+    //("atan", builtin_atan),
 ];
 
 fn builtin_add(values: Vec<Value>) -> Result<MaybeValue, String> {
@@ -886,6 +893,17 @@ fn builtin_vectorlist(values: Vec<Value>) -> Result<MaybeValue, String> {
         return Err("Vector->list needs a vector as argument".to_string());
     };
     Ok(MaybeValue::Just(Value::from_slice(&rc.borrow())))
+}
+
+fn builtin_sqrt(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let &[x] = values.as_slice() else {
+        return Err("Sqrt expects one argument".to_string());
+    };
+    match x {
+        Value::Integer(n) => Ok(Value::Float((n as f64).sqrt())),
+        Value::Float(f) => Ok(Value::Float(f.sqrt())),
+        _ => Err("Unsupported type for sqrt".to_string()),
+    }
 }
 
 #[cfg(test)]
