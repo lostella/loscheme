@@ -5,7 +5,7 @@ use std::io::{self, BufRead};
 use std::mem::take;
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 84] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 90] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -90,12 +90,12 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 84] = [
     ("list->vector", builtin_listvector),
     ("vector->list", builtin_vectorlist),
     ("sqrt", builtin_sqrt),
-    //("sin", builtin_sin),
-    //("cos", builtin_cos),
-    //("tan", builtin_tan),
-    //("asin", builtin_asin),
-    //("acos", builtin_acos),
-    //("atan", builtin_atan),
+    ("sin", builtin_sin),
+    ("cos", builtin_cos),
+    ("tan", builtin_tan),
+    ("asin", builtin_asin),
+    ("acos", builtin_acos),
+    ("atan", builtin_atan),
 ];
 
 fn builtin_add(values: Vec<Value>) -> Result<MaybeValue, String> {
@@ -903,6 +903,72 @@ fn builtin_sqrt(values: Vec<Value>) -> Result<MaybeValue, String> {
         Value::Integer(n) => Ok(MaybeValue::Just(Value::Float((*n as f64).sqrt()))),
         Value::Float(f) => Ok(MaybeValue::Just(Value::Float(f.sqrt()))),
         _ => Err("Unsupported type for sqrt".to_string()),
+    }
+}
+
+fn builtin_sin(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let [x] = values.as_slice() else {
+        return Err("Sin expects one argument".to_string());
+    };
+    match x {
+        Value::Integer(n) => Ok(MaybeValue::Just(Value::Float((*n as f64).sin()))),
+        Value::Float(f) => Ok(MaybeValue::Just(Value::Float(f.sin()))),
+        _ => Err("Unsupported type for sin".to_string()),
+    }
+}
+
+fn builtin_cos(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let [x] = values.as_slice() else {
+        return Err("Cos expects one argument".to_string());
+    };
+    match x {
+        Value::Integer(n) => Ok(MaybeValue::Just(Value::Float((*n as f64).cos()))),
+        Value::Float(f) => Ok(MaybeValue::Just(Value::Float(f.cos()))),
+        _ => Err("Unsupported type for cos".to_string()),
+    }
+}
+
+fn builtin_tan(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let [x] = values.as_slice() else {
+        return Err("Tan expects one argument".to_string());
+    };
+    match x {
+        Value::Integer(n) => Ok(MaybeValue::Just(Value::Float((*n as f64).tan()))),
+        Value::Float(f) => Ok(MaybeValue::Just(Value::Float(f.tan()))),
+        _ => Err("Unsupported type for tan".to_string()),
+    }
+}
+
+fn builtin_asin(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let [x] = values.as_slice() else {
+        return Err("Asin expects one argument".to_string());
+    };
+    match x {
+        Value::Integer(n) => Ok(MaybeValue::Just(Value::Float((*n as f64).asin()))),
+        Value::Float(f) => Ok(MaybeValue::Just(Value::Float(f.asin()))),
+        _ => Err("Unsupported type for asin".to_string()),
+    }
+}
+
+fn builtin_acos(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let [x] = values.as_slice() else {
+        return Err("Acos expects one argument".to_string());
+    };
+    match x {
+        Value::Integer(n) => Ok(MaybeValue::Just(Value::Float((*n as f64).acos()))),
+        Value::Float(f) => Ok(MaybeValue::Just(Value::Float(f.acos()))),
+        _ => Err("Unsupported type for acos".to_string()),
+    }
+}
+
+fn builtin_atan(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let [x] = values.as_slice() else {
+        return Err("Atan expects one argument".to_string());
+    };
+    match x {
+        Value::Integer(n) => Ok(MaybeValue::Just(Value::Float((*n as f64).atan()))),
+        Value::Float(f) => Ok(MaybeValue::Just(Value::Float(f.atan()))),
+        _ => Err("Unsupported type for atan".to_string()),
     }
 }
 
