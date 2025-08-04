@@ -896,7 +896,7 @@ fn builtin_vectorlist(values: Vec<Value>) -> Result<MaybeValue, String> {
 }
 
 fn builtin_sqrt(values: Vec<Value>) -> Result<MaybeValue, String> {
-    let &[x] = values.as_slice() else {
+    let [x] = values.as_slice() else {
         return Err("Sqrt expects one argument".to_string());
     };
     match x {
