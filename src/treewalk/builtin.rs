@@ -900,8 +900,8 @@ fn builtin_sqrt(values: Vec<Value>) -> Result<MaybeValue, String> {
         return Err("Sqrt expects one argument".to_string());
     };
     match x {
-        Value::Integer(n) => Ok(Value::Float((n as f64).sqrt())),
-        Value::Float(f) => Ok(Value::Float(f.sqrt())),
+        Value::Integer(n) => Ok(MaybeValue::Just(Value::Float((n as f64).sqrt()))),
+        Value::Float(f) => Ok(MaybeValue::Just(Value::Float(f.sqrt()))),
         _ => Err("Unsupported type for sqrt".to_string()),
     }
 }
