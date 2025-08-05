@@ -103,14 +103,14 @@ impl Value {
     pub fn car(self) -> Result<Value, String> {
         match self {
             Value::Pair(p) => Ok(p.borrow().0.clone()),
-            _ => Err("Car needs a pair as argument".to_string()),
+            v => Err(format!("Car needs a pair as argument, got {v}")),
         }
     }
 
     pub fn cdr(self) -> Result<Value, String> {
         match self {
             Value::Pair(p) => Ok(p.borrow().1.clone()),
-            _ => Err("Cdr needs a pair as argument".to_string()),
+            v => Err(format!("Cdr needs a pair as argument, got {v}")),
         }
     }
 
