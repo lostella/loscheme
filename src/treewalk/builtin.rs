@@ -5,7 +5,7 @@ use std::io::{self, BufRead};
 use std::mem::take;
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 90] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 91] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -79,6 +79,7 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 90] = [
     ("quotient", builtin_quotient),
     ("remainder", builtin_remainder),
     ("modulo", builtin_modulo),
+    ("make-list", builtin_makelist),
     ("list-ref", builtin_listref),
     ("list-tail", builtin_listtail),
     ("vector", builtin_vector),
@@ -766,6 +767,21 @@ fn builtin_newline(values: Vec<Value>) -> Result<MaybeValue, String> {
     }
     println!();
     Ok(MaybeValue::Just(Value::Unspecified))
+}
+
+fn builtin_makelist(values: Vec<Value>) -> Result<MaybeValue, String> {
+    let fill = if values.len() == 1 {
+        Value::Unspecified
+    } else if values.len() == 2 {
+        values[1].clone()
+    } else {
+        return Err("Make-list expects one or two arguments".to_string());
+    };
+    let Value::Integer(qty) = values[0] else {
+        return Err("Make-list expects an integer as first argument".to_string());
+    };
+    let data = vec![fill; qty as usize];
+    Ok(MaybeValue::Just(Value::from_slice(&data)))
 }
 
 fn builtin_listtail(values: Vec<Value>) -> Result<MaybeValue, String> {
