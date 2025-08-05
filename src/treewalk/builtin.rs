@@ -473,196 +473,196 @@ fn builtin_cdr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
 
 fn builtin_caar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Caar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.car()?.into())
 }
 
 fn builtin_cadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cadr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.car()?.into())
 }
 
 fn builtin_cdar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Cdar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.cdr()?.into())
 }
 
 fn builtin_cddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cddr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.cdr()?.into())
 }
 
 fn builtin_caaar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Caaar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.car()?.car()?.into())
 }
 
 fn builtin_caadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Caadr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.car()?.car()?.into())
 }
 
 fn builtin_cadar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Cadar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.cdr()?.car()?.into())
 }
 
 fn builtin_caddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Caddr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.cdr()?.car()?.into())
 }
 
 fn builtin_cdaar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Cdaar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.car()?.cdr()?.into())
 }
 
 fn builtin_cdadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cdadr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.car()?.cdr()?.into())
 }
 
 fn builtin_cddar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Cddar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.cdr()?.cdr()?.into())
 }
 
 fn builtin_cdddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cdddr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.cdr()?.cdr()?.into())
 }
 
 fn builtin_caaaar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Caaaar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.car()?.car()?.car()?.into())
 }
 
 fn builtin_caaadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Caaadr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.car()?.car()?.car()?.into())
 }
 
 fn builtin_caadar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Caadar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.cdr()?.car()?.car()?.into())
 }
 
 fn builtin_caaddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Caaddr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.cdr()?.car()?.car()?.into())
 }
 
 fn builtin_cadaar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Cadaar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.car()?.cdr()?.car()?.into())
 }
 
 fn builtin_cadadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cadadr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.car()?.cdr()?.car()?.into())
 }
 
 fn builtin_caddar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Caddar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.cdr()?.cdr()?.car()?.into())
 }
 
 fn builtin_cadddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cadddr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.cdr()?.cdr()?.car()?.into())
 }
 
 fn builtin_cdaaar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Cdaaar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.car()?.car()?.cdr()?.into())
 }
 
 fn builtin_cdaadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cdaadr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.car()?.car()?.cdr()?.into())
 }
 
 fn builtin_cdadar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Cdadar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.cdr()?.car()?.cdr()?.into())
 }
 
 fn builtin_cdaddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cdaddr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.cdr()?.car()?.cdr()?.into())
 }
 
 fn builtin_cddaar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Cddaar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.car()?.cdr()?.cdr()?.into())
 }
 
 fn builtin_cddadr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cddadr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.car()?.cdr()?.cdr()?.into())
 }
 
 fn builtin_cdddar(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Car needs exactly one argument".to_string());
+        return Err("Cdddar needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).car()?.cdr()?.cdr()?.cdr()?.into())
 }
 
 fn builtin_cddddr(mut values: Vec<Value>) -> Result<MaybeValue, String> {
     if values.len() != 1 {
-        return Err("Cdr needs exactly one argument".to_string());
+        return Err("Cddddr needs exactly one argument".to_string());
     }
     Ok(take(&mut values[0]).cdr()?.cdr()?.cdr()?.cdr()?.into())
 }
