@@ -771,7 +771,7 @@ fn builtin_newline(values: Vec<Value>) -> Result<MaybeValue, String> {
 
 fn builtin_makelist(values: Vec<Value>) -> Result<MaybeValue, String> {
     let fill = if values.len() == 1 {
-        Value::Unspecified
+        Value::Integer(0)
     } else if values.len() == 2 {
         values[1].clone()
     } else {
@@ -848,7 +848,7 @@ fn builtin_vectorlength(values: Vec<Value>) -> Result<MaybeValue, String> {
 
 fn builtin_makevector(values: Vec<Value>) -> Result<MaybeValue, String> {
     let fill = if values.len() == 1 {
-        Value::Unspecified
+        Value::Integer(0)
     } else if values.len() == 2 {
         values[1].clone()
     } else {
