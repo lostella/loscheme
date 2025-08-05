@@ -256,6 +256,7 @@ fn test_language_features() {
         ("pq", "(1 2 42 43 44 45)"),
         ("p", "(1 2 3)"),
         ("q", "(4 5)"),
+        ("(make-list 4 42)", "(42 42 42 42)"),
         ("(list-ref pq 0)", "1"),
         ("(list-ref pq 4)", "44"),
         ("(list-ref pq 5)", "45"),
