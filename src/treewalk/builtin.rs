@@ -363,7 +363,7 @@ fn builtin_isinteger(values: Vec<Value>) -> Result<MaybeValue, String> {
         Value::Integer(_) => true,
         Value::Rational(_, d) => d == 1,
         Value::Float(f) => f.fract() == 0.0,
-        _ => false
+        _ => false,
     };
     Ok(MaybeValue::Just(Value::Bool(res)))
 }
