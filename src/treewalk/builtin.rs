@@ -360,9 +360,9 @@ fn builtin_isinteger(values: Vec<Value>) -> Result<MaybeValue, String> {
         return Err("Integer? needs exactly one argument".to_string());
     }
     let res = match values[0] {
-        Values::Integer(_) => true,
-        Values::Rational(_, d) => d == 1,
-        Values::Float(f) => f.fract() == 0.0,
+        Value::Integer(_) => true,
+        Value::Rational(_, d) => d == 1,
+        Value::Float(f) => f.fract() == 0.0,
         _ => false
     };
     Ok(MaybeValue::Just(Value::Bool(res)))
