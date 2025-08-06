@@ -1,9 +1,9 @@
 use loscheme::run::{run, run_standard};
 use loscheme::treewalk::Environment;
-use std::process::ExitCode;
 use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
+use std::process::ExitCode;
 
 const REPL_PROMPT: &str = "λscm>";
 
