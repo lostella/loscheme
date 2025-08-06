@@ -1,5 +1,6 @@
 use loscheme::run::{run, run_standard};
 use loscheme::treewalk::Environment;
+use std::process::ExitCode;
 use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
@@ -23,7 +24,7 @@ fn read_code_file(filename: &str) -> String {
     code
 }
 
-fn repl_loop() {
+fn repl_loop() -> ExitCode {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut env = Environment::standard().child();
@@ -58,22 +59,27 @@ fn repl_loop() {
             }
         }
     }
+    ExitCode::SUCCESS
 }
 
-fn script_loop(filename: &str) {
+fn script_loop(filename: &str) -> ExitCode {
     let code = read_code_file(filename);
     let output = run_standard(&code);
     if let Err(err) = output {
         eprintln!("{err}")
     }
+    ExitCode::SUCCESS
 }
 
-fn main() {
+fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
 
     match args.len() - 1 {
         0 => repl_loop(),
         1 => script_loop(&args[1]),
-        x => eprintln!("Error: need one argument at most, got {x}"),
+        x => {
+            eprintln!("Error: need one argument at most, got {x}");
+            ExitCode::from(1)
+        }
     }
 }
