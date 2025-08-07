@@ -471,7 +471,7 @@ impl Environment {
                 Intern::new(s.to_string()),
                 Value::Procedure(Rc::new(Procedure::BuiltIn(BuiltInProcedure {
                     name: s.to_string(),
-                    func: f
+                    func: f,
                 }))),
             );
         }
