@@ -963,7 +963,7 @@ mod tests {
     fn validate(steps: Vec<(&str, Value)>) {
         let mut env = Environment::standard().child();
         for (code, out) in steps {
-            let val = Value::from(parse(code).unwrap()[0]);
+            let val = Value::from(parse(code).unwrap().remove(0));
             assert_eq!(
                 env.evaluate(val),
                 Ok(out.clone()),
