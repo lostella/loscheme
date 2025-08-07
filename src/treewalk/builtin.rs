@@ -144,13 +144,15 @@ fn builtin_abs(values: Vec<Value>) -> Result<MaybeValue, String> {
 }
 
 fn builtin_div(values: Vec<Value>) -> Result<MaybeValue, String> {
-    let mut values_iter = values.into_iter();
-    let Some(v) = values_iter.next() else {
-        return Ok(MaybeValue::Just(Value::Integer(1)));
+    let Some((first, rest)) = values.split_first() else {
+        return Err("/ needs at least one argument".to_string());
     };
-    let mut res = v.clone();
-    for v in values_iter {
-        res = res.div(&v)?;
+    if rest.is_empty() {
+        return Ok(MaybeValue::Just(Value::Integer(1).div(first)?));
+    }
+    let mut res = first.clone();
+    for v in rest {
+        res = res.div(v)?;
     }
     Ok(MaybeValue::Just(res))
 }
