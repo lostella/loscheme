@@ -115,13 +115,15 @@ fn builtin_mul(values: Vec<Value>) -> Result<MaybeValue, String> {
 }
 
 fn builtin_sub(values: Vec<Value>) -> Result<MaybeValue, String> {
-    let mut values_iter = values.into_iter();
-    let Some(v) = values_iter.next() else {
-        return Ok(MaybeValue::Just(Value::Integer(0)));
-    };
-    let mut res = v.clone();
-    for v in values_iter {
-        res = res.sub(&v)?;
+    let Some((first, rest)) = values.split_first() else {
+        return Err("- needs at least one argument".to_string());
+    }
+    if rest.is_empty() {
+        return Ok(MaybeValue::Just(Value::Integer(0).sub(first)));
+    }
+    let mut res = first.clone();
+    for v in rest {
+        res = res.sub(v)?;
     }
     Ok(MaybeValue::Just(res))
 }
