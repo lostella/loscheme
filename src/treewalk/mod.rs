@@ -892,7 +892,7 @@ impl Callable for BuiltInProcedure {
     }
 }
 
-impl PartialEq for BuiltinProcedure {
+impl PartialEq for BuiltInProcedure {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
