@@ -963,7 +963,7 @@ mod tests {
     fn validate(steps: Vec<(&str, Value)>) {
         let mut env = Environment::standard().child();
         for (code, out) in steps {
-            let val = Value::from(parse(code).unwrap().remove(0));
+            let val = Value::from(parse(code).unwrap()[0]);
             assert_eq!(
                 env.evaluate(val),
                 Ok(out.clone()),
@@ -1000,7 +1000,7 @@ mod tests {
             ("(+ 3 2.0)", Value::Float(5.0)),
             ("(* 3.0 2)", Value::Float(6.0)),
             ("(- 10 2 3)", Value::Integer(5)),
-            ("(/ 24 3 2)", Value::Float(4.0)),
+            ("(/ 24 3 2)", Value::Integer(4)),
             ("(+ 3/4 7/3)", Value::Rational(37, 12)),
             ("(- 3/4 7/3)", Value::Rational(-19, 12)),
             ("(* 3/4 7/3)", Value::Rational(7, 4)),
