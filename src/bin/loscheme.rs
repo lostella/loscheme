@@ -66,9 +66,11 @@ fn script_loop(filename: &str) -> ExitCode {
     let code = read_code_file(filename);
     let output = run_standard(&code);
     if let Err(err) = output {
-        eprintln!("{err}")
+        eprintln!("{err}");
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
     }
-    ExitCode::SUCCESS
 }
 
 fn main() -> ExitCode {
