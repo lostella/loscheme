@@ -469,7 +469,10 @@ impl Environment {
         for (s, f) in builtin::BUILTIN_BINDINGS {
             env.set(
                 Intern::new(s.to_string()),
-                Value::Procedure(Rc::new(Procedure::BuiltIn(BuiltInProcedure { func: f }))),
+                Value::Procedure(Rc::new(Procedure::BuiltIn(BuiltInProcedure {
+                    name: s.to_string(),
+                    func: f
+                }))),
             );
         }
         env
@@ -879,12 +882,19 @@ type BuiltInFnType = fn(Vec<Value>) -> Result<MaybeValue, String>;
 
 #[derive(Debug, Clone)]
 pub struct BuiltInProcedure {
+    name: String,
     func: BuiltInFnType,
 }
 
 impl Callable for BuiltInProcedure {
     fn call(&self, args: Vec<Value>) -> Result<MaybeValue, String> {
         (self.func)(args)
+    }
+}
+
+impl PartialEq for BuiltinProcedure {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
     }
 }
 
@@ -907,7 +917,7 @@ impl fmt::Display for Procedure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Procedure::UserDefined(_) => write!(f, "#[user-defined procedure]"),
-            Procedure::BuiltIn(_) => write!(f, "#[built-in procedure]"),
+            Procedure::BuiltIn(proc) => write!(f, "#[built-in procedure {}]", proc.name),
         }
     }
 }
