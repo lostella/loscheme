@@ -877,7 +877,7 @@ impl Callable for UserDefinedProcedure {
 
 type BuiltInFnType = fn(Vec<Value>) -> Result<MaybeValue, String>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct BuiltInProcedure {
     func: BuiltInFnType,
 }
