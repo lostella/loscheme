@@ -199,7 +199,7 @@ impl Value {
 
     pub fn div(&self, other: &Value) -> Result<Value, String> {
         match (self, other) {
-            (Value::Integer(a), Value::Integer(b)) => Ok(Value::Float(*a as f64 / *b as f64)),
+            (Value::Integer(a), Value::Integer(b)) => Ok(make_rational(*a, *b)),
             (Value::Integer(a), Value::Float(b)) => Ok(Value::Float(*a as f64 / b)),
             (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
             (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a / *b as f64)),
