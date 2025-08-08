@@ -497,7 +497,8 @@ impl Environment {
             | Value::Float(_)
             | Value::Rational(_, _)
             | Value::Str(_)
-            | Value::Bool(_) => Ok(MaybeValue::Just(expr)),
+            | Value::Bool(_)
+            | Value::Vector(_) => Ok(MaybeValue::Just(expr)),
             Value::Pair(rc) => self.maybe_evaluate_pair(&rc.borrow()),
             Value::Symbol(s) => match self.get(&s) {
                 Some(rc) => Ok(MaybeValue::Just(rc.borrow().clone())),

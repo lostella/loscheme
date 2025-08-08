@@ -437,6 +437,7 @@ fn test_language_features() {
         ("(define v (vector 1 2 3 '(4 . 5)))", ""),
         ("(define v (vector 1 2 3 '(4 . 5)))", ""),
         ("v", "#(1 2 3 (4 . 5))"),
+        ("(define v #(1 2 3 (4 . 5)))", ""),
         ("(vector? v)", "#t"),
         ("(vector? '(1 2 3))", "#f"),
         ("(vector-length v)", "4"),
