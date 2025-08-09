@@ -15,8 +15,17 @@ pub enum Token {
     Atom(String),
 }
 
+#[derive(Debug, PartialEq)]
+pub struct TokenInfo {
+    token: Token,
+    line: usize,
+    column: usize,
+}
+
 pub struct Tokenizer<'a> {
     input: Peekable<Chars<'a>>,
+    line: usize,
+    column: usize,
 }
 
 impl<'a> Tokenizer<'a> {
@@ -24,6 +33,16 @@ impl<'a> Tokenizer<'a> {
     pub fn new(input: &'a str) -> Self {
         Tokenizer {
             input: input.chars().peekable(),
+            line: 1,
+            column: 1,
+        }
+    }
+
+    fn emit_token_info(&self, token: Token) -> TokenInfo {
+        TokenInfo {
+            token,
+            line: self.line,
+            column: self.column,
         }
     }
 
@@ -36,6 +55,7 @@ impl<'a> Tokenizer<'a> {
             }
             result.push(c);
             self.input.next();
+            self.column += 1;
         }
 
         result
@@ -48,6 +68,7 @@ impl<'a> Tokenizer<'a> {
         while let Some(&c) = self.input.peek() {
             result.push(c);
             self.input.next();
+            self.column += 1;
             if c == '"' {
                 cnt += 1;
             }
@@ -58,20 +79,24 @@ impl<'a> Tokenizer<'a> {
 
         result
     }
-}
 
-impl Iterator for Tokenizer<'_> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn next_token(&mut self) -> Option<TokenInfo> {
         while let Some(&c) = self.input.peek() {
             match c {
-                ' ' | '\t' | '\n' | '\r' => {
+                '\n' => {
                     self.input.next();
+                    self.line += 1;
+                    self.column = 1;
+                    continue;
+                }
+                ' ' | '\t' | '\r' => {
+                    self.input.next();
+                    self.column += 1;
                     continue;
                 }
                 ';' => {
                     self.input.next();
+                    self.column += 1;
                     while let Some(&cc) = self.input.peek() {
                         if cc == '\n' {
                             break;
@@ -80,42 +105,78 @@ impl Iterator for Tokenizer<'_> {
                     }
                 }
                 '(' => {
+                    let token_info = self.emit_token_info(Token::LParen);
                     self.input.next();
-                    return Some(Token::LParen);
+                    self.column += 1;
+                    return Some(token_info);
                 }
                 ')' => {
+                    let token_info = self.emit_token_info(Token::RParen);
                     self.input.next();
-                    return Some(Token::RParen);
+                    self.column += 1;
+                    return Some(token_info);
                 }
                 '\'' => {
+                    let token_info = self.emit_token_info(Token::Quote);
                     self.input.next();
-                    return Some(Token::Quote);
+                    self.column += 1;
+                    return Some(token_info);
                 }
                 '`' => {
+                    let token_info = self.emit_token_info(Token::Quasiquote);
                     self.input.next();
-                    return Some(Token::Quasiquote);
+                    self.column += 1;
+                    return Some(token_info);
                 }
                 ',' => {
+                    let token_info = self.emit_token_info(Token::Unquote);
                     self.input.next();
-                    return Some(Token::Unquote);
+                    self.column += 1;
+                    return Some(token_info);
                 }
                 '.' => {
+                    let token_info = self.emit_token_info(Token::Dot);
                     self.input.next();
-                    return Some(Token::Dot);
+                    self.column += 1;
+                    return Some(token_info);
                 }
                 '#' => {
+                    let token_info = self.emit_token_info(Token::Pound);
                     self.input.next();
-                    return Some(Token::Pound);
+                    self.column += 1;
+                    return Some(token_info);
                 }
                 '"' => {
-                    return Some(Token::Atom(self.read_string_literal()));
+                    let line = self.line;
+                    let column = self.column;
+                    let token = Token::Atom(self.read_string_literal());
+                    return Some(TokenInfo {
+                        token,
+                        line,
+                        column,
+                    });
                 }
                 _ => {
-                    return Some(Token::Atom(self.read_other()));
+                    let line = self.line;
+                    let column = self.column;
+                    let token = Token::Atom(self.read_other());
+                    return Some(TokenInfo {
+                        token,
+                        line,
+                        column,
+                    });
                 }
             }
         }
         None
+    }
+}
+
+impl Iterator for Tokenizer<'_> {
+    type Item = TokenInfo;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_token()
     }
 }
 
@@ -207,6 +268,13 @@ pub enum Expr {
     Vector(Vec<Expr>),
 }
 
+fn format_error(msg: &str, token_info: &TokenInfo) -> Result<Expr, String> {
+    Err(format!(
+        "{msg} (at line {}, column {})",
+        token_info.line, token_info.column
+    ))
+}
+
 pub fn parse_tokens(tokens: &mut Peekable<Tokenizer>) -> Result<Vec<Expr>, String> {
     let mut expressions = Vec::new();
     while tokens.peek().is_some() {
@@ -216,29 +284,33 @@ pub fn parse_tokens(tokens: &mut Peekable<Tokenizer>) -> Result<Vec<Expr>, Strin
 }
 
 pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
-    match tokens.next() {
-        Some(Token::LParen) => parse_list(tokens),
-        Some(Token::Quote) => parse_quote(tokens),
-        Some(Token::Quasiquote) => parse_quasiquote(tokens),
-        Some(Token::Unquote) => parse_unquote(tokens),
-        Some(Token::Atom(s)) => Ok(parse_atom(s)),
-        Some(Token::Dot) => Ok(Expr::Keyword(Keyword::Dot)),
-        Some(Token::Pound) => {
-            let next = tokens.next();
-            if next == Some(Token::LParen) {
+    let Some(token_info) = tokens.next() else {
+        return Err("Unexpected end of input".to_string());
+    };
+    match token_info.token {
+        Token::LParen => parse_list(tokens),
+        Token::Quote => parse_quote(tokens),
+        Token::Quasiquote => parse_quasiquote(tokens),
+        Token::Unquote => parse_unquote(tokens),
+        Token::Atom(s) => Ok(parse_atom(s)),
+        Token::Dot => Ok(Expr::Keyword(Keyword::Dot)),
+        Token::Pound => {
+            let Some(token_info) = tokens.next() else {
+                return format_error("Unexpected end of tokens after #", &token_info);
+            };
+            if token_info.token == Token::LParen {
                 return parse_vector(tokens);
             }
-            if let Some(Token::Atom(s)) = next {
+            if let Token::Atom(ref s) = token_info.token {
                 if s == "t" {
                     return Ok(Expr::Bool(true));
                 } else if s == "f" {
                     return Ok(Expr::Bool(false));
                 }
             }
-            Err("Unexpected expression after #".to_string())
+            format_error("Unexpected expression after #", &token_info)
         }
-        Some(Token::RParen) => Err("Unexpected closing parenthesis".to_string()),
-        None => Err("Unexpected end of input".to_string()),
+        Token::RParen => format_error("Unexpected closing parenthesis", &token_info),
     }
 }
 
@@ -246,28 +318,28 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     let mut v = vec![];
     let mut dot_found = false;
     let mut last_expression_parsed = false;
-    while let Some(token) = tokens.peek() {
-        match token {
+    while let Some(token_info) = tokens.peek() {
+        match token_info.token {
             Token::RParen => {
                 if dot_found && !last_expression_parsed {
-                    return Err("No expression following dot".to_string());
+                    return format_error("No expression following dot", token_info);
                 }
                 tokens.next();
                 return Ok(Expr::List(v));
             }
             Token::Dot => {
                 if v.is_empty() {
-                    return Err("No expressions preceeding dot".to_string());
+                    return format_error("No expressions preceeding dot", token_info);
                 }
                 if dot_found {
-                    return Err("Multiple dots".to_string());
+                    return format_error("Multiple dots", token_info);
                 }
                 dot_found = true;
                 v.push(parse_expression(tokens)?);
             }
             _ => {
                 if last_expression_parsed {
-                    return Err("Multiple expressions following dot".to_string());
+                    return format_error("Multiple expressions following dot", token_info);
                 }
                 v.push(parse_expression(tokens)?);
                 if dot_found {
@@ -282,8 +354,8 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
 fn parse_vector(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
     let mut vec = vec![];
     loop {
-        if let Some(token) = tokens.peek() {
-            match token {
+        if let Some(token_info) = tokens.peek() {
+            match token_info.token {
                 Token::RParen => {
                     tokens.next();
                     return Ok(Expr::Vector(vec));
@@ -417,34 +489,128 @@ mod tests {
 
     #[test]
     fn test_tokenizer() {
-        let code = "(define (square x) (* x x)) 'expr (quote ; comment\n(1 2 3)) \"hello world\"";
-        let expected: Vec<Token> = vec![
-            Token::LParen,
-            Token::Atom("define".to_string()),
-            Token::LParen,
-            Token::Atom("square".to_string()),
-            Token::Atom("x".to_string()),
-            Token::RParen,
-            Token::LParen,
-            Token::Atom("*".to_string()),
-            Token::Atom("x".to_string()),
-            Token::Atom("x".to_string()),
-            Token::RParen,
-            Token::RParen,
-            Token::Quote,
-            Token::Atom("expr".to_string()),
-            Token::LParen,
-            Token::Atom("quote".to_string()),
-            Token::LParen,
-            Token::Atom("1".to_string()),
-            Token::Atom("2".to_string()),
-            Token::Atom("3".to_string()),
-            Token::RParen,
-            Token::RParen,
-            Token::Atom("\"hello world\"".to_string()),
+        let code = "(define (square x)\n  (* x x))\n'expr (quote ; comment (1 2 3)\n\n; comment line\n\n(1 2 3)) \"hello world\"";
+        let expected = vec![
+            TokenInfo {
+                token: Token::LParen,
+                line: 1,
+                column: 1,
+            },
+            TokenInfo {
+                token: Token::Atom("define".to_string()),
+                line: 1,
+                column: 2,
+            },
+            TokenInfo {
+                token: Token::LParen,
+                line: 1,
+                column: 9,
+            },
+            TokenInfo {
+                token: Token::Atom("square".to_string()),
+                line: 1,
+                column: 10,
+            },
+            TokenInfo {
+                token: Token::Atom("x".to_string()),
+                line: 1,
+                column: 17,
+            },
+            TokenInfo {
+                token: Token::RParen,
+                line: 1,
+                column: 18,
+            },
+            TokenInfo {
+                token: Token::LParen,
+                line: 2,
+                column: 3,
+            },
+            TokenInfo {
+                token: Token::Atom("*".to_string()),
+                line: 2,
+                column: 4,
+            },
+            TokenInfo {
+                token: Token::Atom("x".to_string()),
+                line: 2,
+                column: 6,
+            },
+            TokenInfo {
+                token: Token::Atom("x".to_string()),
+                line: 2,
+                column: 8,
+            },
+            TokenInfo {
+                token: Token::RParen,
+                line: 2,
+                column: 9,
+            },
+            TokenInfo {
+                token: Token::RParen,
+                line: 2,
+                column: 10,
+            },
+            TokenInfo {
+                token: Token::Quote,
+                line: 3,
+                column: 1,
+            },
+            TokenInfo {
+                token: Token::Atom("expr".to_string()),
+                line: 3,
+                column: 2,
+            },
+            TokenInfo {
+                token: Token::LParen,
+                line: 3,
+                column: 7,
+            },
+            TokenInfo {
+                token: Token::Atom("quote".to_string()),
+                line: 3,
+                column: 8,
+            },
+            TokenInfo {
+                token: Token::LParen,
+                line: 7,
+                column: 1,
+            },
+            TokenInfo {
+                token: Token::Atom("1".to_string()),
+                line: 7,
+                column: 2,
+            },
+            TokenInfo {
+                token: Token::Atom("2".to_string()),
+                line: 7,
+                column: 4,
+            },
+            TokenInfo {
+                token: Token::Atom("3".to_string()),
+                line: 7,
+                column: 6,
+            },
+            TokenInfo {
+                token: Token::RParen,
+                line: 7,
+                column: 7,
+            },
+            TokenInfo {
+                token: Token::RParen,
+                line: 7,
+                column: 8,
+            },
+            TokenInfo {
+                token: Token::Atom("\"hello world\"".to_string()),
+                line: 7,
+                column: 10,
+            },
         ];
-        let tokens: Vec<Token> = Tokenizer::new(code).collect();
-        assert_eq!(tokens, expected);
+        let tokens: Vec<TokenInfo> = Tokenizer::new(code).collect();
+        for (token_info, expected_info) in tokens.into_iter().zip(expected) {
+            assert_eq!(token_info, expected_info);
+        }
     }
 
     #[test]
