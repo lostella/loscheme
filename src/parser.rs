@@ -1,3 +1,4 @@
+use crate::char::char_from_external;
 use internment::Intern;
 use std::fmt;
 use std::iter::Peekable;
@@ -261,6 +262,7 @@ pub enum Expr {
     Float(f64),
     Rational(i64, i64),
     Str(String),
+    Char(char),
     Bool(bool),
     Keyword(Keyword),
     Symbol(Intern<String>),
@@ -268,7 +270,7 @@ pub enum Expr {
     Vector(Vec<Expr>),
 }
 
-fn format_error(msg: &str, token_info: &TokenInfo) -> Result<Expr, String> {
+fn format_error(msg: String, token_info: &TokenInfo) -> Result<Expr, String> {
     Err(format!(
         "{msg} (at line {}, column {})",
         token_info.line, token_info.column
@@ -296,7 +298,7 @@ pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String
         Token::Dot => Ok(Expr::Keyword(Keyword::Dot)),
         Token::Pound => {
             let Some(token_info) = tokens.next() else {
-                return format_error("Unexpected end of tokens after #", &token_info);
+                return format_error("Unexpected end of tokens after `#`".into(), &token_info);
             };
             if token_info.token == Token::LParen {
                 return parse_vector(tokens);
@@ -304,13 +306,19 @@ pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String
             if let Token::Atom(ref s) = token_info.token {
                 if s == "t" {
                     return Ok(Expr::Bool(true));
-                } else if s == "f" {
+                }
+                if s == "f" {
                     return Ok(Expr::Bool(false));
                 }
+                if let Some(stripped) = s.strip_prefix('\\') {
+                    if let Some(c) = char_from_external(stripped) {
+                        return Ok(Expr::Char(c));
+                    }
+                }
             }
-            format_error("Unexpected expression after #", &token_info)
+            format_error(format!("Unexpected token `{:?}` after `#`", token_info.token), &token_info)
         }
-        Token::RParen => format_error("Unexpected closing parenthesis", &token_info),
+        Token::RParen => format_error("Unexpected `)`".into(), &token_info),
     }
 }
 
@@ -322,24 +330,24 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
         match token_info.token {
             Token::RParen => {
                 if dot_found && !last_expression_parsed {
-                    return format_error("No expression following dot", token_info);
+                    return format_error("No expression following `.`".into() , token_info);
                 }
                 tokens.next();
                 return Ok(Expr::List(v));
             }
             Token::Dot => {
                 if v.is_empty() {
-                    return format_error("No expressions preceeding dot", token_info);
+                    return format_error("No expressions preceeding `.`".into(), token_info);
                 }
                 if dot_found {
-                    return format_error("Multiple dots", token_info);
+                    return format_error("Multiple `.` in list".into(), token_info);
                 }
                 dot_found = true;
                 v.push(parse_expression(tokens)?);
             }
             _ => {
                 if last_expression_parsed {
-                    return format_error("Multiple expressions following dot", token_info);
+                    return format_error("Multiple expressions following `.`".into(), token_info);
                 }
                 v.push(parse_expression(tokens)?);
                 if dot_found {
@@ -436,6 +444,7 @@ impl fmt::Display for Expr {
             Expr::Float(v) => write!(f, "{v}"),
             Expr::Rational(n, d) => write!(f, "{n}/{d}"),
             Expr::Str(v) => write!(f, "\"{v}\""),
+            Expr::Char(c) => write!(f, "#\\{c}"),
             Expr::Keyword(k) => write!(f, "{k}"),
             Expr::Symbol(s) => write!(f, "{s}"),
             Expr::List(v) => {

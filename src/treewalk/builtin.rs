@@ -5,7 +5,7 @@ use std::io::{self, BufRead};
 use std::mem::take;
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 92] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 93] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -31,6 +31,7 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 92] = [
     ("integer?", builtin_isinteger),
     ("symbol?", builtin_issymbol),
     ("string?", builtin_isstring),
+    ("char?", builtin_ischar),
     ("boolean?", builtin_isboolean),
     ("procedure?", builtin_isprocedure),
     ("even?", builtin_iseven),
@@ -389,6 +390,16 @@ fn builtin_isstring(values: Vec<Value>) -> Result<MaybeValue, String> {
     Ok(MaybeValue::Just(Value::Bool(matches!(
         values[0],
         Value::Str(_)
+    ))))
+}
+
+fn builtin_ischar(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("Char? needs exactly one argument".to_string());
+    }
+    Ok(MaybeValue::Just(Value::Bool(matches!(
+        values[0],
+        Value::Char(_)
     ))))
 }
 

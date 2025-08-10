@@ -185,6 +185,9 @@ fn test_language_features() {
         ("(string? \"hello\")", "#t"),
         ("(string? 3.14)", "#f"),
         ("(string? '())", "#f"),
+        ("(char? #\\a)", "#t"),
+        ("(char? #\\newline)", "#t"),
+        ("(char? \"hello\")", "#f"),
         ("(boolean? #t)", "#t"),
         ("(boolean? #f)", "#t"),
         ("(boolean? \"hello\")", "#f"),
@@ -459,18 +462,25 @@ fn test_language_features() {
         ("(set-car! (vector-ref v 2) 3)", ""),
         ("l", "(1 2 (3 4) 5)"),
         ("(vector->list v)", "(1 2 (3 4) 5)"),
-        // ("(define (f . a) (* 2 (sum a)))", ""),
-        // ("(f . (1 2 3))", "12"),
-        // ("(define g (lambda a (* 3 (sum a))))", ""),
-        // ("(g . (1 2 3))", "18"),
+        /*
+        ("(define (two-sum . a) (* 2 (sum a)))", ""),
+        ("(two-sum 1 2 3)", "12"),
+        ("(define three-sum (lambda a (* 3 (sum a))))", ""),
+        ("(three-sum 1 2 3)", "18"),
+        */
     ];
 
     let mut env = Environment::standard().child();
     for (code, exp) in steps {
-        let got = format!("{}", run(code, &mut env).unwrap());
+        let out = run(code, &mut env);
+        let got = if let Ok(v) = out {
+            format!("{}", v)
+        } else {
+            format!("{:?}", out)
+        };
         assert_eq!(
             exp, got,
-            "we are testing that {} gives {}, but got {}",
+            "we are testing that `{}` gives `{}`, but got `{}`",
             code, exp, got
         );
     }

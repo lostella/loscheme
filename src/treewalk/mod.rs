@@ -1,3 +1,4 @@
+use crate::char::char_to_external;
 use crate::parser::{Expr, Keyword};
 use crate::rationals::{lcm, simplify};
 use internment::Intern;
@@ -16,6 +17,7 @@ pub enum Value {
     Float(f64),
     Rational(i64, i64),
     Str(Rc<String>),
+    Char(char),
     Bool(bool),
     Keyword(Keyword),
     Symbol(Intern<String>),
@@ -43,6 +45,7 @@ impl From<Expr> for Value {
             Expr::Float(x) => Value::Float(x),
             Expr::Rational(x, y) => make_rational(x, y),
             Expr::Str(x) => Value::Str(x.into()),
+            Expr::Char(c) => Value::Char(c),
             Expr::Keyword(x) => Value::Keyword(x),
             Expr::Symbol(x) => Value::Symbol(x),
             Expr::List(v) => {
@@ -79,7 +82,7 @@ impl Value {
             0 => Value::Null,
             _ => Value::Pair(Rc::new(RefCell::new((
                 v[0].clone(),
-                Value::from_slice(&v[1..v.len()]),
+                Value::from_slice(&v[1..]),
             )))),
         }
     }
@@ -95,7 +98,7 @@ impl Value {
                     res.push(borrowed.0.clone());
                     cur = borrowed.1.clone();
                 }
-                _ => return Err("Not a proper list".to_string()),
+                _ => return Err(format!("Not a proper list {cur}")),
             }
         }
     }
@@ -341,6 +344,7 @@ impl fmt::Display for Value {
             Value::Float(v) => write!(f, "{v}"),
             Value::Rational(n, d) => write!(f, "{n}/{d}"),
             Value::Str(v) => write!(f, "\"{v}\""),
+            Value::Char(c) => write!(f, "#\\{}", char_to_external(*c)),
             Value::Keyword(k) => write!(f, "{k}"),
             Value::Symbol(s) => write!(f, "{s}"),
             Value::Pair(_) => {
@@ -497,6 +501,7 @@ impl Environment {
             | Value::Float(_)
             | Value::Rational(_, _)
             | Value::Str(_)
+            | Value::Char(_)
             | Value::Bool(_)
             | Value::Vector(_) => Ok(MaybeValue::Just(expr)),
             Value::Pair(rc) => self.maybe_evaluate_pair(&rc.borrow()),
@@ -581,16 +586,15 @@ impl Environment {
         self.do_quasiquote(args[0].clone())
     }
 
-    fn evaluate_lambda(&mut self, args: &[Value]) -> Result<Value, String> {
-        if args.is_empty() {
-            return Err("Lambda needs at least one argument".to_string());
-        }
-        let first = args[0].clone();
-        let rest = &args[1..args.len()];
+    fn evaluate_lambda_helper(
+        &mut self,
+        lambda_args: &Value,
+        lambda_body: &[Value],
+    ) -> Result<Value, String> {
         let mut params = Vec::new();
-        match first {
+        match lambda_args {
             Value::Pair(_) => {
-                for val in first.into_vec()? {
+                for val in lambda_args.clone().into_vec()? {
                     match val {
                         Value::Symbol(s) => params.push(s),
                         _ => return Err(format!("Not a symbol: {val}")),
@@ -601,7 +605,7 @@ impl Environment {
             _ => return Err("First argument to lambda must be a list of symbols".to_string()),
         };
         let mut body = Vec::new();
-        for expr in rest {
+        for expr in lambda_body {
             body.push((*expr).clone());
         }
         let proc = UserDefinedProcedure {
@@ -612,44 +616,35 @@ impl Environment {
         Ok(Value::Procedure(Rc::new(Procedure::UserDefined(proc))))
     }
 
+    fn evaluate_lambda(&mut self, args: &[Value]) -> Result<Value, String> {
+        if args.is_empty() {
+            return Err("Lambda needs at least one argument".to_string());
+        }
+        self.evaluate_lambda_helper(&args[0], &args[1..])
+    }
+
     fn evaluate_define(&mut self, args: &[Value]) -> Result<Value, String> {
         if args.len() < 2 {
             return Err("Define needs at least two arguments".to_string());
         }
-        let first = args[0].clone();
-        let rest = &args[1..args.len()];
-        match first {
+        match &args[0] {
             Value::Symbol(key) => {
                 let value = match args.len() {
                     1 => Value::Unspecified,
                     2 => self.evaluate(args[1].clone())?,
                     _ => return Err("Define with a symbol gets at most two arguments".to_string()),
                 };
-                self.set(key, value);
+                self.set(*key, value);
                 Ok(Value::Unspecified)
             }
             Value::Pair(p) => {
-                let key = match p.borrow().0 {
+                let car = &p.borrow().0;
+                let key = match car {
                     Value::Symbol(s) => Ok(s),
-                    _ => Err("Not a symbol"),
+                    _ => Err(format!("Not a symbol: {}", car)),
                 }?;
-                let mut params = Vec::new();
-                for val in p.borrow().1.clone().into_vec()? {
-                    match val {
-                        Value::Symbol(s) => params.push(s),
-                        _ => return Err(format!("Not a symbol: {val}")),
-                    }
-                }
-                let mut body = Vec::new();
-                for expr in rest {
-                    body.push((*expr).clone());
-                }
-                let proc = UserDefinedProcedure {
-                    params,
-                    body,
-                    env: self.clone(),
-                };
-                self.set(key, Value::Procedure(Rc::new(Procedure::UserDefined(proc))));
+                let proc = self.evaluate_lambda_helper(&p.borrow().1, &args[1..])?;
+                self.set(*key, proc);
                 Ok(Value::Unspecified)
             }
             _ => Err("Define needs a symbol or a list as first argument".to_string()),
@@ -844,17 +839,15 @@ pub struct UserDefinedProcedure {
 
 impl UserDefinedProcedure {
     fn call_except_tail(&self, args: Vec<Value>) -> Result<MaybeValue, String> {
-        let params = &self.params;
-        let body = &self.body;
         let mut env = self.env.child();
-        if args.len() != params.len() {
+        if args.len() != self.params.len() {
             return Err("Incorrect number of arguments".to_string());
         }
-        for (param, arg) in zip(params, args) {
+        for (param, arg) in zip(&self.params, args) {
             env.set(*param, arg);
         }
         let mut out = MaybeValue::Just(Value::Unspecified);
-        if let Some((last, rest)) = body.split_last() {
+        if let Some((last, rest)) = self.body.split_last() {
             for expr in rest {
                 env.evaluate(expr.clone())?;
             }
