@@ -316,7 +316,10 @@ pub fn parse_expression(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String
                     }
                 }
             }
-            format_error(format!("Unexpected token `{:?}` after `#`", token_info.token), &token_info)
+            format_error(
+                format!("Unexpected token `{:?}` after `#`", token_info.token),
+                &token_info,
+            )
         }
         Token::RParen => format_error("Unexpected `)`".into(), &token_info),
     }
@@ -330,7 +333,7 @@ fn parse_list(tokens: &mut Peekable<Tokenizer>) -> Result<Expr, String> {
         match token_info.token {
             Token::RParen => {
                 if dot_found && !last_expression_parsed {
-                    return format_error("No expression following `.`".into() , token_info);
+                    return format_error("No expression following `.`".into(), token_info);
                 }
                 tokens.next();
                 return Ok(Expr::List(v));
