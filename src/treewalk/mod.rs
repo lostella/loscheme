@@ -443,6 +443,8 @@ pub struct Environment {
     head: Rc<RefCell<EnvironmentNode>>,
 }
 
+type ArgSpec = (Vec<Intern<String>>, Option<Intern<String>>);
+
 impl Environment {
     #[must_use]
     pub fn empty() -> Self {
@@ -586,7 +588,7 @@ impl Environment {
         self.do_quasiquote(args[0].clone())
     }
 
-    fn split_args(args: &Value) -> Result<(Vec<Intern<String>>, Option<Intern<String>>), String> {
+    fn split_args(args: &Value) -> Result<ArgSpec, String> {
         let mut pos_args = Vec::new();
         let mut current = args.clone();
         loop {
