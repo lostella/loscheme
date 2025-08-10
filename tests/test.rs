@@ -462,12 +462,17 @@ fn test_language_features() {
         ("(set-car! (vector-ref v 2) 3)", ""),
         ("l", "(1 2 (3 4) 5)"),
         ("(vector->list v)", "(1 2 (3 4) 5)"),
-        /*
         ("(define (two-sum . a) (* 2 (sum a)))", ""),
         ("(two-sum 1 2 3)", "12"),
         ("(define three-sum (lambda a (* 3 (sum a))))", ""),
         ("(three-sum 1 2 3)", "18"),
-        */
+        ("(define (four-sum a b . c) (* 4 (+ a b (sum c))))", ""),
+        ("(four-sum 1 2 3 4)", "40"),
+        (
+            "(define five-sum (lambda (a b . c) (* 5 (+ a b (sum c)))))",
+            "",
+        ),
+        ("(five-sum 1 2 3 4)", "50"),
     ];
 
     let mut env = Environment::standard().child();

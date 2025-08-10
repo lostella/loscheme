@@ -586,30 +586,41 @@ impl Environment {
         self.do_quasiquote(args[0].clone())
     }
 
+    fn split_args(args: &Value) -> Result<(Vec<Intern<String>>, Option<Intern<String>>), String> {
+        let mut pos_args = Vec::new();
+        let mut current = args.clone();
+        loop {
+            match current {
+                Value::Pair(pair_rc) => {
+                    let pair = pair_rc.borrow();
+                    if let Value::Symbol(s) = pair.0 {
+                        pos_args.push(s);
+                    } else {
+                        return Err("Expecting symbols".to_string());
+                    }
+                    let pair = pair_rc.borrow();
+                    current = pair.1.clone();
+                }
+                Value::Null => return Ok((pos_args, None)),
+                Value::Symbol(last) => return Ok((pos_args, Some(last))),
+                _ => return Err("Expecting symbols".to_string()),
+            }
+        }
+    }
+
     fn evaluate_lambda_helper(
         &mut self,
         lambda_args: &Value,
         lambda_body: &[Value],
     ) -> Result<Value, String> {
-        let mut params = Vec::new();
-        match lambda_args {
-            Value::Pair(_) => {
-                for val in lambda_args.clone().into_vec()? {
-                    match val {
-                        Value::Symbol(s) => params.push(s),
-                        _ => return Err(format!("Not a symbol: {val}")),
-                    }
-                }
-            }
-            Value::Null => (),
-            _ => return Err("First argument to lambda must be a list of symbols".to_string()),
-        };
+        let (pos_args, var_arg) = Self::split_args(lambda_args)?;
         let mut body = Vec::new();
         for expr in lambda_body {
             body.push((*expr).clone());
         }
         let proc = UserDefinedProcedure {
-            params,
+            params: pos_args,
+            varparam: var_arg,
             body,
             env: self.clone(),
         };
@@ -833,6 +844,7 @@ trait Callable {
 #[derive(Debug, PartialEq, Clone)]
 pub struct UserDefinedProcedure {
     params: Vec<Intern<String>>,
+    varparam: Option<Intern<String>>,
     body: Vec<Value>,
     env: Environment,
 }
@@ -840,11 +852,15 @@ pub struct UserDefinedProcedure {
 impl UserDefinedProcedure {
     fn call_except_tail(&self, args: Vec<Value>) -> Result<MaybeValue, String> {
         let mut env = self.env.child();
-        if args.len() != self.params.len() {
+        if args.len() < self.params.len() {
             return Err("Incorrect number of arguments".to_string());
         }
-        for (param, arg) in zip(&self.params, args) {
+        for (param, arg) in zip(&self.params, args.clone()) {
             env.set(*param, arg);
+        }
+        if let Some(name) = self.varparam {
+            let rest = Value::from_slice(&args[self.params.len()..]);
+            env.set(name, rest);
         }
         let mut out = MaybeValue::Just(Value::Unspecified);
         if let Some((last, rest)) = self.body.split_last() {
