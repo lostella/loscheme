@@ -1,3 +1,5 @@
+(import (scheme write))
+
 (define (quicksort lst)
   (if (null? lst)
       '()

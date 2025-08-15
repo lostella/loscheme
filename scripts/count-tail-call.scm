@@ -1,3 +1,5 @@
+(import (scheme write))
+
 (define limit 100000)
 
 (define (count-if-1 n)

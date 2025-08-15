@@ -8,7 +8,8 @@ use std::fmt;
 use std::iter::zip;
 use std::rc::Rc;
 
-pub mod builtin;
+mod builtin;
+mod write;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub enum Value {
@@ -471,16 +472,15 @@ impl Environment {
     #[must_use]
     pub fn standard() -> Self {
         let mut env = Self::empty();
+        env.import_bindings(&builtin::BUILTIN_BINDINGS);
+        env
+    }
 
-        for (s, f) in builtin::BUILTIN_BINDINGS {
-            env.set(
-                Intern::new(s.to_string()),
-                Value::Procedure(Rc::new(Procedure::BuiltIn(BuiltInProcedure {
-                    name: s.to_string(),
-                    func: f,
-                }))),
-            );
-        }
+    #[must_use]
+    pub fn replenv() -> Self {
+        let mut env = Self::empty();
+        env.import_bindings(&builtin::BUILTIN_BINDINGS);
+        env.import_bindings(&write::EXPORTED_BINDINGS);
         env
     }
 
@@ -519,6 +519,7 @@ impl Environment {
         let args = pair.1.clone().into_vec()?;
 
         match pair.0 {
+            Value::Keyword(Keyword::Import) => Ok(MaybeValue::Just(self.evaluate_import(&args)?)),
             Value::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(&args)?)),
             Value::Keyword(Keyword::Quasiquote) => {
                 Ok(MaybeValue::Just(self.evaluate_quasiquote(&args)?))
@@ -547,6 +548,38 @@ impl Environment {
                 stuff => Err(format!("Not a procedure call: {stuff}")),
             },
         }
+    }
+
+    fn import_bindings(&mut self, bindings: &[(&str, BuiltInFnType)]) {
+        for (s, f) in bindings {
+            self.set(
+                Intern::new(s.to_string()),
+                Value::Procedure(Rc::new(Procedure::BuiltIn(BuiltInProcedure {
+                    name: s.to_string(),
+                    func: *f,
+                }))),
+            );
+        }
+    }
+
+    fn evaluate_import_set(&mut self, import_set: &Value) -> Result<(), String> {
+        match import_set.clone().into_vec()?[..] {
+            [Value::Symbol(lang), Value::Symbol(name)] => {
+                if *lang == "scheme" && *name == "write" {
+                    self.import_bindings(&write::EXPORTED_BINDINGS);
+                    return Ok(());
+                }
+                Err("Unknown library".to_string())
+            }
+            _ => Err("Usupported import set format".to_string()),
+        }
+    }
+
+    fn evaluate_import(&mut self, args: &[Value]) -> Result<Value, String> {
+        for import_set in args {
+            self.evaluate_import_set(import_set)?;
+        }
+        Ok(Value::Unspecified)
     }
 
     fn evaluate_quote(&self, args: &[Value]) -> Result<Value, String> {
@@ -611,7 +644,7 @@ impl Environment {
     }
 
     fn evaluate_lambda_helper(
-        &mut self,
+        &self,
         lambda_args: &Value,
         lambda_body: &[Value],
     ) -> Result<Value, String> {
@@ -629,7 +662,7 @@ impl Environment {
         Ok(Value::Procedure(Rc::new(Procedure::UserDefined(proc))))
     }
 
-    fn evaluate_lambda(&mut self, args: &[Value]) -> Result<Value, String> {
+    fn evaluate_lambda(&self, args: &[Value]) -> Result<Value, String> {
         if args.is_empty() {
             return Err("Lambda needs at least one argument".to_string());
         }

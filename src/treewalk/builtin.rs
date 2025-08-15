@@ -5,7 +5,7 @@ use std::io::{self, BufRead};
 use std::mem::take;
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 93] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 91] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -76,8 +76,6 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 93] = [
     ("map", builtin_map),
     ("reverse", builtin_reverse),
     ("read", builtin_read),
-    ("write", builtin_write),
-    ("newline", builtin_newline),
     ("quotient", builtin_quotient),
     ("remainder", builtin_remainder),
     ("modulo", builtin_modulo),
@@ -780,22 +778,6 @@ fn builtin_read(values: Vec<Value>) -> Result<MaybeValue, String> {
         }
         let _ = io::stdin().lock().read_line(&mut input);
     }
-}
-
-fn builtin_write(values: Vec<Value>) -> Result<MaybeValue, String> {
-    if values.len() != 1 {
-        return Err("Write needs exactly one argument".to_string());
-    }
-    print!("{}", values[0]);
-    Ok(MaybeValue::Just(Value::Unspecified))
-}
-
-fn builtin_newline(values: Vec<Value>) -> Result<MaybeValue, String> {
-    if !values.is_empty() {
-        return Err("Write takes no arguments".to_string());
-    }
-    println!();
-    Ok(MaybeValue::Just(Value::Unspecified))
 }
 
 fn builtin_makelist(values: Vec<Value>) -> Result<MaybeValue, String> {

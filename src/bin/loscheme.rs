@@ -27,7 +27,7 @@ fn read_code_file(filename: &str) -> String {
 fn repl_loop() -> ExitCode {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
-    let mut env = Environment::standard().child();
+    let mut env = Environment::replenv().child();
 
     loop {
         print!("{REPL_PROMPT} ");
