@@ -77,6 +77,14 @@ impl From<Expr> for Value {
     }
 }
 
+fn intern_str(s: &str) -> Intern<String> {
+    Intern::new(s.to_string())
+}
+
+fn symbol_from_str(s: &str) -> Value {
+    Value::Symbol(intern_str(s))
+}
+
 impl Value {
     pub fn from_slice(v: &[Value]) -> Self {
         match v.len() {
@@ -563,16 +571,16 @@ impl Environment {
     }
 
     fn evaluate_import_set(&mut self, import_set: &Value) -> Result<(), String> {
-        match import_set.clone().into_vec()?[..] {
-            [Value::Symbol(lang), Value::Symbol(name)] => {
-                if *lang == "scheme" && *name == "write" {
-                    self.import_bindings(&write::EXPORTED_BINDINGS);
-                    return Ok(());
-                }
-                Err("Unknown library".to_string())
-            }
-            _ => Err("Usupported import set format".to_string()),
+        let v = import_set.clone().into_vec()?;
+        if v == [symbol_from_str("scheme"), symbol_from_str("base")] {
+            self.import_bindings(&builtin::BUILTIN_BINDINGS);
+            return Ok(());
         }
+        if v == [symbol_from_str("scheme"), symbol_from_str("write")] {
+            self.import_bindings(&write::EXPORTED_BINDINGS);
+            return Ok(());
+        }
+        Err("Usupported import set format".to_string())
     }
 
     fn evaluate_import(&mut self, args: &[Value]) -> Result<Value, String> {
@@ -971,14 +979,6 @@ impl fmt::Display for Procedure {
 mod tests {
     use super::*;
     use crate::parser::parse;
-
-    fn intern_str(s: &str) -> Intern<String> {
-        Intern::new(s.to_string())
-    }
-
-    fn symbol_from_str(s: &str) -> Value {
-        Value::Symbol(intern_str(s))
-    }
 
     #[test]
     fn test_environment() {
