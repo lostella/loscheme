@@ -5,7 +5,7 @@ use std::io::{self, BufRead};
 use std::mem::take;
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 91] = [
+pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 94] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -76,6 +76,9 @@ pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 91] = [
     ("map", builtin_map),
     ("reverse", builtin_reverse),
     ("read", builtin_read),
+    ("newline", builtin_newline),
+    ("write-char", builtin_writechar),
+    ("write-string", builtin_writestring),
     ("quotient", builtin_quotient),
     ("remainder", builtin_remainder),
     ("modulo", builtin_modulo),
@@ -778,6 +781,36 @@ fn builtin_read(values: Vec<Value>) -> Result<MaybeValue, String> {
         }
         let _ = io::stdin().lock().read_line(&mut input);
     }
+}
+
+fn builtin_newline(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if !values.is_empty() {
+        return Err("Newline takes no arguments".to_string());
+    }
+    println!();
+    Ok(MaybeValue::Just(Value::Unspecified))
+}
+
+fn builtin_writechar(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() > 1 {
+        return Err("Write-char takes one argument".to_string());
+    }
+    let Some(Value::Char(c)) = values.first() else {
+        return Err("Write-char takes a char as argument".to_string());
+    };
+    print!("{c}");
+    Ok(MaybeValue::Just(Value::Unspecified))
+}
+
+fn builtin_writestring(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() > 1 {
+        return Err("Write-string takes one argument".to_string());
+    }
+    let Some(Value::Str(s)) = values.first() else {
+        return Err("Write-string takes a string as argument".to_string());
+    };
+    print!("{s}");
+    Ok(MaybeValue::Just(Value::Unspecified))
 }
 
 fn builtin_makelist(values: Vec<Value>) -> Result<MaybeValue, String> {

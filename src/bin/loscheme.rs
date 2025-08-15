@@ -1,5 +1,5 @@
 use loscheme::run::{run, run_standard};
-use loscheme::treewalk::Environment;
+use loscheme::treewalk::{Environment, Value};
 use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
@@ -37,7 +37,6 @@ fn repl_loop() -> ExitCode {
         let read_res = stdin.lock().read_line(&mut input);
         match read_res {
             Ok(0) => {
-                println!();
                 continue;
             }
             Ok(_) => {
@@ -45,6 +44,7 @@ fn repl_loop() -> ExitCode {
                     break;
                 }
                 match run(&input, &mut env) {
+                    Ok(Value::Unspecified) => (),
                     Ok(v) => println!("{v}"),
                     Err(err) => eprintln!("{err}"),
                 }
