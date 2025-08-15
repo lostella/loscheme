@@ -476,6 +476,9 @@ fn test_language_features() {
             "",
         ),
         ("(five-sum 1 2 3 4)", "50"),
+        ("(include \"./tests/test-1.scm\" \"./tests/test-2.scm\")", ""),
+        ("(f1 42)", "84"),
+        ("(f2 42)", "126"),
     ];
 
     let mut env = Environment::standard().child();

@@ -1,10 +1,12 @@
 use crate::char::char_to_external;
-use crate::parser::{Expr, Keyword};
+use crate::parser::{parse, Expr, Keyword};
 use crate::rationals::{lcm, simplify};
 use internment::Intern;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::fmt;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::iter::zip;
 use std::rc::Rc;
 
@@ -527,6 +529,7 @@ impl Environment {
         let args = pair.1.clone().into_vec()?;
 
         match pair.0 {
+            Value::Keyword(Keyword::Include) => Ok(MaybeValue::Just(self.evaluate_include(&args)?)),
             Value::Keyword(Keyword::Import) => Ok(MaybeValue::Just(self.evaluate_import(&args)?)),
             Value::Keyword(Keyword::Quote) => Ok(MaybeValue::Just(self.evaluate_quote(&args)?)),
             Value::Keyword(Keyword::Quasiquote) => {
@@ -556,6 +559,43 @@ impl Environment {
                 stuff => Err(format!("Not a procedure call: {stuff}")),
             },
         }
+    }
+
+    fn include_file(&mut self, filename: String) -> Result<Value, String> {
+        let file = File::open(filename).expect("Unable to open file");
+        let reader = BufReader::new(file);
+        let mut code = String::new();
+
+        for res in reader.lines() {
+            let line = res.expect("Unable to read line");
+            match line.find(';') {
+                Some(idx) => code.push_str(&line[..idx]),
+                None => code.push_str(&line),
+            }
+            code.push('\n');
+        }
+
+        let exprs = parse(&code)?;
+        let mut val = Value::Unspecified;
+
+        for expr in exprs {
+            val = self.evaluate(Value::from(expr))?;
+        }
+
+        Ok(val)
+    }
+
+    fn evaluate_include(&mut self, args: &[Value]) -> Result<Value, String> {
+        let mut val = Value::Unspecified;
+
+        for arg in args {
+            let Value::Str(filename) = arg else {
+                return Err("Include only takes strings as arguments".to_string());
+            };
+            val = self.include_file(filename.to_string())?;
+        }
+
+        Ok(val)
     }
 
     fn import_bindings(&mut self, bindings: &[(&str, BuiltInFnType)]) {

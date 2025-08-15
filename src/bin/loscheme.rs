@@ -44,12 +44,7 @@ fn repl_loop() -> ExitCode {
                 if input.split_once(":quit").is_some() {
                     break;
                 }
-                let to_be_run = if let Some((_, filename)) = input.trim().split_once(":load ") {
-                    read_code_file(filename)
-                } else {
-                    input
-                };
-                match run(&to_be_run, &mut env) {
+                match run(&input, &mut env) {
                     Ok(v) => println!("{v}"),
                     Err(err) => eprintln!("{err}"),
                 }

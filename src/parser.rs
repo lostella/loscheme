@@ -183,6 +183,7 @@ impl Iterator for Tokenizer<'_> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Keyword {
+    Include,
     Import,
     Quote,
     Quasiquote,
@@ -209,6 +210,7 @@ impl FromStr for Keyword {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "include" => Ok(Keyword::Include),
             "import" => Ok(Keyword::Import),
             "lambda" => Ok(Keyword::Lambda),
             "quote" => Ok(Keyword::Quote),
@@ -236,6 +238,7 @@ impl FromStr for Keyword {
 impl fmt::Display for Keyword {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Keyword::Include => write!(f, "include"),
             Keyword::Import => write!(f, "import"),
             Keyword::Lambda => write!(f, "lambda"),
             Keyword::Quote => write!(f, "quote"),
