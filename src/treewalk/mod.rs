@@ -1,12 +1,11 @@
 use crate::char::char_to_external;
 use crate::parser::{parse, Expr, Keyword};
 use crate::rationals::{lcm, simplify};
+use crate::utils::read_code;
 use internment::Intern;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::fmt;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::iter::zip;
 use std::rc::Rc;
 
@@ -561,20 +560,8 @@ impl Environment {
         }
     }
 
-    fn include_file(&mut self, filename: String) -> Result<Value, String> {
-        let file = File::open(filename).expect("Unable to open file");
-        let reader = BufReader::new(file);
-        let mut code = String::new();
-
-        for res in reader.lines() {
-            let line = res.expect("Unable to read line");
-            match line.find(';') {
-                Some(idx) => code.push_str(&line[..idx]),
-                None => code.push_str(&line),
-            }
-            code.push('\n');
-        }
-
+    fn include_file(&mut self, filename: &str) -> Result<Value, String> {
+        let code = read_code(filename)?;
         let exprs = parse(&code)?;
         let mut val = Value::Unspecified;
 
@@ -592,7 +579,7 @@ impl Environment {
             let Value::Str(filename) = arg else {
                 return Err("Include only takes strings as arguments".to_string());
             };
-            val = self.include_file(filename.to_string())?;
+            val = self.include_file(filename)?;
         }
 
         Ok(val)

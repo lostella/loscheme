@@ -1,28 +1,11 @@
 use loscheme::run::{run, run_standard};
 use loscheme::treewalk::{Environment, Value};
+use loscheme::utils::read_code;
 use std::env;
-use std::fs::File;
-use std::io::{self, prelude::*, BufReader};
+use std::io::{self, prelude::*};
 use std::process::ExitCode;
 
 const REPL_PROMPT: &str = "λscm>";
-
-fn read_code_file(filename: &str) -> String {
-    let file = File::open(filename).expect("Unable to open file");
-    let reader = BufReader::new(file);
-    let mut code = String::new();
-
-    for res in reader.lines() {
-        let line = res.expect("Unable to read line");
-        match line.find(';') {
-            Some(idx) => code.push_str(&line[..idx]),
-            None => code.push_str(&line),
-        }
-        code.push('\n');
-    }
-
-    code
-}
 
 fn repl_loop() -> ExitCode {
     let stdin = io::stdin();
@@ -58,14 +41,19 @@ fn repl_loop() -> ExitCode {
 }
 
 fn script_loop(filename: &str) -> ExitCode {
-    let code = read_code_file(filename);
-    let output = run_standard(&code);
+    let maybe_code = read_code(filename);
+    let output = match maybe_code {
+        Ok(code) => run_standard(&code),
+        Err(err) => {
+            eprintln!("{err}");
+            return ExitCode::from(1);
+        }
+    };
     if let Err(err) = output {
         eprintln!("{err}");
-        ExitCode::from(1)
-    } else {
-        ExitCode::SUCCESS
+        return ExitCode::from(1);
     }
+    ExitCode::SUCCESS
 }
 
 fn main() -> ExitCode {
