@@ -322,9 +322,7 @@ impl Compiler {
 
     fn compile_define(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
         let Some((Expr::Symbol(s), rest)) = args.split_first() else {
-            return Err(
-                "`define` takes at least 2 arguments, the first being a symbol".to_string(),
-            );
+            return Err("`define` takes at least 1 argument".to_string());
         };
         let mut instr = vec![];
         for expr in rest {
