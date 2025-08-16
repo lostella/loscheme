@@ -5,7 +5,7 @@ use std::io::{self, BufRead};
 use std::mem::take;
 use std::rc::Rc;
 
-pub const BUILTIN_BINDINGS: [(&str, BuiltInFnType); 94] = [
+pub const EXPORTED_BINDINGS: [(&str, BuiltInFnType); 94] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),

@@ -9,7 +9,7 @@ use std::fmt;
 use std::iter::zip;
 use std::rc::Rc;
 
-mod builtin;
+mod base;
 mod write;
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -481,14 +481,14 @@ impl Environment {
     #[must_use]
     pub fn standard() -> Self {
         let mut env = Self::empty();
-        env.import_bindings(&builtin::BUILTIN_BINDINGS);
+        env.import_bindings(&base::EXPORTED_BINDINGS);
         env
     }
 
     #[must_use]
     pub fn replenv() -> Self {
         let mut env = Self::empty();
-        env.import_bindings(&builtin::BUILTIN_BINDINGS);
+        env.import_bindings(&base::EXPORTED_BINDINGS);
         env.import_bindings(&write::EXPORTED_BINDINGS);
         env
     }
@@ -600,7 +600,7 @@ impl Environment {
     fn evaluate_import_set(&mut self, import_set: &Value) -> Result<(), String> {
         let v = import_set.clone().into_vec()?;
         if v == [symbol_from_str("scheme"), symbol_from_str("base")] {
-            self.import_bindings(&builtin::BUILTIN_BINDINGS);
+            self.import_bindings(&base::EXPORTED_BINDINGS);
             return Ok(());
         }
         if v == [symbol_from_str("scheme"), symbol_from_str("write")] {
@@ -801,7 +801,7 @@ impl Environment {
                         }
                     }
                     for datum in p.borrow().0.clone().into_vec()? {
-                        if builtin::eqv(&val, &datum) {
+                        if base::eqv(&val, &datum) {
                             return self.evaluate_begin(&seq);
                         }
                     }
