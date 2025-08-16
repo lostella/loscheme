@@ -10,6 +10,7 @@ use std::iter::zip;
 use std::rc::Rc;
 
 mod base;
+mod char;
 mod write;
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -603,6 +604,10 @@ impl Environment {
             self.import_bindings(&base::EXPORTED_BINDINGS);
             return Ok(());
         }
+        if v == [symbol_from_str("scheme"), symbol_from_str("char")] {
+            self.import_bindings(&char::EXPORTED_BINDINGS);
+            return Ok(());
+        }
         if v == [symbol_from_str("scheme"), symbol_from_str("write")] {
             self.import_bindings(&write::EXPORTED_BINDINGS);
             return Ok(());
@@ -839,6 +844,9 @@ impl Environment {
             return Err("Let needs at least one argument".to_string());
         }
         let mut child = self.child();
+        if let Some(Value::Symbol(_)) = args.first() {
+            return Err("Named let not supported yet".to_string());
+        }
         for expr in args[0].clone().into_vec()? {
             match expr {
                 Value::Pair(p) => {

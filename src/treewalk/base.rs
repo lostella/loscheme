@@ -5,7 +5,7 @@ use std::io::{self, BufRead};
 use std::mem::take;
 use std::rc::Rc;
 
-pub const EXPORTED_BINDINGS: [(&str, BuiltInFnType); 94] = [
+pub const EXPORTED_BINDINGS: [(&str, BuiltInFnType); 95] = [
     ("+", builtin_add),
     ("-", builtin_sub),
     ("*", builtin_mul),
@@ -100,6 +100,7 @@ pub const EXPORTED_BINDINGS: [(&str, BuiltInFnType); 94] = [
     ("asin", builtin_asin),
     ("acos", builtin_acos),
     ("atan", builtin_atan),
+    ("string-length", builtin_stringlength),
 ];
 
 fn builtin_add(values: Vec<Value>) -> Result<MaybeValue, String> {
@@ -1030,6 +1031,16 @@ fn builtin_atan(values: Vec<Value>) -> Result<MaybeValue, String> {
         Value::Float(f) => Ok(MaybeValue::Just(Value::Float(f.atan()))),
         _ => Err("Unsupported type for atan".to_string()),
     }
+}
+
+fn builtin_stringlength(values: Vec<Value>) -> Result<MaybeValue, String> {
+    if values.len() != 1 {
+        return Err("String-length needs exactly one argument".to_string());
+    }
+    let Some(Value::Str(s)) = values.first() else {
+        return Err("String-length needs a string as argument".to_string());
+    };
+    Ok(MaybeValue::Just(Value::Integer(s.len() as i64)))
 }
 
 #[cfg(test)]
