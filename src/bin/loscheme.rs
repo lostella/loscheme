@@ -6,36 +6,81 @@ use std::io::{self, prelude::*};
 use std::process::ExitCode;
 
 const REPL_PROMPT: &str = "λscm>";
+const REPL_PROMPT_CONT: &str = "....>";
+
+fn parens_balanced(s: &str) -> bool {
+    let mut balance = 0;
+    let mut in_string = false;
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => in_string = !in_string,
+            '(' if !in_string => balance += 1,
+            ')' if !in_string => {
+                if balance == 0 {
+                    return false; // Unmatched closing paren
+                }
+                balance -= 1;
+            }
+            ';' if !in_string => {
+                // Skip comments
+                while let Some(&next_c) = chars.peek() {
+                    if next_c == '\n' {
+                        break;
+                    }
+                    chars.next();
+                }
+            }
+            _ => (),
+        }
+    }
+    balance == 0
+}
 
 fn repl_loop() -> ExitCode {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut env = Environment::replenv().child();
+    let mut buffer = String::new();
 
     loop {
-        print!("{REPL_PROMPT} ");
+        if buffer.is_empty() {
+            print!("{REPL_PROMPT} ");
+        } else {
+            print!("{REPL_PROMPT_CONT} ");
+        }
         stdout.flush().unwrap();
 
         let mut input = String::new();
-        let read_res = stdin.lock().read_line(&mut input);
-        match read_res {
+        match stdin.lock().read_line(&mut input) {
             Ok(0) => {
                 // EOF (Ctrl-D)
+                if !buffer.is_empty() {
+                    eprintln!("\nWarning: exiting with incomplete expression:\n{}", buffer);
+                }
                 println!(); // Print a newline for clean exit
                 break;
             }
             Ok(_) => {
-                let input = input.trim();
-                if input == ":quit" {
+                buffer.push_str(&input);
+
+                let buffer_trimmed = buffer.trim();
+                if buffer_trimmed == ":quit" {
                     break;
                 }
-                if input.is_empty() {
+                if buffer_trimmed.is_empty() {
+                    buffer.clear();
                     continue;
                 }
-                match run(input, &mut env) {
-                    Ok(Value::Unspecified) => (),
-                    Ok(v) => println!("{v}"),
-                    Err(err) => eprintln!("{err}"),
+
+                if parens_balanced(&buffer) {
+                    match run(&buffer, &mut env) {
+                        Ok(Value::Unspecified) => (),
+                        Ok(v) => println!("{v}"),
+                        Err(err) => eprintln!("{err}"),
+                    }
+                    buffer.clear();
                 }
             }
             Err(err) => {
