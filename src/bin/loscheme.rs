@@ -111,10 +111,13 @@ fn script_loop(filename: &str) -> ExitCode {
 
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
-    let program_name = args.get(0).map_or("loscheme", |s| s.as_str());
+    let program_name = args.first().map_or("loscheme", |s| s.as_str());
 
     if args.len() > 2 {
-        eprintln!("Error: expected one file argument at most, got {}", args.len() - 1);
+        eprintln!(
+            "Error: expected one file argument at most, got {}",
+            args.len() - 1
+        );
         eprintln!("Usage: {} [script_file]", program_name);
         return ExitCode::from(1);
     }
