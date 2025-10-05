@@ -152,7 +152,11 @@ impl VM {
                 self.push(self.stack[src].clone());
             }
             Instruction::StoreLocal { offset } => {
-                self.stack[self.fp + offset as usize] = self.pop()?;
+                let dest = self.fp + offset as usize;
+                self.stack[dest] = self.pop()?;
+                if self.sp <= dest {
+                    self.sp = dest + 1
+                }
             }
             Instruction::LoadGlobal { offset } => {
                 self.push(self.globals[offset as usize].clone());
@@ -178,6 +182,9 @@ impl VM {
     }
 
     fn _run(&mut self, debug: bool) -> Result<(), &'static str> {
+        if debug {
+            println!("code: {:?}", self.code)
+        }
         while self.ip < self.code.len() {
             if debug {
                 println!("{self}")
@@ -209,18 +216,19 @@ impl fmt::Display for VM {
     }
 }
 
+#[derive(Debug)]
 struct Compiler {
     global_scope: HashMap<String, SymbolInfo>,
     local_scopes: Vec<HashMap<String, SymbolInfo>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum SymbolKind {
     Local,
     Global,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct SymbolInfo {
     kind: SymbolKind,
     index: i8,
@@ -393,11 +401,40 @@ impl Compiler {
     }
 
     fn compile_lambda(&mut self, _: &[Expr]) -> Result<Vec<Instruction>, String> {
-        todo!("lambda")
+        todo!("lambda");
         // TODO:
         // - lambda pushes new environment onto the compiler stack
         // - compile each expression in the body of the lambda
         // - concatenate output code
+        //
+        // Example:
+        // (define plus-one (lambda (x) (+ 1 x)))
+        //
+        // Example:
+        // (define a 3)
+        // (define plus-a (lambda (x) (+ a x)))
+
+        // let Some((Expr::List(arguments), body)) = args.split_first() else {
+        //     return Err("`lambda`: needs at least 1 argument (a list of arguments)".to_string());
+        // };
+        // // create local scope
+        // let mut local_scope = HashMap::<String, SymbolInfo>::new();
+        // for (idx, argument) in arguments.iter().enumerate() {
+        //     let Expr::Symbol(s) = argument else {
+        //         return Err("`lambda`: the list of arguments must contain symbols".to_string());
+        //     };
+        //     local_scope.insert(
+        //         s.to_string(),
+        //         SymbolInfo {
+        //             kind: SymbolKind::Local,
+        //             index: idx as i8,
+        //         },
+        //     );
+        // }
+        // self.local_scopes.push(local_scope);
+        // let instr = self.compile_begin(body)?;
+        // self.local_scopes.pop();
+        // Ok(instr)
     }
 
     fn compile_cmp(&mut self, cmp: &str, args: &[Expr]) -> Result<Vec<Instruction>, String> {
@@ -415,13 +452,16 @@ impl Compiler {
     }
 
     fn compile_add(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
-        if args.len() != 2 {
-            return Err("`+` takes exactly 2 arguments".to_string());
+        let Some((first, mut rest)) = args.split_first() else {
+            return Ok(vec![Instruction::Push { value: Value::Int(0) }])
+        };
+        let mut instr = self.compile_expr(first)?;
+        while let Some((first, next_rest)) = rest.split_first() {
+            let mut new_instr = self.compile_expr(first)?;
+            instr.append(&mut new_instr);
+            instr.push(Instruction::Add);
+            rest = next_rest;
         }
-        let mut instr = self.compile_expr(&args[0])?;
-        let mut instr_op2 = self.compile_expr(&args[1])?;
-        instr.append(&mut instr_op2);
-        instr.push(Instruction::Add);
         Ok(instr)
     }
 
@@ -487,6 +527,7 @@ mod tests {
             ("#t", Some(Bool(true))),
             ("#f", Some(Bool(false))),
             ("42", Some(Int(42))),
+            ("(+ 3 4 5 6)", Some(Int(18))),
             ("(if #t 1 0)", Some(Int(1))),
             ("(if #f 1 0)", Some(Int(0))),
             ("(if (< 2 3) 1 0)", Some(Int(1))),
@@ -503,7 +544,16 @@ mod tests {
             ("(define y #f) (define x 6) (define y 42) y", Some(Int(42))),
             ("(let ((a 3)) (+ a 1))", Some(Int(4))),
             ("(let ((a 3) (b 4)) (+ a b))", Some(Int(7))),
+            ("(let ((a 3) (b 4)) (define c 5) (define d 6) (+ a b c d))", Some(Int(18))),
             ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", Some(Int(46))),
+            // (
+            //     "(define a 3) (define plus-a (lambda (x) (+ a 3))) (plus-a 4)",
+            //     Some(Int(7)),
+            // ),
+            // (
+            //     "(define make-adder (lambda (a) (lambda (x) (+ a x)))) (define a 5) (define plus-a (make-adder a)) (define a 42) (plus-a 6)",
+            //     Some(Int(11)),
+            // ),
         ];
 
         for (code, expected_res) in cases {
