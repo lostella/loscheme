@@ -453,7 +453,9 @@ impl Compiler {
 
     fn compile_add(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
         let Some((first, mut rest)) = args.split_first() else {
-            return Ok(vec![Instruction::Push { value: Value::Int(0) }])
+            return Ok(vec![Instruction::Push {
+                value: Value::Int(0),
+            }]);
         };
         let mut instr = self.compile_expr(first)?;
         while let Some((first, next_rest)) = rest.split_first() {
@@ -544,7 +546,10 @@ mod tests {
             ("(define y #f) (define x 6) (define y 42) y", Some(Int(42))),
             ("(let ((a 3)) (+ a 1))", Some(Int(4))),
             ("(let ((a 3) (b 4)) (+ a b))", Some(Int(7))),
-            ("(let ((a 3) (b 4)) (define c 5) (define d 6) (+ a b c d))", Some(Int(18))),
+            (
+                "(let ((a 3) (b 4)) (define c 5) (define d 6) (+ a b c d))",
+                Some(Int(18)),
+            ),
             ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", Some(Int(46))),
             // (
             //     "(define a 3) (define plus-a (lambda (x) (+ a 3))) (plus-a 4)",
