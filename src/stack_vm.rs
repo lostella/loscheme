@@ -1,11 +1,12 @@
 use crate::parser::{Expr, Keyword};
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, collections::VecDeque, fmt};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Pointer(usize),
     Bool(bool),
     Int(i64),
+    Procedure { addr: usize, arity: u8 },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,7 +18,8 @@ pub enum Instruction {
     LessThan,
     Jump { offset: i16 },
     JumpIfTrue { offset: i16 },
-    Call { addr: usize },
+    // Call { addr: usize },
+    CallStack,
     StackAlloc { size: i8 },
     LoadLocal { offset: i8 },
     StoreLocal { offset: i8 },
@@ -134,7 +136,10 @@ impl VM {
             Instruction::Print => {
                 println!("{:?}", self.pop()?);
             }
-            Instruction::Call { addr } => {
+            Instruction::CallStack => {
+                let Ok(Value::Procedure { addr, arity: _ }) = self.pop() else {
+                    return Err("Invalid operand for CallStack");
+                };
                 self.push(Value::Pointer(self.fp));
                 self.push(Value::Pointer(self.ip));
                 self.fp = self.sp;
@@ -217,7 +222,7 @@ impl fmt::Display for VM {
 }
 
 #[derive(Debug)]
-struct Compiler {
+pub struct Compiler {
     global_scope: HashMap<String, SymbolInfo>,
     local_scopes: Vec<HashMap<String, SymbolInfo>>,
 }
@@ -235,11 +240,15 @@ struct SymbolInfo {
 }
 
 impl Compiler {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Compiler {
             global_scope: HashMap::<String, SymbolInfo>::new(),
             local_scopes: vec![],
         }
+    }
+
+    pub fn compile(&mut self, exprs: &[Expr]) -> Result<Vec<Instruction>, String> {
+        self.compile_begin(exprs)
     }
 
     fn get_symbol_info(&self, symbol: &String) -> Option<SymbolInfo> {
@@ -275,7 +284,7 @@ impl Compiler {
                 };
                 Ok(vec![instr])
             }
-            _ => todo!("{expr}"),
+            _ => return Err(format!("Cannot compile expression: {expr}")),
         }
     }
 
@@ -295,10 +304,20 @@ impl Compiler {
                     "<" | ">" | "<=" | ">=" => self.compile_cmp(s, rest),
                     "+" => self.compile_add(rest),
                     "-" => self.compile_sub(rest),
-                    _ => todo!("list starting with: {first}"),
+                    _ => todo!("list starting with symbol: {first}"),
                 }
             }
-            _ => todo!("list starting with: {first}"),
+            Expr::List(v) => {
+                // todo!("list starting with list: {first}");
+                let mut instr = vec![];
+                for expr in rest.iter().rev() {
+                    instr.extend(self.compile(&[expr.clone()])?)
+                }
+                instr.extend(self.compile_list(&v)?);
+                instr.push(Instruction::CallStack);
+                Ok(instr)
+            }
+            _ => todo!("list starting with: {first:?}"),
         }
     }
 
@@ -400,8 +419,8 @@ impl Compiler {
         Ok(instr)
     }
 
-    fn compile_lambda(&mut self, _: &[Expr]) -> Result<Vec<Instruction>, String> {
-        todo!("lambda");
+    fn compile_lambda(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
+        // todo!("lambda");
         // TODO:
         // - lambda pushes new environment onto the compiler stack
         // - compile each expression in the body of the lambda
@@ -414,27 +433,36 @@ impl Compiler {
         // (define a 3)
         // (define plus-a (lambda (x) (+ a x)))
 
-        // let Some((Expr::List(arguments), body)) = args.split_first() else {
-        //     return Err("`lambda`: needs at least 1 argument (a list of arguments)".to_string());
-        // };
-        // // create local scope
-        // let mut local_scope = HashMap::<String, SymbolInfo>::new();
-        // for (idx, argument) in arguments.iter().enumerate() {
-        //     let Expr::Symbol(s) = argument else {
-        //         return Err("`lambda`: the list of arguments must contain symbols".to_string());
-        //     };
-        //     local_scope.insert(
-        //         s.to_string(),
-        //         SymbolInfo {
-        //             kind: SymbolKind::Local,
-        //             index: idx as i8,
-        //         },
-        //     );
-        // }
-        // self.local_scopes.push(local_scope);
-        // let instr = self.compile_begin(body)?;
-        // self.local_scopes.pop();
-        // Ok(instr)
+        let Some((Expr::List(arguments), body)) = args.split_first() else {
+            return Err("`lambda`: needs at least 1 argument (a list of arguments)".to_string());
+        };
+        // create local scope
+        let mut local_scope = HashMap::<String, SymbolInfo>::new();
+        for (idx, argument) in arguments.iter().enumerate() {
+            let Expr::Symbol(s) = argument else {
+                return Err("`lambda`: the list of arguments must contain symbols".to_string());
+            };
+            local_scope.insert(
+                s.to_string(),
+                SymbolInfo {
+                    kind: SymbolKind::Local,
+                    index: idx as i8,
+                },
+            );
+        }
+        self.local_scopes.push(local_scope);
+        let mut instr = VecDeque::from(self.compile_begin(body)?);
+        self.local_scopes.pop();
+        instr.push_front(Instruction::Jump {
+            offset: instr.len() as i16 + 1,
+        });
+        instr.push_back(Instruction::Push {
+            value: Value::Procedure {
+                addr: 1,
+                arity: arguments.len() as u8,
+            },
+        });
+        Ok(instr.into())
     }
 
     fn compile_cmp(&mut self, cmp: &str, args: &[Expr]) -> Result<Vec<Instruction>, String> {
@@ -479,14 +507,9 @@ impl Compiler {
     }
 }
 
-pub fn compile(exprs: &[Expr]) -> Result<Vec<Instruction>, String> {
-    let mut comp = Compiler::new();
-    comp.compile_begin(exprs)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{compile, Instruction::*, Value::*, VM};
+    use super::{Compiler, Instruction::*, Value::*, VM};
     use crate::parser::parse;
 
     #[test]
@@ -494,8 +517,11 @@ mod tests {
         let code = vec![
             // main:
             Push { value: Int(6) }, // argument for fib
-            Call { addr: 3 },       // call fib
-            Halt,                   // halt
+            Push {
+                value: Procedure { addr: 4, arity: 1 },
+            },
+            CallStack, // call fib
+            Halt,      // halt
             // fib:
             StackAlloc { size: 1 },
             Push { value: Int(1) },   // push 1
@@ -507,12 +533,18 @@ mod tests {
             LoadLocal { offset: -3 },
             Push { value: Int(1) },
             Sub,
-            Call { addr: 3 }, // fib(n - 1)
+            Push {
+                value: Procedure { addr: 4, arity: 1 },
+            },
+            CallStack, // fib(n - 1)
             StoreLocal { offset: 0 },
             LoadLocal { offset: -3 },
             Push { value: Int(2) },
             Sub,
-            Call { addr: 3 }, // fib(n - 2)
+            Push {
+                value: Procedure { addr: 4, arity: 1 },
+            },
+            CallStack, // fib(n - 2)
             LoadLocal { offset: 0 },
             Add,
             Ret,
@@ -550,7 +582,13 @@ mod tests {
                 "(let ((a 3) (b 4)) (define c 5) (define d 6) (+ a b c d))",
                 Some(Int(18)),
             ),
+            ("(define a 3) (let ((a 15)) (+ a 4) (+ a 2))", Some(Int(17))),
             ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", Some(Int(46))),
+            (
+                "(lambda (x) (+ x 1))",
+                Some(Procedure { addr: 1, arity: 1 }),
+            ),
+            // ("((lambda (x) (+ x 1)) 3)", Some(Int(4))),
             // (
             //     "(define a 3) (define plus-a (lambda (x) (+ a 3))) (plus-a 4)",
             //     Some(Int(7)),
@@ -563,9 +601,10 @@ mod tests {
 
         for (code, expected_res) in cases {
             let exprs = parse(code).unwrap();
-            let instr = compile(&exprs).unwrap();
+            let mut compiler = Compiler::new();
+            let instr = compiler.compile(&exprs).unwrap();
             let mut vm = VM::new(instr);
-            vm.run().unwrap();
+            vm.debug().unwrap();
             assert_eq!(
                 vm.clone_stack_top(),
                 expected_res,
@@ -583,7 +622,8 @@ mod tests {
 
         for (code, expected_res) in cases {
             let exprs = parse(code).unwrap();
-            assert_eq!(compile(&exprs), expected_res);
+            let mut compiler = Compiler::new();
+            assert_eq!(compiler.compile(&exprs), expected_res);
         }
     }
 }

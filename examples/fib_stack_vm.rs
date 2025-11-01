@@ -3,9 +3,12 @@ use loscheme::stack_vm::{Instruction::*, Value::*, VM};
 fn main() {
     let code = vec![
         // main:
-        Push { value: Int(30) }, // argument for fib
-        Call { addr: 3 },        // call fib(20)
-        Halt,                    // halt
+        Push { value: Int(35) }, // argument for fib
+        Push {
+            value: Procedure { addr: 4, arity: 1 },
+        },
+        CallStack, // call fib
+        Halt,      // halt
         // fib:
         StackAlloc { size: 1 },
         Push { value: Int(1) },   // push 1
@@ -17,12 +20,18 @@ fn main() {
         LoadLocal { offset: -3 },
         Push { value: Int(1) },
         Sub,
-        Call { addr: 3 }, // fib(n - 1)
+        Push {
+            value: Procedure { addr: 4, arity: 1 },
+        },
+        CallStack, // fib(n - 1)
         StoreLocal { offset: 0 },
         LoadLocal { offset: -3 },
         Push { value: Int(2) },
         Sub,
-        Call { addr: 3 }, // fib(n - 2)
+        Push {
+            value: Procedure { addr: 4, arity: 1 },
+        },
+        CallStack, // fib(n - 2)
         LoadLocal { offset: 0 },
         Add,
         Ret,
