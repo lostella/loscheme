@@ -157,10 +157,10 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod test {
     use super::parens_balanced;
-    
+
     #[test]
     fn test_balanced() {
-        let code = r#"
+        let balanced_code = r#"
             (define fact
                 (lambda (n) (
                     ; this is a comment )
@@ -168,6 +168,16 @@ mod test {
                     1
                     (* n (fact (- n 1))))))
         "#;
-        assert_eq!(parens_balanced(&code), true)
+        assert_eq!(parens_balanced(&balanced_code), true);
+
+        let unbalanced_code = r#"
+            (define fact
+                (lambda (n) (
+                    ; this is a comment )
+                    if (<= n 1)
+                    1
+                    (* n (fact (- n 1)))))
+        "#;
+        assert_eq!(parens_balanced(&unbalanced_code), false)
     }
 }
