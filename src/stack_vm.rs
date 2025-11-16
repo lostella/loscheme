@@ -239,6 +239,12 @@ struct SymbolInfo {
     index: i8,
 }
 
+impl Default for Compiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
@@ -284,7 +290,7 @@ impl Compiler {
                 };
                 Ok(vec![instr])
             }
-            _ => return Err(format!("Cannot compile expression: {expr}")),
+            _ => Err(format!("Cannot compile expression: {expr}")),
         }
     }
 
@@ -311,9 +317,9 @@ impl Compiler {
                 // todo!("list starting with list: {first}");
                 let mut instr = vec![];
                 for expr in rest.iter().rev() {
-                    instr.extend(self.compile(&[expr.clone()])?)
+                    instr.extend(self.compile(std::slice::from_ref(expr))?)
                 }
-                instr.extend(self.compile_list(&v)?);
+                instr.extend(self.compile_list(v)?);
                 instr.push(Instruction::CallStack);
                 Ok(instr)
             }
