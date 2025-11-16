@@ -153,3 +153,21 @@ fn main() -> ExitCode {
         repl_loop()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::parens_balanced;
+    
+    #[test]
+    fn test_balanced() {
+        let code = r#"
+            (define fact
+                (lambda (n) (
+                    ; this is a comment )
+                    if (<= n 1)
+                    1
+                    (* n (fact (- n 1))))))
+        "#;
+        assert_eq!(parens_balanced(&code), true)
+    }
+}
