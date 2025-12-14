@@ -141,7 +141,11 @@ impl Compiler {
                     "<" | ">" | "<=" | ">=" => self.compile_cmp(s, rest),
                     "+" => self.compile_add(rest),
                     "-" => self.compile_sub(rest),
-                    _ => todo!("list starting with symbol: {first}"),
+                    _ => {
+                        self.compile_expr(first)?;
+                        self.emit(Instruction::CallStack);
+                        Ok(())
+                    }
                 }
             }
             Expr::List(v) => {

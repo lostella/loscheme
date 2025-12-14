@@ -192,6 +192,7 @@ impl VM {
         if debug {
             println!("========================================");
             println!("code: {:?}", self.code);
+            println!("----------------------------------------");
             println!("{self}")
         }
         while self.ip < self.code.len() {
@@ -220,7 +221,7 @@ impl fmt::Display for VM {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
-            "fp: {}, sp: {}, ip: {} ({:?})",
+            "fp: {}, sp: {}, ip: {} ==> {:?}",
             self.fp,
             self.sp,
             self.ip,
