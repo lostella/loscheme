@@ -1,5 +1,5 @@
 use loscheme::parser::parse;
-use loscheme::stack_vm::{Compiler, VM};
+use loscheme::stack_vm::Compiler;
 
 fn run_example(name: &str, code: &str) {
     println!("-------------------------- {name}");
@@ -7,9 +7,7 @@ fn run_example(name: &str, code: &str) {
     let exprs = parse(code).unwrap();
     println!("exprs: {exprs:?}");
     let mut compiler = Compiler::new();
-    let instr = compiler.compile(&exprs).unwrap();
-    println!("instr: {instr:?}");
-    let mut vm = VM::new(instr);
+    let mut vm = compiler.compile(&exprs).unwrap();
     vm.run().unwrap();
     println!("stack: {:?}", vm.clone_stack());
     println!("  res: {:?}", vm.clone_stack_top());

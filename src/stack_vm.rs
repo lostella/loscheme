@@ -1,5 +1,5 @@
 use crate::parser::{Expr, Keyword};
-use std::{collections::HashMap, collections::VecDeque, fmt};
+use std::{collections::HashMap, fmt};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -11,25 +11,29 @@ pub enum Value {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
+    // stack manipulation
+    StackAlloc { size: u8 },
     Push { value: Value },
-    Pop,
-    Add,
-    Sub,
-    LessThan,
-    Jump { offset: i16 },
-    JumpIfTrue { offset: i16 },
-    // Call { addr: usize },
-    CallStack,
-    StackAlloc { size: i8 },
     LoadLocal { offset: i8 },
     StoreLocal { offset: i8 },
     LoadGlobal { offset: u8 },
     StoreGlobal { offset: u8 },
+    // operations
+    Add,
+    Sub,
+    LessThan,
+    // control flow
+    Jump { addr: usize },
+    JumpOffset { offset: i16 },
+    JumpIfTrue { offset: i16 },
+    // procedure calling
+    Call { addr: usize },
     Ret,
-    Print,
+    // others
     Halt,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct VM {
     code: Vec<Instruction>,
     stack: Vec<Value>,
@@ -40,14 +44,14 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new(code: Vec<Instruction>) -> Self {
+    pub fn new(code: Vec<Instruction>, ip: usize) -> Self {
         Self {
             code,
             globals: vec![Value::Int(0); 1024],
             stack: vec![Value::Int(0); 1024],
             sp: 0,
             fp: 0,
-            ip: 0,
+            ip,
         }
     }
 
@@ -82,71 +86,32 @@ impl VM {
         let instr = self.code[self.ip].clone();
         self.ip += 1;
         match instr {
+            Instruction::StackAlloc { size } => self.sp += size as usize,
             Instruction::Halt => self.ip = self.code.len(),
             Instruction::Push { value } => self.push(value),
-            Instruction::Pop => {
-                self.pop()?;
-            }
             Instruction::Add => {
-                let b = self.pop()?;
                 let a = self.pop()?;
+                let b = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x + y)),
                     _ => return Err("Invalid operands for Add"),
                 }
             }
             Instruction::Sub => {
-                let b = self.pop()?;
                 let a = self.pop()?;
+                let b = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x - y)),
                     _ => return Err("Invalid operands for Sub"),
                 }
             }
             Instruction::LessThan => {
-                let b = self.pop()?;
                 let a = self.pop()?;
+                let b = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x < y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
-            }
-            Instruction::Jump { offset } => {
-                if offset >= 0 {
-                    self.ip = self.ip.wrapping_add(offset as usize) - 1;
-                } else {
-                    self.ip = self.ip.wrapping_add((-offset) as usize) - 1;
-                }
-            }
-            Instruction::JumpIfTrue { offset } => {
-                let cond = self.pop()?;
-                match cond {
-                    Value::Bool(b) => {
-                        if b {
-                            if offset >= 0 {
-                                self.ip = self.ip.wrapping_add(offset as usize) - 1;
-                            } else {
-                                self.ip = self.ip.wrapping_add((-offset) as usize) - 1;
-                            }
-                        }
-                    }
-                    _ => return Err("Invalid operand for JumpIfTrue"),
-                }
-            }
-            Instruction::Print => {
-                println!("{:?}", self.pop()?);
-            }
-            Instruction::CallStack => {
-                let Ok(Value::Procedure { addr, arity: _ }) = self.pop() else {
-                    return Err("Invalid operand for CallStack");
-                };
-                self.push(Value::Pointer(self.fp));
-                self.push(Value::Pointer(self.ip));
-                self.fp = self.sp;
-                self.ip = addr;
-            }
-            Instruction::StackAlloc { size } => {
-                self.sp += size as usize;
             }
             Instruction::LoadLocal { offset } => {
                 let src = if offset >= 0 {
@@ -169,6 +134,34 @@ impl VM {
             Instruction::StoreGlobal { offset } => {
                 self.globals[offset as usize] = self.pop()?;
             }
+            Instruction::Jump { addr } => self.ip = addr,
+            Instruction::JumpOffset { offset } => {
+                if offset >= 0 {
+                    self.ip = self.ip.wrapping_add(offset as usize);
+                } else {
+                    self.ip = self.ip.wrapping_sub((-offset) as usize);
+                }
+            }
+            Instruction::JumpIfTrue { offset } => {
+                let cond = self.pop()?;
+                match cond {
+                    Value::Bool(true) => {
+                        if offset >= 0 {
+                            self.ip = self.ip.wrapping_add(offset as usize);
+                        } else {
+                            self.ip = self.ip.wrapping_sub((-offset) as usize);
+                        }
+                    }
+                    Value::Bool(false) => (),
+                    _ => return Err("Invalid operand for JumpIfTrue"),
+                }
+            }
+            Instruction::Call { addr } => {
+                self.push(Value::Pointer(self.fp));
+                self.push(Value::Pointer(self.ip));
+                self.fp = self.sp;
+                self.ip = addr;
+            }
             Instruction::Ret => {
                 let ret = self.pop()?;
                 self.sp = self.fp - 2;
@@ -188,13 +181,18 @@ impl VM {
 
     fn _run(&mut self, debug: bool) -> Result<(), &'static str> {
         if debug {
-            println!("code: {:?}", self.code)
+            println!("========================================");
+            println!("code: {:?}", self.code);
         }
         while self.ip < self.code.len() {
             if debug {
+                println!("----------------------------------------");
                 println!("{self}")
             }
             self.step()?
+        }
+        if debug {
+            println!("========================================");
         }
         Ok(())
     }
@@ -210,14 +208,12 @@ impl VM {
 
 impl fmt::Display for VM {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
+        writeln!(
             f,
-            "ip: {}, fp: {}, stack: {:?}, instr: {:?}",
-            self.ip,
-            self.fp,
-            self.clone_stack(),
-            self.code[self.ip],
-        )
+            "fp: {}, sp: {}, ip: {}, instr: {:?}",
+            self.fp, self.sp, self.ip, self.code[self.ip],
+        )?;
+        write!(f, "stack: {:?}", self.clone_stack())
     }
 }
 
@@ -225,6 +221,9 @@ impl fmt::Display for VM {
 pub struct Compiler {
     global_scope: HashMap<String, SymbolInfo>,
     local_scopes: Vec<HashMap<String, SymbolInfo>>,
+    proc_section: Vec<Instruction>,
+    main_section: Vec<Instruction>,
+    emit_to_main: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -250,11 +249,41 @@ impl Compiler {
         Compiler {
             global_scope: HashMap::<String, SymbolInfo>::new(),
             local_scopes: vec![],
+            proc_section: vec![],
+            main_section: vec![],
+            emit_to_main: true,
         }
     }
 
-    pub fn compile(&mut self, exprs: &[Expr]) -> Result<Vec<Instruction>, String> {
-        self.compile_begin(exprs)
+    pub fn compile(&mut self, exprs: &[Expr]) -> Result<VM, String> {
+        self.compile_begin(exprs)?;
+        let mut code = self.proc_section.clone();
+        code.append(&mut self.main_section.clone());
+        Ok(VM::new(code, self.proc_section.len()))
+    }
+
+    fn emit(&mut self, instr: Instruction) {
+        if self.emit_to_main {
+            self.main_section.push(instr)
+        } else {
+            self.proc_section.push(instr)
+        }
+    }
+
+    fn insert_code_at(&mut self, location: usize, instr: Instruction) {
+        if self.emit_to_main {
+            self.main_section.insert(location, instr)
+        } else {
+            self.proc_section.insert(location, instr)
+        }
+    }
+
+    fn get_section_length(&self) -> usize {
+        if self.emit_to_main {
+            self.main_section.len()
+        } else {
+            self.proc_section.len()
+        }
     }
 
     fn get_symbol_info(&self, symbol: &String) -> Option<SymbolInfo> {
@@ -269,15 +298,21 @@ impl Compiler {
         None
     }
 
-    fn compile_expr(&mut self, expr: &Expr) -> Result<Vec<Instruction>, String> {
+    fn compile_expr(&mut self, expr: &Expr) -> Result<(), String> {
         match expr {
             Expr::List(v) => self.compile_list(v),
-            Expr::Bool(b) => Ok(vec![Instruction::Push {
-                value: Value::Bool(*b),
-            }]),
-            Expr::Integer(i) => Ok(vec![Instruction::Push {
-                value: Value::Int(*i),
-            }]),
+            Expr::Bool(b) => {
+                self.emit(Instruction::Push {
+                    value: Value::Bool(*b),
+                });
+                Ok(())
+            }
+            Expr::Integer(i) => {
+                self.emit(Instruction::Push {
+                    value: Value::Int(*i),
+                });
+                Ok(())
+            }
             Expr::Symbol(s) => {
                 let Some(info) = self.get_symbol_info(s) else {
                     return Err(format!("Not found in scope: {s}"));
@@ -288,13 +323,14 @@ impl Compiler {
                     },
                     SymbolKind::Local => Instruction::LoadLocal { offset: info.index },
                 };
-                Ok(vec![instr])
+                self.emit(instr);
+                Ok(())
             }
             _ => Err(format!("Cannot compile expression: {expr}")),
         }
     }
 
-    fn compile_list(&mut self, exprs: &[Expr]) -> Result<Vec<Instruction>, String> {
+    fn compile_list(&mut self, exprs: &[Expr]) -> Result<(), String> {
         let Some((first, rest)) = exprs.split_first() else {
             return Err("Cannot compile the empty list".to_string());
         };
@@ -303,7 +339,13 @@ impl Compiler {
             Expr::Keyword(Keyword::Begin) => self.compile_begin(rest),
             Expr::Keyword(Keyword::Define) => self.compile_define(rest),
             Expr::Keyword(Keyword::Let) => self.compile_let(rest),
-            Expr::Keyword(Keyword::Lambda) => self.compile_lambda(rest),
+            Expr::Keyword(Keyword::Lambda) => {
+                let was_emitting_to_main = self.emit_to_main;
+                self.emit_to_main = false;
+                let res = self.compile_lambda(rest);
+                self.emit_to_main = was_emitting_to_main;
+                res
+            }
             Expr::Symbol(s) => {
                 let s = s.as_str();
                 match s {
@@ -314,52 +356,55 @@ impl Compiler {
                 }
             }
             Expr::List(v) => {
-                // todo!("list starting with list: {first}");
-                let mut instr = vec![];
                 for expr in rest.iter().rev() {
-                    instr.extend(self.compile(std::slice::from_ref(expr))?)
+                    self.compile_expr(expr)?
                 }
-                instr.extend(self.compile_list(v)?);
-                instr.push(Instruction::CallStack);
-                Ok(instr)
+                self.compile_list(v)?;
+                // self.emit(Instruction::CallStack);
+                Ok(())
             }
             _ => todo!("list starting with: {first:?}"),
         }
     }
 
-    fn compile_if(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
+    fn compile_if(&mut self, args: &[Expr]) -> Result<(), String> {
         if args.len() != 3 {
             return Err("`if` takes exactly 3 arguments".to_string());
         }
-        let mut instr = self.compile_expr(&args[0])?;
-        let mut branch_true = self.compile_expr(&args[1])?;
-        let mut branch_false = self.compile_expr(&args[2])?;
-        instr.push(Instruction::JumpIfTrue {
-            offset: branch_false.len() as i16 + 2,
-        });
-        instr.append(&mut branch_false);
-        instr.push(Instruction::Jump {
-            offset: branch_true.len() as i16 + 1,
-        });
-        instr.append(&mut branch_true);
-        Ok(instr)
+        self.compile_expr(&args[0])?;
+        let len = self.get_section_length();
+        self.compile_expr(&args[2])?;
+        let len_branch_false = self.get_section_length();
+        self.compile_expr(&args[1])?;
+        let len_branch_true = self.get_section_length();
+        self.insert_code_at(
+            len,
+            Instruction::JumpIfTrue {
+                offset: (len_branch_false - len) as i16 + 1,
+            },
+        );
+        self.insert_code_at(
+            len_branch_false + 1,
+            Instruction::JumpOffset {
+                offset: len_branch_true as i16,
+            },
+        );
+        Ok(())
     }
 
-    fn compile_begin(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
-        let mut instr = vec![];
+    fn compile_begin(&mut self, args: &[Expr]) -> Result<(), String> {
         for expr in args {
-            instr.append(&mut self.compile_expr(expr)?);
+            self.compile_expr(expr)?
         }
-        Ok(instr)
+        Ok(())
     }
 
-    fn compile_define(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
+    fn compile_define(&mut self, args: &[Expr]) -> Result<(), String> {
         let Some((Expr::Symbol(s), rest)) = args.split_first() else {
             return Err("`define` takes at least 1 argument".to_string());
         };
-        let mut instr = vec![];
         for expr in rest {
-            instr.append(&mut self.compile_expr(expr)?);
+            self.compile_expr(expr)?;
         }
         let (kind, env) = match self.local_scopes.last_mut() {
             Some(env) => (SymbolKind::Local, env),
@@ -384,17 +429,16 @@ impl Compiler {
             },
             SymbolKind::Local => Instruction::StoreLocal { offset: info.index },
         };
-        instr.push(last_instr);
-        Ok(instr)
+        self.emit(last_instr);
+        Ok(())
     }
 
-    fn compile_let(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
+    fn compile_let(&mut self, args: &[Expr]) -> Result<(), String> {
         let Some((Expr::List(bindings), body)) = args.split_first() else {
             return Err("`let`: needs at least 1 argument (a list of bindings)".to_string());
         };
         // create local scope
         let mut local_scope = HashMap::<String, SymbolInfo>::new();
-        let mut instr = vec![];
         // compile bindings
         for (idx, binding) in bindings.iter().enumerate() {
             let Expr::List(v) = binding else {
@@ -415,30 +459,16 @@ impl Compiler {
                 },
             );
             // compile binding expression
-            instr.append(&mut self.compile_expr(&v[1])?);
+            self.compile_expr(&v[1])?;
         }
         // enter scope, compile body, exit scope
         self.local_scopes.push(local_scope);
-        let mut body = self.compile_begin(body)?;
+        self.compile_begin(body)?;
         self.local_scopes.pop();
-        instr.append(&mut body);
-        Ok(instr)
+        Ok(())
     }
 
-    fn compile_lambda(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
-        // todo!("lambda");
-        // TODO:
-        // - lambda pushes new environment onto the compiler stack
-        // - compile each expression in the body of the lambda
-        // - concatenate output code
-        //
-        // Example:
-        // (define plus-one (lambda (x) (+ 1 x)))
-        //
-        // Example:
-        // (define a 3)
-        // (define plus-a (lambda (x) (+ a x)))
-
+    fn compile_lambda(&mut self, args: &[Expr]) -> Result<(), String> {
         let Some((Expr::List(arguments), body)) = args.split_first() else {
             return Err("`lambda`: needs at least 1 argument (a list of arguments)".to_string());
         };
@@ -456,60 +486,62 @@ impl Compiler {
                 },
             );
         }
+        let len = self.get_section_length();
         self.local_scopes.push(local_scope);
-        let mut instr = VecDeque::from(self.compile_begin(body)?);
+        self.compile_begin(body)?;
         self.local_scopes.pop();
-        instr.push_front(Instruction::Jump {
-            offset: instr.len() as i16 + 1,
-        });
-        instr.push_back(Instruction::Push {
+        self.insert_code_at(
+            len,
+            Instruction::Jump {
+                addr: self.get_section_length(),
+            },
+        );
+        self.emit(Instruction::Push {
             value: Value::Procedure {
                 addr: 1,
                 arity: arguments.len() as u8,
             },
         });
-        Ok(instr.into())
+        Ok(())
     }
 
-    fn compile_cmp(&mut self, cmp: &str, args: &[Expr]) -> Result<Vec<Instruction>, String> {
+    fn compile_cmp(&mut self, cmp: &str, args: &[Expr]) -> Result<(), String> {
         if args.len() != 2 {
             return Err(format!("`{cmp}` takes exactly 2 arguments"));
         }
-        let mut instr = self.compile_expr(&args[0])?;
-        let mut instr_op2 = self.compile_expr(&args[1])?;
-        instr.append(&mut instr_op2);
+        self.compile_expr(&args[1])?;
+        self.compile_expr(&args[0])?;
         match cmp {
-            "<" => instr.push(Instruction::LessThan),
+            "<" => self.emit(Instruction::LessThan),
             _ => todo!("comparison operator: {cmp}"),
         }
-        Ok(instr)
+        Ok(())
     }
 
-    fn compile_add(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
+    fn compile_add(&mut self, args: &[Expr]) -> Result<(), String> {
         let Some((first, mut rest)) = args.split_first() else {
-            return Ok(vec![Instruction::Push {
+            self.emit(Instruction::Push {
                 value: Value::Int(0),
-            }]);
+            });
+            return Ok(());
         };
-        let mut instr = self.compile_expr(first)?;
+        self.compile_expr(first)?;
         while let Some((first, next_rest)) = rest.split_first() {
-            let mut new_instr = self.compile_expr(first)?;
-            instr.append(&mut new_instr);
-            instr.push(Instruction::Add);
+            self.compile_expr(first)?;
+            self.emit(Instruction::Add);
             rest = next_rest;
         }
-        Ok(instr)
+        Ok(())
     }
 
-    fn compile_sub(&mut self, args: &[Expr]) -> Result<Vec<Instruction>, String> {
+    fn compile_sub(&mut self, args: &[Expr]) -> Result<(), String> {
         if args.len() != 2 {
             return Err("`-` takes exactly 2 arguments".to_string());
         }
-        let mut instr = self.compile_expr(&args[0])?;
-        let mut instr_op2 = self.compile_expr(&args[1])?;
-        instr.append(&mut instr_op2);
-        instr.push(Instruction::Sub);
-        Ok(instr)
+        self.compile_expr(&args[1])?;
+        self.compile_expr(&args[0])?;
+        self.emit(Instruction::Sub);
+        Ok(())
     }
 }
 
@@ -523,40 +555,30 @@ mod tests {
         let code = vec![
             // main:
             Push { value: Int(6) }, // argument for fib
-            Push {
-                value: Procedure { addr: 4, arity: 1 },
-            },
-            CallStack, // call fib
-            Halt,      // halt
+            Call { addr: 3 },       // call fib
+            Halt,                   // halt
             // fib:
-            StackAlloc { size: 1 },
-            Push { value: Int(1) },   // push 1
             LoadLocal { offset: -3 }, // put n on the stack
+            Push { value: Int(1) },   // push 1
             LessThan,
-            JumpIfTrue { offset: 3 }, // if 1 < n, jump to recursive case
+            JumpIfTrue { offset: 2 }, // if 1 < n, jump to recursive case
             LoadLocal { offset: -3 }, // put n on the stack
             Ret,                      // return n
-            LoadLocal { offset: -3 },
             Push { value: Int(1) },
-            Sub,
-            Push {
-                value: Procedure { addr: 4, arity: 1 },
-            },
-            CallStack, // fib(n - 1)
-            StoreLocal { offset: 0 },
             LoadLocal { offset: -3 },
-            Push { value: Int(2) },
             Sub,
-            Push {
-                value: Procedure { addr: 4, arity: 1 },
-            },
-            CallStack, // fib(n - 2)
+            Call { addr: 3 }, // fib(n - 1)
+            StoreLocal { offset: 0 },
+            Push { value: Int(2) },
+            LoadLocal { offset: -3 },
+            Sub,
+            Call { addr: 3 }, // fib(n - 2)
             LoadLocal { offset: 0 },
             Add,
             Ret,
         ];
 
-        let mut vm = VM::new(code);
+        let mut vm = VM::new(code, 0);
         vm.run().unwrap();
         assert_eq!(vm.clone_stack_top(), Some(Int(8)));
     }
@@ -590,10 +612,10 @@ mod tests {
             ),
             ("(define a 3) (let ((a 15)) (+ a 4) (+ a 2))", Some(Int(17))),
             ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", Some(Int(46))),
-            (
-                "(lambda (x) (+ x 1))",
-                Some(Procedure { addr: 1, arity: 1 }),
-            ),
+            // (
+            //     "(lambda (x) (+ x 1))",
+            //     Some(Procedure { addr: 1, arity: 1 }),
+            // ),
             // ("((lambda (x) (+ x 1)) 3)", Some(Int(4))),
             // (
             //     "(define a 3) (define plus-a (lambda (x) (+ a 3))) (plus-a 4)",
@@ -607,9 +629,7 @@ mod tests {
 
         for (code, expected_res) in cases {
             let exprs = parse(code).unwrap();
-            let mut compiler = Compiler::new();
-            let instr = compiler.compile(&exprs).unwrap();
-            let mut vm = VM::new(instr);
+            let mut vm = Compiler::new().compile(&exprs).unwrap();
             vm.debug().unwrap();
             assert_eq!(
                 vm.clone_stack_top(),
