@@ -1,4 +1,4 @@
-use loscheme::stack_vm::{Instruction::*, Value::*, VM};
+use loscheme::stack_vm::vm::{Instruction::*, Value::*, VM};
 
 fn main() {
     let code = vec![

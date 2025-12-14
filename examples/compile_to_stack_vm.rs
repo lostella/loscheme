@@ -1,5 +1,5 @@
 use loscheme::parser::parse;
-use loscheme::stack_vm::Compiler;
+use loscheme::stack_vm::compiler::Compiler;
 
 fn run_example(name: &str, code: &str) {
     println!("-------------------------- {name}");

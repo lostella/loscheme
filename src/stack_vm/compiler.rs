@@ -1,221 +1,6 @@
 use crate::parser::{Expr, Keyword};
-use std::{collections::HashMap, fmt};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Value {
-    Pointer(usize),
-    Bool(bool),
-    Int(i64),
-    Procedure { addr: usize, arity: u8 },
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Instruction {
-    // stack manipulation
-    StackAlloc { size: u8 },
-    Push { value: Value },
-    LoadLocal { offset: i8 },
-    StoreLocal { offset: i8 },
-    LoadGlobal { offset: u8 },
-    StoreGlobal { offset: u8 },
-    // operations
-    Add,
-    Sub,
-    LessThan,
-    // control flow
-    Jump { addr: usize },
-    JumpOffset { offset: i16 },
-    JumpIfTrue { offset: i16 },
-    // procedure calling
-    Call { addr: usize },
-    Ret,
-    // others
-    Halt,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct VM {
-    code: Vec<Instruction>,
-    stack: Vec<Value>,
-    globals: Vec<Value>,
-    sp: usize,
-    fp: usize,
-    ip: usize,
-}
-
-impl VM {
-    pub fn new(code: Vec<Instruction>, ip: usize) -> Self {
-        Self {
-            code,
-            globals: vec![Value::Int(0); 1024],
-            stack: vec![Value::Int(0); 1024],
-            sp: 0,
-            fp: 0,
-            ip,
-        }
-    }
-
-    pub fn clone_stack(&self) -> Vec<Value> {
-        // pop does not actually shrink the stack
-        // we clone only up to sp, to omit the "garbage"
-        self.stack[..self.sp].to_vec()
-    }
-
-    pub fn clone_stack_top(&self) -> Option<Value> {
-        if self.sp == 0 {
-            None
-        } else {
-            Some(self.stack[self.sp - 1].clone())
-        }
-    }
-
-    fn push(&mut self, val: Value) {
-        self.stack[self.sp] = val;
-        self.sp += 1;
-    }
-
-    fn pop(&mut self) -> Result<Value, &'static str> {
-        if self.sp == 0 {
-            return Err("Stack is empty");
-        }
-        self.sp -= 1;
-        Ok(self.stack[self.sp].clone())
-    }
-
-    pub fn step(&mut self) -> Result<(), &'static str> {
-        let instr = self.code[self.ip].clone();
-        self.ip += 1;
-        match instr {
-            Instruction::StackAlloc { size } => self.sp += size as usize,
-            Instruction::Halt => self.ip = self.code.len(),
-            Instruction::Push { value } => self.push(value),
-            Instruction::Add => {
-                let a = self.pop()?;
-                let b = self.pop()?;
-                match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x + y)),
-                    _ => return Err("Invalid operands for Add"),
-                }
-            }
-            Instruction::Sub => {
-                let a = self.pop()?;
-                let b = self.pop()?;
-                match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x - y)),
-                    _ => return Err("Invalid operands for Sub"),
-                }
-            }
-            Instruction::LessThan => {
-                let a = self.pop()?;
-                let b = self.pop()?;
-                match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x < y)),
-                    _ => return Err("Invalid operands for LessThan"),
-                }
-            }
-            Instruction::LoadLocal { offset } => {
-                let src = if offset >= 0 {
-                    self.fp + offset as usize
-                } else {
-                    self.fp - (-offset as usize)
-                };
-                self.push(self.stack[src].clone());
-            }
-            Instruction::StoreLocal { offset } => {
-                let dest = self.fp + offset as usize;
-                self.stack[dest] = self.pop()?;
-                if self.sp <= dest {
-                    self.sp = dest + 1
-                }
-            }
-            Instruction::LoadGlobal { offset } => {
-                self.push(self.globals[offset as usize].clone());
-            }
-            Instruction::StoreGlobal { offset } => {
-                self.globals[offset as usize] = self.pop()?;
-            }
-            Instruction::Jump { addr } => self.ip = addr,
-            Instruction::JumpOffset { offset } => {
-                if offset >= 0 {
-                    self.ip = self.ip.wrapping_add(offset as usize);
-                } else {
-                    self.ip = self.ip.wrapping_sub((-offset) as usize);
-                }
-            }
-            Instruction::JumpIfTrue { offset } => {
-                let cond = self.pop()?;
-                match cond {
-                    Value::Bool(true) => {
-                        if offset >= 0 {
-                            self.ip = self.ip.wrapping_add(offset as usize);
-                        } else {
-                            self.ip = self.ip.wrapping_sub((-offset) as usize);
-                        }
-                    }
-                    Value::Bool(false) => (),
-                    _ => return Err("Invalid operand for JumpIfTrue"),
-                }
-            }
-            Instruction::Call { addr } => {
-                self.push(Value::Pointer(self.fp));
-                self.push(Value::Pointer(self.ip));
-                self.fp = self.sp;
-                self.ip = addr;
-            }
-            Instruction::Ret => {
-                let ret = self.pop()?;
-                self.sp = self.fp - 2;
-                self.ip = match self.stack[self.fp - 1] {
-                    Value::Pointer(i) => i,
-                    _ => return Err("Invalid return address"),
-                };
-                self.fp = match self.stack[self.fp - 2] {
-                    Value::Pointer(i) => i,
-                    _ => return Err("Invalid frame pointer"),
-                };
-                self.push(ret);
-            }
-        }
-        Ok(())
-    }
-
-    fn _run(&mut self, debug: bool) -> Result<(), &'static str> {
-        if debug {
-            println!("========================================");
-            println!("code: {:?}", self.code);
-        }
-        while self.ip < self.code.len() {
-            if debug {
-                println!("----------------------------------------");
-                println!("{self}")
-            }
-            self.step()?
-        }
-        if debug {
-            println!("========================================");
-        }
-        Ok(())
-    }
-
-    pub fn run(&mut self) -> Result<(), &'static str> {
-        self._run(false)
-    }
-
-    pub fn debug(&mut self) -> Result<(), &'static str> {
-        self._run(true)
-    }
-}
-
-impl fmt::Display for VM {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "fp: {}, sp: {}, ip: {}, instr: {:?}",
-            self.fp, self.sp, self.ip, self.code[self.ip],
-        )?;
-        write!(f, "stack: {:?}", self.clone_stack())
-    }
-}
+use crate::stack_vm::vm::{Instruction, Value, VM};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Compiler {
@@ -342,8 +127,12 @@ impl Compiler {
             Expr::Keyword(Keyword::Lambda) => {
                 let was_emitting_to_main = self.emit_to_main;
                 self.emit_to_main = false;
+                let addr = self.get_section_length();
                 let res = self.compile_lambda(rest);
                 self.emit_to_main = was_emitting_to_main;
+                self.emit(Instruction::Push {
+                    value: Value::Procedure { addr },
+                });
                 res
             }
             Expr::Symbol(s) => {
@@ -360,7 +149,7 @@ impl Compiler {
                     self.compile_expr(expr)?
                 }
                 self.compile_list(v)?;
-                // self.emit(Instruction::CallStack);
+                self.emit(Instruction::CallStack);
                 Ok(())
             }
             _ => todo!("list starting with: {first:?}"),
@@ -482,26 +271,15 @@ impl Compiler {
                 s.to_string(),
                 SymbolInfo {
                     kind: SymbolKind::Local,
-                    index: idx as i8,
+                    // NOTE: index is set based on the calling conventions
+                    index: -(idx as i8 + 3),
                 },
             );
         }
-        let len = self.get_section_length();
         self.local_scopes.push(local_scope);
         self.compile_begin(body)?;
+        self.emit(Instruction::Ret);
         self.local_scopes.pop();
-        self.insert_code_at(
-            len,
-            Instruction::Jump {
-                addr: self.get_section_length(),
-            },
-        );
-        self.emit(Instruction::Push {
-            value: Value::Procedure {
-                addr: 1,
-                arity: arguments.len() as u8,
-            },
-        });
         Ok(())
     }
 
@@ -547,41 +325,8 @@ impl Compiler {
 
 #[cfg(test)]
 mod tests {
-    use super::{Compiler, Instruction::*, Value::*, VM};
+    use super::{Compiler, Value::*};
     use crate::parser::parse;
-
-    #[test]
-    fn test_fib() {
-        let code = vec![
-            // main:
-            Push { value: Int(6) }, // argument for fib
-            Call { addr: 3 },       // call fib
-            Halt,                   // halt
-            // fib:
-            LoadLocal { offset: -3 }, // put n on the stack
-            Push { value: Int(1) },   // push 1
-            LessThan,
-            JumpIfTrue { offset: 2 }, // if 1 < n, jump to recursive case
-            LoadLocal { offset: -3 }, // put n on the stack
-            Ret,                      // return n
-            Push { value: Int(1) },
-            LoadLocal { offset: -3 },
-            Sub,
-            Call { addr: 3 }, // fib(n - 1)
-            StoreLocal { offset: 0 },
-            Push { value: Int(2) },
-            LoadLocal { offset: -3 },
-            Sub,
-            Call { addr: 3 }, // fib(n - 2)
-            LoadLocal { offset: 0 },
-            Add,
-            Ret,
-        ];
-
-        let mut vm = VM::new(code, 0);
-        vm.run().unwrap();
-        assert_eq!(vm.clone_stack_top(), Some(Int(8)));
-    }
 
     #[test]
     fn test_parse_compile_run() {
@@ -612,11 +357,8 @@ mod tests {
             ),
             ("(define a 3) (let ((a 15)) (+ a 4) (+ a 2))", Some(Int(17))),
             ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", Some(Int(46))),
-            // (
-            //     "(lambda (x) (+ x 1))",
-            //     Some(Procedure { addr: 1, arity: 1 }),
-            // ),
-            // ("((lambda (x) (+ x 1)) 3)", Some(Int(4))),
+            ("(lambda (x) (+ x 1))", Some(Procedure { addr: 0 })),
+            ("((lambda (x) (+ x 1)) 3)", Some(Int(4))),
             // (
             //     "(define a 3) (define plus-a (lambda (x) (+ a 3))) (plus-a 4)",
             //     Some(Int(7)),
