@@ -142,6 +142,9 @@ impl Compiler {
                     "+" => self.compile_add(rest),
                     "-" => self.compile_sub(rest),
                     _ => {
+                        for expr in rest.iter().rev() {
+                            self.compile_expr(expr)?
+                        }
                         self.compile_expr(first)?;
                         self.emit(Instruction::CallStack);
                         Ok(())
@@ -363,13 +366,17 @@ mod tests {
             ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", Some(Int(46))),
             ("(lambda (x) (+ x 1))", Some(Procedure { addr: 0 })),
             ("((lambda (x) (+ x 1)) 3)", Some(Int(4))),
-            // (
-            //     "(define a 3) (define plus-a (lambda (x) (+ a 3))) (plus-a 4)",
-            //     Some(Int(7)),
-            // ),
+            (
+                "(define a 3) (define plus-a (lambda (x) (+ a x))) (plus-a 42)",
+                Some(Int(45)),
+            ),
+            (
+                "(define a 3) (define plus-a (lambda (x) (+ a x))) (define a 16) (plus-a 42)",
+                Some(Int(58)),
+            ),
             // (
             //     "(define make-adder (lambda (a) (lambda (x) (+ a x)))) (define a 5) (define plus-a (make-adder a)) (define a 42) (plus-a 6)",
-            //     Some(Int(11)),
+            //     Some(Int(48)),
             // ),
         ];
 
