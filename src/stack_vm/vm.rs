@@ -32,6 +32,7 @@ pub enum Instruction {
     Call { addr: usize },
     CallStack,
     Ret,
+    Slide { n: usize },
     // others
     Halt,
 }
@@ -83,6 +84,14 @@ impl VM {
         }
         self.sp -= 1;
         Ok(self.stack[self.sp].clone())
+    }
+
+    fn drop(&mut self, n: usize) -> Result<(), &'static str> {
+        if self.sp < n {
+            return Err("Stack is too small");
+        }
+        self.sp -= n;
+        Ok(())
     }
 
     fn call(&mut self, addr: usize) {
@@ -209,6 +218,11 @@ impl VM {
                     Value::Pointer(i) => i,
                     _ => return Err("Invalid frame pointer"),
                 };
+                self.push(ret);
+            }
+            Instruction::Slide { n } => {
+                let ret = self.pop()?;
+                self.drop(n)?;
                 self.push(ret);
             }
         }

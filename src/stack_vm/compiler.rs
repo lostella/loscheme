@@ -147,6 +147,7 @@ impl Compiler {
                         }
                         self.compile_expr(first)?;
                         self.emit(Instruction::CallStack);
+                        self.emit(Instruction::Slide { n: rest.len() });
                         Ok(())
                     }
                 }
@@ -157,6 +158,7 @@ impl Compiler {
                 }
                 self.compile_list(v)?;
                 self.emit(Instruction::CallStack);
+                self.emit(Instruction::Slide { n: rest.len() });
                 Ok(())
             }
             _ => todo!("list starting with: {first:?}"),
@@ -182,7 +184,7 @@ impl Compiler {
         self.insert_code_at(
             len_branch_false + 1,
             Instruction::JumpOffset {
-                offset: len_branch_true as i16,
+                offset: (len_branch_true - len_branch_false) as i16,
             },
         );
         Ok(())
@@ -199,7 +201,6 @@ impl Compiler {
         let [Expr::Symbol(s), expr] = args else {
             return Err("`define` takes 2 arguments".to_string());
         };
-        self.compile_expr(expr)?;
         let (kind, env) = match self.local_scopes.last_mut() {
             Some(env) => (SymbolKind::Local, env),
             _ => (SymbolKind::Global, &mut self.global_scope),
@@ -223,6 +224,7 @@ impl Compiler {
             },
             SymbolKind::Local => Instruction::StoreLocal { offset: info.index },
         };
+        self.compile_expr(expr)?;
         self.emit(last_instr);
         Ok(())
     }
@@ -391,10 +393,14 @@ mod tests {
                 "(define f (lambda (x) (define g (lambda (y) (+ 3 y))) (g x))) (f 4)",
                 Some(Int(7)),
             ),
-            // (
-            //     "(define count (lambda (m n) (if (>= m n) m (count (+ m 1) n)))) (count 0 10)",
-            //     Some(Int(10)),
-            // ),
+            (
+                "(define count (lambda (m n) (if (>= m n) m (count (+ m 1) n)))) (count 0 10)",
+                Some(Int(10)),
+            ),
+            (
+                "(define fib (lambda (n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))) (fib 2)",
+                Some(Int(1)),
+            ),
             // (
             //     "(define make-adder (lambda (a) (lambda (x) (+ a x)))) (define a 5) (define plus-a (make-adder a)) (define a 42) (plus-a 6)",
             //     Some(Int(48)),
