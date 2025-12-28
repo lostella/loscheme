@@ -20,7 +20,10 @@ pub enum Instruction {
     // operations
     Add,
     Sub,
+    GreaterThan,
+    GreaterThanEqual,
     LessThan,
+    LessThanEqual,
     // control flow
     Jump { addr: usize },
     JumpOffset { offset: i16 },
@@ -117,6 +120,30 @@ impl VM {
                 let b = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x < y)),
+                    _ => return Err("Invalid operands for LessThan"),
+                }
+            }
+            Instruction::LessThanEqual => {
+                let a = self.pop()?;
+                let b = self.pop()?;
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x <= y)),
+                    _ => return Err("Invalid operands for LessThan"),
+                }
+            }
+            Instruction::GreaterThan => {
+                let a = self.pop()?;
+                let b = self.pop()?;
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x > y)),
+                    _ => return Err("Invalid operands for LessThan"),
+                }
+            }
+            Instruction::GreaterThanEqual => {
+                let a = self.pop()?;
+                let b = self.pop()?;
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x >= y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
             }

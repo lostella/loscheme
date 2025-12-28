@@ -196,12 +196,10 @@ impl Compiler {
     }
 
     fn compile_define(&mut self, args: &[Expr]) -> Result<(), String> {
-        let Some((Expr::Symbol(s), rest)) = args.split_first() else {
-            return Err("`define` takes at least 1 argument".to_string());
+        let [Expr::Symbol(s), expr] = args else {
+            return Err("`define` takes 2 arguments".to_string());
         };
-        for expr in rest {
-            self.compile_expr(expr)?;
-        }
+        self.compile_expr(expr)?;
         let (kind, env) = match self.local_scopes.last_mut() {
             Some(env) => (SymbolKind::Local, env),
             _ => (SymbolKind::Global, &mut self.global_scope),
@@ -298,6 +296,9 @@ impl Compiler {
         self.compile_expr(&args[0])?;
         match cmp {
             "<" => self.emit(Instruction::LessThan),
+            "<=" => self.emit(Instruction::LessThanEqual),
+            ">" => self.emit(Instruction::GreaterThan),
+            ">=" => self.emit(Instruction::GreaterThanEqual),
             _ => todo!("comparison operator: {cmp}"),
         }
         Ok(())
@@ -341,6 +342,18 @@ mod tests {
             ("#t", Some(Bool(true))),
             ("#f", Some(Bool(false))),
             ("42", Some(Int(42))),
+            ("(< 2 3)", Some(Bool(true))),
+            ("(< 3 3)", Some(Bool(false))),
+            ("(< 4 3)", Some(Bool(false))),
+            ("(<= 2 3)", Some(Bool(true))),
+            ("(<= 3 3)", Some(Bool(true))),
+            ("(<= 4 3)", Some(Bool(false))),
+            ("(> 2 3)", Some(Bool(false))),
+            ("(> 3 3)", Some(Bool(false))),
+            ("(> 4 3)", Some(Bool(true))),
+            ("(>= 2 3)", Some(Bool(false))),
+            ("(>= 3 3)", Some(Bool(true))),
+            ("(>= 4 3)", Some(Bool(true))),
             ("(+ 3 4 5 6)", Some(Int(18))),
             ("(if #t 1 0)", Some(Int(1))),
             ("(if #f 1 0)", Some(Int(0))),
@@ -374,6 +387,14 @@ mod tests {
                 "(define a 3) (define plus-a (lambda (x) (+ a x))) (define a 16) (plus-a 42)",
                 Some(Int(58)),
             ),
+            (
+                "(define f (lambda (x) (define g (lambda (y) (+ 3 y))) (g x))) (f 4)",
+                Some(Int(7)),
+            ),
+            // (
+            //     "(define count (lambda (m n) (if (>= m n) m (count (+ m 1) n)))) (count 0 10)",
+            //     Some(Int(10)),
+            // ),
             // (
             //     "(define make-adder (lambda (a) (lambda (x) (+ a x)))) (define a 5) (define plus-a (make-adder a)) (define a 42) (plus-a 6)",
             //     Some(Int(48)),
@@ -389,6 +410,21 @@ mod tests {
                 expected_res,
                 "we are testing `{code}`"
             )
+        }
+    }
+
+    #[test]
+    fn test_compilation_error() {
+        let cases = vec![
+            "a",
+            "(define a 3) b",
+            "(define f (lambda (x) (define g (lambda (y) (+ 3 y))) (g x))) (g 4)",
+        ];
+
+        for code in cases {
+            let exprs = parse(code).unwrap();
+            let res = Compiler::new().compile(&exprs);
+            assert!(matches!(res, Err(_)))
         }
     }
 
