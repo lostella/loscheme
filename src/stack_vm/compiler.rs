@@ -382,28 +382,62 @@ mod tests {
             ("(lambda (x) (+ x 1))", Some(Procedure { addr: 0 })),
             ("((lambda (x) (+ x 1)) 3)", Some(Int(4))),
             (
-                "(define a 3) (define plus-a (lambda (x) (+ a x))) (plus-a 42)",
+                r#"
+                (define a 3)
+                (define plus-a (lambda (x) (+ a x)))
+                (plus-a 42)
+                "#,
                 Some(Int(45)),
             ),
             (
-                "(define a 3) (define plus-a (lambda (x) (+ a x))) (define a 16) (plus-a 42)",
+                r#"
+                (define a 3)
+                (define plus-a (lambda (x) (+ a x)))
+                (define a 16)
+                (plus-a 42)
+                "#,
                 Some(Int(58)),
             ),
             (
-                "(define f (lambda (x) (define g (lambda (y) (+ 3 y))) (g x))) (f 4)",
+                r#"
+                (define f (lambda (x) (define g (lambda (y) (+ 3 y))) (g x)))
+                (f 4)
+                "#,
                 Some(Int(7)),
             ),
             (
-                "(define count (lambda (m n) (if (>= m n) m (count (+ m 1) n)))) (count 0 10)",
+                r#"
+                (define count (lambda (m n)
+                    (if (>= m n)
+                        m
+                        (count (+ m 1) n))))
+                (count 0 10)
+                "#,
                 Some(Int(10)),
             ),
             (
-                "(define fib (lambda (n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))) (fib 2)",
-                Some(Int(1)),
+                r#"
+                (define fib (lambda (n)
+                    (if (<= n 1)
+                        n
+                        (+ (fib (- n 1)) (fib (- n 2))))))
+                (fib 7)
+                "#,
+                Some(Int(13)),
             ),
             // (
+            //     r#"
+            //     (define makeinc (lambda ()
+            //         (lambda (x)
+            //                 (+ 1 x))))
+            //     (define inc (makeinc))
+            //     (inc 4)
+            //     "#,
+            //     Some(Int(5)),
+            // ),
+            // (
             //     "(define make-adder (lambda (a) (lambda (x) (+ a x)))) (define a 5) (define plus-a (make-adder a)) (define a 42) (plus-a 6)",
-            //     Some(Int(48)),
+            //     Some(Int(11)),
             // ),
         ];
 
@@ -420,26 +454,19 @@ mod tests {
     }
 
     #[test]
-    fn test_compilation_error() {
-        let cases = vec![
-            "a",
-            "(define a 3) b",
-            "(define f (lambda (x) (define g (lambda (y) (+ 3 y))) (g x))) (g 4)",
-        ];
-
-        for code in cases {
-            let exprs = parse(code).unwrap();
-            let res = Compiler::new().compile(&exprs);
-            assert!(matches!(res, Err(_)))
-        }
-    }
-
-    #[test]
     fn test_compilation_errors() {
-        let cases = vec![(
-            "(let ((a 3) (b 4)) (+ a b)) a",
-            Err("Not found in scope: a".into()),
-        )];
+        let cases = vec![
+            (
+                "(let ((a 3) (b 4)) (+ a b)) a",
+                Err("Not found in scope: a".into()),
+            ),
+            ("a", Err("Not found in scope: a".into())),
+            ("(define a 3) b", Err("Not found in scope: b".into())),
+            (
+                "(define f (lambda (x) (define g (lambda (y) (+ 3 y))) (g x))) (g 4)",
+                Err("Not found in scope: g".into()),
+            ),
+        ];
 
         for (code, expected_res) in cases {
             let exprs = parse(code).unwrap();

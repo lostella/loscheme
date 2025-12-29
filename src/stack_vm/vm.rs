@@ -232,7 +232,9 @@ impl VM {
     fn _run(&mut self, debug: bool) -> Result<(), &'static str> {
         if debug {
             println!("========================================");
-            println!("code: {:?}", self.code);
+            for (idx, instr) in self.code.iter().enumerate() {
+                println!("{idx:03}: {instr:?}")
+            }
             println!("----------------------------------------");
             println!("{self}")
         }
