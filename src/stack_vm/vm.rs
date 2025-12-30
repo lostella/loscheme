@@ -108,48 +108,48 @@ impl VM {
             Instruction::Halt => self.ip = self.code.len(),
             Instruction::Push { value } => self.push(value),
             Instruction::Add => {
-                let a = self.pop()?;
                 let b = self.pop()?;
+                let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x + y)),
                     _ => return Err("Invalid operands for Add"),
                 }
             }
             Instruction::Sub => {
-                let a = self.pop()?;
                 let b = self.pop()?;
+                let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x - y)),
                     _ => return Err("Invalid operands for Sub"),
                 }
             }
             Instruction::LessThan => {
-                let a = self.pop()?;
                 let b = self.pop()?;
+                let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x < y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
             }
             Instruction::LessThanEqual => {
-                let a = self.pop()?;
                 let b = self.pop()?;
+                let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x <= y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
             }
             Instruction::GreaterThan => {
-                let a = self.pop()?;
                 let b = self.pop()?;
+                let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x > y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
             }
             Instruction::GreaterThanEqual => {
-                let a = self.pop()?;
                 let b = self.pop()?;
+                let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x >= y)),
                     _ => return Err("Invalid operands for LessThan"),
@@ -284,19 +284,19 @@ mod tests {
             Call { addr: 3 },       // call fib
             Halt,                   // halt
             // fib:
-            LoadLocal { offset: -3 }, // put n on the stack
             Push { value: Int(1) },   // push 1
+            LoadLocal { offset: -3 }, // put n on the stack
             LessThan,
             JumpIfTrue { offset: 2 }, // if 1 < n, jump to recursive case
             LoadLocal { offset: -3 }, // put n on the stack
             Ret,                      // return n
-            Push { value: Int(1) },
             LoadLocal { offset: -3 },
+            Push { value: Int(1) },
             Sub,
             Call { addr: 3 }, // fib(n - 1)
             StoreLocal { offset: 0 },
-            Push { value: Int(2) },
             LoadLocal { offset: -3 },
+            Push { value: Int(2) },
             Sub,
             Call { addr: 3 }, // fib(n - 2)
             LoadLocal { offset: 0 },

@@ -305,8 +305,8 @@ impl Compiler {
         if args.len() != 2 {
             return Err(format!("`{cmp}` takes exactly 2 arguments"));
         }
-        self.compile_expr(&args[1])?;
         self.compile_expr(&args[0])?;
+        self.compile_expr(&args[1])?;
         match cmp {
             "<" => self.emit(Instruction::LessThan),
             "<=" => self.emit(Instruction::LessThanEqual),
@@ -334,12 +334,18 @@ impl Compiler {
     }
 
     fn compile_sub(&mut self, args: &[Expr]) -> Result<(), String> {
-        if args.len() != 2 {
-            return Err("`-` takes exactly 2 arguments".to_string());
+        let Some((first, mut rest)) = args.split_first() else {
+            self.emit(Instruction::Push {
+                value: Value::Int(0),
+            });
+            return Ok(());
+        };
+        self.compile_expr(first)?;
+        while let Some((first, next_rest)) = rest.split_first() {
+            self.compile_expr(first)?;
+            self.emit(Instruction::Sub);
+            rest = next_rest;
         }
-        self.compile_expr(&args[1])?;
-        self.compile_expr(&args[0])?;
-        self.emit(Instruction::Sub);
         Ok(())
     }
 }
@@ -368,6 +374,8 @@ mod tests {
             ("(>= 3 3)", Some(Bool(true))),
             ("(>= 4 3)", Some(Bool(true))),
             ("(+ 3 4 5 6)", Some(Int(18))),
+            ("(- 7 4)", Some(Int(3))),
+            ("(- 3 4 5 6)", Some(Int(-12))),
             ("(if #t 1 0)", Some(Int(1))),
             ("(if #f 1 0)", Some(Int(0))),
             ("(if (< 2 3) 1 0)", Some(Int(1))),
