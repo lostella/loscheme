@@ -42,9 +42,20 @@ impl Compiler {
 
     pub fn compile(&mut self, exprs: &[Expr]) -> Result<VM, String> {
         self.compile_begin(exprs)?;
-        let mut code = self.proc_section.clone();
-        code.append(&mut self.main_section.clone());
-        Ok(VM::new(code, self.proc_section.len()))
+        let mut code = self.main_section.clone();
+        code.push(Instruction::Halt);
+        let addr_offset = code.len();
+        code.append(&mut self.proc_section.clone());
+        for instr in code.iter_mut() {
+            match instr {
+                Instruction::Call { addr } => *addr += addr_offset,
+                Instruction::Push {
+                    value: Value::Procedure { addr },
+                } => *addr += addr_offset,
+                _ => (),
+            }
+        }
+        Ok(VM::new(code))
     }
 
     fn emit(&mut self, instr: Instruction) {
@@ -379,7 +390,7 @@ mod tests {
             ),
             ("(define a 3) (let ((a 15)) (+ a 4) (+ a 2))", Some(Int(17))),
             ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", Some(Int(46))),
-            ("(lambda (x) (+ x 1))", Some(Procedure { addr: 0 })),
+            ("(lambda (x) (+ x 1))", Some(Procedure { addr: 2 })),
             ("((lambda (x) (+ x 1)) 3)", Some(Int(4))),
             (
                 r#"

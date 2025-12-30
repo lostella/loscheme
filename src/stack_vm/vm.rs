@@ -25,7 +25,6 @@ pub enum Instruction {
     LessThan,
     LessThanEqual,
     // control flow
-    Jump { addr: usize },
     JumpOffset { offset: i16 },
     JumpIfTrue { offset: i16 },
     // procedure calling
@@ -48,14 +47,14 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new(code: Vec<Instruction>, ip: usize) -> Self {
+    pub fn new(code: Vec<Instruction>) -> Self {
         Self {
             code,
             globals: vec![Value::Int(0); 1024],
             stack: vec![Value::Int(0); 1024],
             sp: 0,
             fp: 0,
-            ip,
+            ip: 0,
         }
     }
 
@@ -177,7 +176,6 @@ impl VM {
             Instruction::StoreGlobal { offset } => {
                 self.globals[offset as usize] = self.pop()?;
             }
-            Instruction::Jump { addr } => self.ip = addr,
             Instruction::JumpOffset { offset } => {
                 if offset >= 0 {
                     self.ip = self.ip.wrapping_add(offset as usize);
@@ -306,7 +304,7 @@ mod tests {
             Ret,
         ];
 
-        let mut vm = VM::new(code, 0);
+        let mut vm = VM::new(code);
         vm.run().unwrap();
         assert_eq!(vm.clone_stack_top(), Some(Int(8)));
     }
