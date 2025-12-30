@@ -194,7 +194,7 @@ impl Compiler {
         );
         self.insert_code_at(
             len_branch_false + 1,
-            Instruction::JumpOffset {
+            Instruction::Jump {
                 offset: (len_branch_true - len_branch_false) as i16,
             },
         );

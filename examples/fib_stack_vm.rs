@@ -2,7 +2,7 @@ use loscheme::stack_vm::vm::{Instruction::*, Value::*, VM};
 
 fn main() {
     let code = vec![
-        JumpOffset { offset: 19 },
+        Jump { offset: 19 },
         // fib:
         StackAlloc { size: 1 },   // make room for 1 local variable
         LoadLocal { offset: -3 }, // put n on the stack

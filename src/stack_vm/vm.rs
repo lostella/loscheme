@@ -25,7 +25,7 @@ pub enum Instruction {
     LessThan,
     LessThanEqual,
     // control flow
-    JumpOffset { offset: i16 },
+    Jump { offset: i16 },
     JumpIfTrue { offset: i16 },
     // procedure calling
     Call { addr: usize },
@@ -176,7 +176,7 @@ impl VM {
             Instruction::StoreGlobal { offset } => {
                 self.globals[offset as usize] = self.pop()?;
             }
-            Instruction::JumpOffset { offset } => {
+            Instruction::Jump { offset } => {
                 if offset >= 0 {
                     self.ip = self.ip.wrapping_add(offset as usize);
                 } else {
