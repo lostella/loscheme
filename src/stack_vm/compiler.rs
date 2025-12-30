@@ -109,6 +109,12 @@ impl Compiler {
                 });
                 Ok(())
             }
+            Expr::Float(f) => {
+                self.emit(Instruction::Push {
+                    value: Value::Float(*f),
+                });
+                Ok(())
+            }
             Expr::Symbol(s) => {
                 let Some(info) = self.get_symbol_info(s) else {
                     return Err(format!("Not found in scope: {s}"));
@@ -153,6 +159,8 @@ impl Compiler {
                     "+" => self.compile_add(rest),
                     "-" => self.compile_sub(rest),
                     "*" => self.compile_mul(rest),
+                    "/" => self.compile_div(rest),
+                    "abs" => self.compile_abs(rest),
                     _ => {
                         for expr in rest.iter().rev() {
                             self.compile_expr(expr)?
@@ -210,7 +218,16 @@ impl Compiler {
     }
 
     fn compile_define(&mut self, args: &[Expr]) -> Result<(), String> {
-        let [Expr::Symbol(s), expr] = args else {
+        let mut args = args.to_vec();
+        if let Some((Expr::List(l), body)) = args.split_first() {
+            let Some((Expr::Symbol(s), formals)) = l.split_first() else {
+                return Err("`define` with a list needs a non-empty list of symbols".to_string());
+            };
+            let mut lambda = vec![Expr::Keyword(Keyword::Lambda), Expr::List(formals.to_vec())];
+            lambda.append(&mut body.to_vec());
+            args = vec![Expr::Symbol(*s), Expr::List(lambda)];
+        }
+        let [Expr::Symbol(s), expr] = args.as_slice() else {
             return Err("`define` takes 2 arguments".to_string());
         };
         let (kind, env) = match self.local_scopes.last_mut() {
@@ -370,6 +387,39 @@ impl Compiler {
         }
         Ok(())
     }
+
+    fn compile_div(&mut self, args: &[Expr]) -> Result<(), String> {
+        let Some((first, mut rest)) = args.split_first() else {
+            return Err("`/` takes at least one argument".to_string());
+        };
+        if rest.is_empty() {
+            self.emit(Instruction::Push {
+                value: Value::Int(1),
+            });
+            self.compile_expr(first)?;
+            self.emit(Instruction::Div);
+            return Ok(());
+        }
+        self.compile_expr(first)?;
+        while let Some((first, next_rest)) = rest.split_first() {
+            self.compile_expr(first)?;
+            self.emit(Instruction::Div);
+            rest = next_rest;
+        }
+        Ok(())
+    }
+
+    fn compile_abs(&mut self, args: &[Expr]) -> Result<(), String> {
+        let Some((first, rest)) = args.split_first() else {
+            return Err("`abs` expects one argument".to_string());
+        };
+        if !rest.is_empty() {
+            return Err("`abs` expects one argument".to_string());
+        }
+        self.compile_expr(first)?;
+        self.emit(Instruction::Abs);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -402,6 +452,11 @@ mod tests {
             ("(- 3 4 5 6)", Some(Int(-12))),
             ("(* 3)", Some(Int(3))),
             ("(* 3 4 5)", Some(Int(60))),
+            ("(/ 4.0)", Some(Float(0.25))),
+            ("(/ 4.0 2)", Some(Float(2.0))),
+            ("(/ 1.0 2.0 2 2)", Some(Float(0.125))),
+            ("(abs 42)", Some(Int(42))),
+            ("(abs -42)", Some(Int(42))),
             ("(if #t 1 0)", Some(Int(1))),
             ("(if #f 1 0)", Some(Int(0))),
             ("(if (< 2 3) 1 0)", Some(Int(1))),
@@ -469,6 +524,34 @@ mod tests {
                 (fib 7)
                 "#,
                 Some(Int(13)),
+            ),
+            (
+                r#"
+                (define (fib n)
+                    (if (<= n 1)
+                        n
+                        (+ (fib (- n 1)) (fib (- n 2)))))
+                (fib 7)
+                "#,
+                Some(Int(13)),
+            ),
+            (
+                r#"
+                (define (square x) (* x x))
+                (define (average x y) (/ (+ x y) 2))
+                (define (good-enough? guess x)
+                    (< (abs (- (square guess) x)) 0.001))
+                (define (improve guess x)
+                    (average guess (/ x guess)))
+                (define (sqrt-iter guess x)
+                    (if (good-enough? guess x)
+                        guess
+                        (sqrt-iter (improve guess x) x)))
+                (define (sqrt x)
+                    (sqrt-iter 1.0 x))
+                (sqrt 2)
+                "#,
+                Some(Float(1.4142156862745097)),
             ),
             // (
             //     r#"

@@ -5,6 +5,7 @@ pub enum Value {
     Pointer(usize),
     Bool(bool),
     Int(i64),
+    Float(f64),
     Procedure { addr: usize },
 }
 
@@ -21,6 +22,8 @@ pub enum Instruction {
     Add,
     Sub,
     Mul,
+    Div,
+    Abs,
     GreaterThan,
     GreaterThanEqual,
     LessThan,
@@ -113,6 +116,9 @@ impl VM {
                 let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x + y)),
+                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) + y)),
+                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x + (y as f64))),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x + y)),
                     _ => return Err("Invalid operands for Add"),
                 }
             }
@@ -121,6 +127,9 @@ impl VM {
                 let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x - y)),
+                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) - y)),
+                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x - (y as f64))),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x - y)),
                     _ => return Err("Invalid operands for Sub"),
                 }
             }
@@ -129,7 +138,28 @@ impl VM {
                 let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x * y)),
+                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) * y)),
+                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x * (y as f64))),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x * y)),
                     _ => return Err("Invalid operands for Mul"),
+                }
+            }
+            Instruction::Div => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+                match (a, b) {
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x / y)),
+                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) / y)),
+                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x / (y as f64))),
+                    _ => return Err("Invalid operands for Div"),
+                }
+            }
+            Instruction::Abs => {
+                let a = self.pop()?;
+                match a {
+                    Value::Int(x) => self.push(Value::Int(x.abs())),
+                    Value::Float(x) => self.push(Value::Float(x.abs())),
+                    _ => return Err("Invalid operand for Abs"),
                 }
             }
             Instruction::LessThan => {
@@ -137,6 +167,7 @@ impl VM {
                 let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x < y)),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x < y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
             }
@@ -145,6 +176,7 @@ impl VM {
                 let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x <= y)),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x <= y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
             }
@@ -153,6 +185,7 @@ impl VM {
                 let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x > y)),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x > y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
             }
@@ -161,6 +194,7 @@ impl VM {
                 let a = self.pop()?;
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x >= y)),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x >= y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
             }
