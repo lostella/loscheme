@@ -20,6 +20,7 @@ pub enum Instruction {
     // operations
     Add,
     Sub,
+    Mul,
     GreaterThan,
     GreaterThanEqual,
     LessThan,
@@ -121,6 +122,14 @@ impl VM {
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x - y)),
                     _ => return Err("Invalid operands for Sub"),
+                }
+            }
+            Instruction::Mul => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x * y)),
+                    _ => return Err("Invalid operands for Mul"),
                 }
             }
             Instruction::LessThan => {

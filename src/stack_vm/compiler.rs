@@ -152,6 +152,7 @@ impl Compiler {
                     "<" | ">" | "<=" | ">=" => self.compile_cmp(s, rest),
                     "+" => self.compile_add(rest),
                     "-" => self.compile_sub(rest),
+                    "*" => self.compile_mul(rest),
                     _ => {
                         for expr in rest.iter().rev() {
                             self.compile_expr(expr)?
@@ -335,15 +336,36 @@ impl Compiler {
 
     fn compile_sub(&mut self, args: &[Expr]) -> Result<(), String> {
         let Some((first, mut rest)) = args.split_first() else {
+            return Err("`-` takes at least one argument".to_string());
+        };
+        if rest.is_empty() {
             self.emit(Instruction::Push {
                 value: Value::Int(0),
+            });
+            self.compile_expr(first)?;
+            self.emit(Instruction::Sub);
+            return Ok(());
+        }
+        self.compile_expr(first)?;
+        while let Some((first, next_rest)) = rest.split_first() {
+            self.compile_expr(first)?;
+            self.emit(Instruction::Sub);
+            rest = next_rest;
+        }
+        Ok(())
+    }
+
+    fn compile_mul(&mut self, args: &[Expr]) -> Result<(), String> {
+        let Some((first, mut rest)) = args.split_first() else {
+            self.emit(Instruction::Push {
+                value: Value::Int(1),
             });
             return Ok(());
         };
         self.compile_expr(first)?;
         while let Some((first, next_rest)) = rest.split_first() {
             self.compile_expr(first)?;
-            self.emit(Instruction::Sub);
+            self.emit(Instruction::Mul);
             rest = next_rest;
         }
         Ok(())
@@ -373,9 +395,13 @@ mod tests {
             ("(>= 2 3)", Some(Bool(false))),
             ("(>= 3 3)", Some(Bool(true))),
             ("(>= 4 3)", Some(Bool(true))),
+            ("(+ 3)", Some(Int(3))),
             ("(+ 3 4 5 6)", Some(Int(18))),
+            ("(- 7)", Some(Int(-7))),
             ("(- 7 4)", Some(Int(3))),
             ("(- 3 4 5 6)", Some(Int(-12))),
+            ("(* 3)", Some(Int(3))),
+            ("(* 3 4 5)", Some(Int(60))),
             ("(if #t 1 0)", Some(Int(1))),
             ("(if #f 1 0)", Some(Int(0))),
             ("(if (< 2 3) 1 0)", Some(Int(1))),
