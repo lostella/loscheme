@@ -198,14 +198,14 @@ impl Compiler {
     }
 
     fn compile_if(&mut self, args: &[Expr]) -> Result<(), String> {
-        if args.len() != 3 {
+        let [cond, branch_true, branch_false] = args else {
             return Err("`if` takes exactly 3 arguments".to_string());
-        }
-        self.compile_expr(&args[0])?;
+        };
+        self.compile_expr(cond)?;
         let len = self.get_section_length();
-        self.compile_expr(&args[2])?;
+        self.compile_expr(branch_false)?;
         let len_branch_false = self.get_section_length();
-        self.compile_expr(&args[1])?;
+        self.compile_expr(branch_true)?;
         let len_branch_true = self.get_section_length();
         self.insert_code_at(
             len,
@@ -281,11 +281,8 @@ impl Compiler {
             let Expr::List(v) = binding else {
                 return Err("`let`: each binding must be a list of two elements".to_string());
             };
-            if v.len() != 2 {
+            let [Expr::Symbol(s), value] = v.as_slice() else {
                 return Err("`let`: each binding must be a list of two elements".to_string());
-            };
-            let Expr::Symbol(s) = v[0] else {
-                return Err("`let`: first element of each binding must be a symbol".to_string());
             };
             // add binding variable to local scope
             local_scope.insert(
@@ -296,7 +293,7 @@ impl Compiler {
                 },
             );
             // compile binding expression
-            self.compile_expr(&v[1])?;
+            self.compile_expr(value)?;
         }
         // enter scope, compile body, exit scope
         self.local_scopes.push(local_scope);
@@ -332,11 +329,11 @@ impl Compiler {
     }
 
     fn compile_cmp(&mut self, cmp: &str, args: &[Expr]) -> Result<(), String> {
-        if args.len() != 2 {
+        let [left, right] = args else {
             return Err(format!("`{cmp}` takes exactly 2 arguments"));
-        }
-        self.compile_expr(&args[0])?;
-        self.compile_expr(&args[1])?;
+        };
+        self.compile_expr(left)?;
+        self.compile_expr(right)?;
         match cmp {
             "<" => self.emit(Instruction::LessThan),
             "<=" => self.emit(Instruction::LessThanEqual),
