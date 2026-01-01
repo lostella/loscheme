@@ -1,12 +1,96 @@
+use crate::parser::{Expr, Keyword};
+use std::cell::RefCell;
 use std::fmt;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    Null,
     Pointer(usize),
     Bool(bool),
     Int(i64),
     Float(f64),
+    Pair(Rc<RefCell<(Value, Value)>>),
     Procedure { addr: usize },
+}
+
+impl From<Expr> for Value {
+    fn from(expr: Expr) -> Self {
+        match expr {
+            Expr::Bool(x) => Value::Bool(x),
+            Expr::Integer(x) => Value::Int(x),
+            Expr::Float(x) => Value::Float(x),
+            Expr::List(v) => {
+                let Some((first, rest)) = v.split_first() else {
+                    return Value::Null;
+                };
+                match first {
+                    Expr::Keyword(Keyword::Dot) => {
+                        if let Some(last) = rest.first() {
+                            Value::from(last.clone())
+                        } else {
+                            Value::Null
+                        }
+                    }
+                    _ => Value::Pair(Rc::new(RefCell::new((
+                        Value::from(first.clone()),
+                        Value::from(Expr::List(rest.to_vec())),
+                    )))),
+                }
+            }
+            Expr::Symbol(s) => {
+                if let Ok(addr) = s.trim_start_matches("$Procedure@").parse::<usize>() {
+                    return Value::Procedure { addr };
+                }
+                if let Ok(addr) = s.trim_start_matches("$Pointer->").parse::<usize>() {
+                    return Value::Pointer(addr);
+                }
+                todo!("{expr:?}")
+            }
+            _ => todo!("{expr:?}"),
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Null => write!(f, "()"),
+            Value::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
+            Value::Int(v) => write!(f, "{v}"),
+            Value::Float(v) => write!(f, "{v}"),
+            Value::Pair(_) => {
+                write!(f, "(")?;
+                let mut current = self.clone();
+                let mut first = true;
+
+                loop {
+                    match current {
+                        Value::Pair(pair_rc) => {
+                            let pair = pair_rc.borrow();
+                            if !first {
+                                write!(f, " ")?;
+                            }
+                            write!(f, "{}", pair.0)?;
+                            current = pair.1.clone();
+                            first = false;
+                        }
+                        Value::Null => {
+                            write!(f, ")")?;
+                            break;
+                        }
+                        other => {
+                            write!(f, " . {other})")?;
+                            break;
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Value::Procedure { addr } => write!(f, "$Procedure@{addr}"),
+            Value::Pointer(addr) => write!(f, "$Pointer->{addr}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,7 +102,7 @@ pub enum Instruction {
     StoreLocal { offset: i8 },
     LoadGlobal { offset: u8 },
     StoreGlobal { offset: u8 },
-    // operations
+    // numerical operations
     Add,
     Sub,
     Mul,
@@ -28,6 +112,10 @@ pub enum Instruction {
     GreaterThanEqual,
     LessThan,
     LessThanEqual,
+    // pairs
+    Cons,
+    Car,
+    Cdr,
     // control flow
     Jump { offset: i16 },
     JumpIfTrue { offset: i16 },
@@ -197,6 +285,23 @@ impl VM {
                     (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x >= y)),
                     _ => return Err("Invalid operands for LessThan"),
                 }
+            }
+            Instruction::Cons => {
+                let cdr = self.pop()?;
+                let car = self.pop()?;
+                self.push(Value::Pair(Rc::new(RefCell::new((car, cdr)))));
+            }
+            Instruction::Car => {
+                let Value::Pair(rc) = self.pop()? else {
+                    return Err("Invalid operand for Car");
+                };
+                self.push(rc.borrow().0.clone());
+            }
+            Instruction::Cdr => {
+                let Value::Pair(rc) = self.pop()? else {
+                    return Err("Invalid operand for Cdr");
+                };
+                self.push(rc.borrow().1.clone());
             }
             Instruction::LoadLocal { offset } => {
                 let src = if offset >= 0 {

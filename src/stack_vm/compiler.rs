@@ -161,6 +161,9 @@ impl Compiler {
                     "*" => self.compile_mul(rest),
                     "/" => self.compile_div(rest),
                     "abs" => self.compile_abs(rest),
+                    "cons" => self.compile_cons(rest),
+                    "car" => self.compile_car(rest),
+                    "cdr" => self.compile_cdr(rest),
                     _ => {
                         for expr in rest.iter().rev() {
                             self.compile_expr(expr)?
@@ -179,6 +182,14 @@ impl Compiler {
                 self.compile_list(v)?;
                 self.emit(Instruction::CallStack);
                 self.emit(Instruction::Slide { n: rest.len() });
+                Ok(())
+            }
+            Expr::Keyword(Keyword::Quote) => {
+                let [arg] = rest else {
+                    return Err("Quote needs exactly one argument".to_string());
+                };
+                let value = Value::from(arg.clone());
+                self.emit(Instruction::Push { value });
                 Ok(())
             }
             _ => todo!("list starting with: {first:?}"),
@@ -420,74 +431,133 @@ impl Compiler {
         self.emit(Instruction::Abs);
         Ok(())
     }
+
+    fn compile_cons(&mut self, args: &[Expr]) -> Result<(), String> {
+        let [car, cdr] = args else {
+            return Err("`cons` takes exactly 2 arguments".to_string());
+        };
+        self.compile_expr(car)?;
+        self.compile_expr(cdr)?;
+        self.emit(Instruction::Cons);
+        Ok(())
+    }
+
+    fn compile_car(&mut self, args: &[Expr]) -> Result<(), String> {
+        let [pair] = args else {
+            return Err("`car` takes exactly 1 arguments".to_string());
+        };
+        self.compile_expr(pair)?;
+        self.emit(Instruction::Car);
+        Ok(())
+    }
+
+    fn compile_cdr(&mut self, args: &[Expr]) -> Result<(), String> {
+        let [pair] = args else {
+            return Err("`cdr` takes exactly 1 arguments".to_string());
+        };
+        self.compile_expr(pair)?;
+        self.emit(Instruction::Cdr);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Compiler, Value::*};
+    use super::{Compiler, Value};
     use crate::parser::parse;
+
+    fn str_to_value(s: &str) -> Result<Option<Value>, String> {
+        let exprs = parse(s)?;
+        let Some(expr) = exprs.first() else {
+            return Ok(None);
+        };
+        Ok(Some(Value::from(expr.clone())))
+    }
 
     #[test]
     fn test_parse_compile_run() {
         let cases = vec![
-            ("#t", Some(Bool(true))),
-            ("#f", Some(Bool(false))),
-            ("42", Some(Int(42))),
-            ("(< 2 3)", Some(Bool(true))),
-            ("(< 3 3)", Some(Bool(false))),
-            ("(< 4 3)", Some(Bool(false))),
-            ("(<= 2 3)", Some(Bool(true))),
-            ("(<= 3 3)", Some(Bool(true))),
-            ("(<= 4 3)", Some(Bool(false))),
-            ("(> 2 3)", Some(Bool(false))),
-            ("(> 3 3)", Some(Bool(false))),
-            ("(> 4 3)", Some(Bool(true))),
-            ("(>= 2 3)", Some(Bool(false))),
-            ("(>= 3 3)", Some(Bool(true))),
-            ("(>= 4 3)", Some(Bool(true))),
-            ("(+ 3)", Some(Int(3))),
-            ("(+ 3 4 5 6)", Some(Int(18))),
-            ("(- 7)", Some(Int(-7))),
-            ("(- 7 4)", Some(Int(3))),
-            ("(- 3 4 5 6)", Some(Int(-12))),
-            ("(* 3)", Some(Int(3))),
-            ("(* 3 4 5)", Some(Int(60))),
-            ("(/ 4.0)", Some(Float(0.25))),
-            ("(/ 4.0 2)", Some(Float(2.0))),
-            ("(/ 1.0 2.0 2 2)", Some(Float(0.125))),
-            ("(abs 42)", Some(Int(42))),
-            ("(abs -42)", Some(Int(42))),
-            ("(if #t 1 0)", Some(Int(1))),
-            ("(if #f 1 0)", Some(Int(0))),
-            ("(if (< 2 3) 1 0)", Some(Int(1))),
-            ("(if (< 3 2) 1 0)", Some(Int(0))),
-            ("(if (< 2 3) (+ 1 4) (- 3 7))", Some(Int(5))),
-            ("(if (< 3 2) (+ 1 4) (- 3 7))", Some(Int(-4))),
-            ("(begin (+ 3 4) (- 7 (if (< 4 5) 1 0)))", Some(Int(6))),
-            ("(define x 3)", None),
-            ("(begin (define x 3) x)", Some(Int(3))),
-            ("(begin (define x 3) (define x 4) x)", Some(Int(4))),
-            ("(begin (define y #t) (define x 6) y)", Some(Bool(true))),
-            ("(define x 3) (define x 4) x", Some(Int(4))),
-            ("(define y #f) (define x 6) y", Some(Bool(false))),
-            ("(define y #f) (define x 6) (define y 42) y", Some(Int(42))),
-            ("(let ((a 3)) (+ a 1))", Some(Int(4))),
-            ("(let ((a 3) (b 4)) (+ a b))", Some(Int(7))),
+            ("#t", "#t"),
+            ("#f", "#f"),
+            ("42", "42"),
+            ("(< 2 3)", "#t"),
+            ("(< 3 3)", "#f"),
+            ("(< 4 3)", "#f"),
+            ("(<= 2 3)", "#t"),
+            ("(<= 3 3)", "#t"),
+            ("(<= 4 3)", "#f"),
+            ("(> 2 3)", "#f"),
+            ("(> 3 3)", "#f"),
+            ("(> 4 3)", "#t"),
+            ("(>= 2 3)", "#f"),
+            ("(>= 3 3)", "#t"),
+            ("(>= 4 3)", "#t"),
+            ("(+ 3)", "3"),
+            ("(+ 3 4 5 6)", "18"),
+            ("(- 7)", "-7"),
+            ("(- 7 4)", "3"),
+            ("(- 3 4 5 6)", "-12"),
+            ("(* 3)", "3"),
+            ("(* 3 4 5)", "60"),
+            ("(/ 4.0)", "0.25"),
+            ("(/ 4.0 2)", "2.0"),
+            ("(/ 1.0 2.0 2 2)", "0.125"),
+            ("(abs 42)", "42"),
+            ("(abs -42)", "42"),
+            ("(cons 7 13)", "(7 . 13)"),
+            ("(cons 7 '())", "(7)"),
+            ("(car (cons 7 13))", "7"),
+            ("(cdr (cons 7 13))", "13"),
+            ("'#t", "#t"),
+            ("'#f", "#f"),
+            ("'42", "42"),
+            ("'()", "()"),
+            ("'(1 2 3)", "(1 2 3)"),
+            ("(car '(1 2 3))", "1"),
+            ("(cdr '(1 2 3))", "(2 3)"),
+            ("'(4 . 5)", "(4 . 5)"),
+            ("(car '(4 . 5))", "4"),
+            ("(cdr '(4 . 5))", "5"),
+            ("(if #t 1 0)", "1"),
+            ("(if #f 1 0)", "0"),
+            ("(if (< 2 3) 1 0)", "1"),
+            ("(if (< 3 2) 1 0)", "0"),
+            ("(if (< 2 3) (+ 1 4) (- 3 7))", "5"),
+            ("(if (< 3 2) (+ 1 4) (- 3 7))", "-4"),
+            ("(begin (+ 3 4) (- 7 (if (< 4 5) 1 0)))", "6"),
+            ("(define x 3)", ""),
+            ("(begin (define x 3) x)", "3"),
+            ("(begin (define x 3) (define x 4) x)", "4"),
+            ("(begin (define y #t) (define x 6) y)", "#t"),
+            ("(define x 3) (define x 4) x", "4"),
+            ("(define y #f) (define x 6) y", "#f"),
+            ("(define y #f) (define x 6) (define y 42) y", "42"),
+            ("(define a (cons 3 5)) (define b (cons 7 a)) (car b)", "7"),
+            (
+                "(define a (cons 3 5)) (define b (cons 7 a)) (car (cdr b))",
+                "3",
+            ),
+            (
+                "(define a (cons 3 5)) (define b (cons 7 a)) (cdr (cdr b))",
+                "5",
+            ),
+            ("(let ((a 3)) (+ a 1))", "4"),
+            ("(let ((a 3) (b 4)) (+ a b))", "7"),
             (
                 "(let ((a 3) (b 4)) (define c 5) (define d 6) (+ a b c d))",
-                Some(Int(18)),
+                "18",
             ),
-            ("(define a 3) (let ((a 15)) (+ a 4) (+ a 2))", Some(Int(17))),
-            ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", Some(Int(46))),
-            ("(lambda (x) (+ x 1))", Some(Procedure { addr: 2 })),
-            ("((lambda (x) (+ x 1)) 3)", Some(Int(4))),
+            ("(define a 3) (let ((a 15)) (+ a 4) (+ a 2))", "17"),
+            ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", "46"),
+            ("(lambda (x) (+ x 1))", "$Procedure@2"),
+            ("((lambda (x) (+ x 1)) 3)", "4"),
             (
                 r#"
                 (define a 3)
                 (define plus-a (lambda (x) (+ a x)))
                 (plus-a 42)
                 "#,
-                Some(Int(45)),
+                "45",
             ),
             (
                 r#"
@@ -496,14 +566,14 @@ mod tests {
                 (define a 16)
                 (plus-a 42)
                 "#,
-                Some(Int(58)),
+                "58",
             ),
             (
                 r#"
                 (define f (lambda (x) (define g (lambda (y) (+ 3 y))) (g x)))
                 (f 4)
                 "#,
-                Some(Int(7)),
+                "7",
             ),
             (
                 r#"
@@ -513,7 +583,7 @@ mod tests {
                         (count (+ m 1) n))))
                 (count 0 10)
                 "#,
-                Some(Int(10)),
+                "10",
             ),
             (
                 r#"
@@ -523,7 +593,7 @@ mod tests {
                         (+ (fib (- n 1)) (fib (- n 2))))))
                 (fib 7)
                 "#,
-                Some(Int(13)),
+                "13",
             ),
             (
                 r#"
@@ -533,7 +603,7 @@ mod tests {
                         (+ (fib (- n 1)) (fib (- n 2)))))
                 (fib 7)
                 "#,
-                Some(Int(13)),
+                "13",
             ),
             (
                 r#"
@@ -551,7 +621,7 @@ mod tests {
                     (sqrt-iter 1.0 x))
                 (sqrt 2)
                 "#,
-                Some(Float(1.4142156862745097)),
+                "1.4142156862745097",
             ),
             // (
             //     r#"
@@ -561,11 +631,11 @@ mod tests {
             //     (define inc (makeinc))
             //     (inc 4)
             //     "#,
-            //     Some(Int(5)),
+            //     "5",
             // ),
             // (
             //     "(define make-adder (lambda (a) (lambda (x) (+ a x)))) (define a 5) (define plus-a (make-adder a)) (define a 42) (plus-a 6)",
-            //     Some(Int(11)),
+            //     "11",
             // ),
         ];
 
@@ -575,7 +645,7 @@ mod tests {
             vm.debug().unwrap();
             assert_eq!(
                 vm.clone_stack_top(),
-                expected_res,
+                str_to_value(expected_res).unwrap(),
                 "we are testing `{code}`"
             )
         }
@@ -600,6 +670,20 @@ mod tests {
             let exprs = parse(code).unwrap();
             let mut compiler = Compiler::new();
             assert_eq!(compiler.compile(&exprs), expected_res);
+        }
+    }
+
+    #[test]
+    fn test_runtime_errors() {
+        let cases = vec![
+            ("(car '())", Err("Invalid operand for Car")),
+            ("(cdr '())", Err("Invalid operand for Cdr")),
+        ];
+
+        for (code, expected_res) in cases {
+            let exprs = parse(code).unwrap();
+            let mut vm = Compiler::new().compile(&exprs).unwrap();
+            assert_eq!(vm.debug(), expected_res);
         }
     }
 }
