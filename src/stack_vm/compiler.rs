@@ -164,6 +164,7 @@ impl Compiler {
                     "cons" => self.compile_cons(rest),
                     "car" => self.compile_car(rest),
                     "cdr" => self.compile_cdr(rest),
+                    "null?" => self.compile_isnull(rest),
                     _ => {
                         for expr in rest.iter().rev() {
                             self.compile_expr(expr)?
@@ -442,6 +443,15 @@ impl Compiler {
         Ok(())
     }
 
+    fn compile_isnull(&mut self, args: &[Expr]) -> Result<(), String> {
+        let [arg] = args else {
+            return Err("`null?` takes exactly 1 argument".to_string());
+        };
+        self.compile_expr(arg)?;
+        self.emit(Instruction::IsNull);
+        Ok(())
+    }
+
     fn compile_car(&mut self, args: &[Expr]) -> Result<(), String> {
         let [pair] = args else {
             return Err("`car` takes exactly 1 arguments".to_string());
@@ -518,6 +528,10 @@ mod tests {
             ("'(4 . 5)", "(4 . 5)"),
             ("(car '(4 . 5))", "4"),
             ("(cdr '(4 . 5))", "5"),
+            ("(null? '())", "#t"),
+            ("(null? '(1))", "#f"),
+            ("(null? 4.2)", "#f"),
+            ("(null? 42)", "#f"),
             ("(if #t 1 0)", "1"),
             ("(if #f 1 0)", "0"),
             ("(if (< 2 3) 1 0)", "1"),

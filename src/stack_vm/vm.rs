@@ -108,10 +108,12 @@ pub enum Instruction {
     Mul,
     Div,
     Abs,
+    // predicates
     GreaterThan,
     GreaterThanEqual,
     LessThan,
     LessThanEqual,
+    IsNull,
     // pairs
     Cons,
     Car,
@@ -286,6 +288,10 @@ impl VM {
                     _ => return Err("Invalid operands for LessThan"),
                 }
             }
+            Instruction::IsNull => match self.pop()? {
+                Value::Null => self.push(Value::Bool(true)),
+                _ => self.push(Value::Bool(false)),
+            },
             Instruction::Cons => {
                 let cdr = self.pop()?;
                 let car = self.pop()?;
