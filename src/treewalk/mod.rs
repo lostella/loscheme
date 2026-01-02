@@ -352,7 +352,13 @@ impl fmt::Display for Value {
             Value::Null => write!(f, "()"),
             Value::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
             Value::Integer(v) => write!(f, "{v}"),
-            Value::Float(v) => write!(f, "{v}"),
+            Value::Float(v) => {
+                if v.fract() == 0.0 {
+                    write!(f, "{v:.1}")
+                } else {
+                    write!(f, "{v}")
+                }
+            }
             Value::Rational(n, d) => write!(f, "{n}/{d}"),
             Value::Str(v) => write!(f, "\"{v}\""),
             Value::Char(c) => write!(f, "#\\{}", char_to_external(*c)),
