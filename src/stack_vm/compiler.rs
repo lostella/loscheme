@@ -470,16 +470,8 @@ impl Compiler {
 
 #[cfg(test)]
 mod tests {
-    use super::{Compiler, Value};
+    use super::Compiler;
     use crate::parser::parse;
-
-    fn str_to_value(s: &str) -> Result<Option<Value>, String> {
-        let exprs = parse(s)?;
-        let Some(expr) = exprs.first() else {
-            return Ok(None);
-        };
-        Ok(Some(Value::from(expr.clone())))
-    }
 
     #[test]
     fn test_parse_compile_run() {
@@ -487,6 +479,8 @@ mod tests {
             ("#t", "#t"),
             ("#f", "#f"),
             ("42", "42"),
+            ("42.", "42.0"),
+            ("42.0", "42.0"),
             ("(< 2 3)", "#t"),
             ("(< 3 3)", "#f"),
             ("(< 4 3)", "#f"),
@@ -520,6 +514,7 @@ mod tests {
             ("'42", "42"),
             ("'()", "()"),
             ("'(1 2 3)", "(1 2 3)"),
+            ("'(/ 1.0 2 3)", "(/ 1.0 2 3)"),
             ("(car '(1 2 3))", "1"),
             ("(cdr '(1 2 3))", "(2 3)"),
             ("'(4 . 5)", "(4 . 5)"),
@@ -655,8 +650,10 @@ mod tests {
             let mut vm = Compiler::new().compile(&exprs).unwrap();
             vm.debug().unwrap();
             assert_eq!(
-                vm.clone_stack_top(),
-                str_to_value(expected_res).unwrap(),
+                vm.clone_stack_top()
+                    .map(|x| x.to_string())
+                    .unwrap_or("".into()),
+                expected_res,
                 "we are testing `{code}`"
             )
         }

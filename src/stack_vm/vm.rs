@@ -1,22 +1,25 @@
 use crate::parser::{Expr, Keyword};
+use internment::Intern;
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    Symbol(Intern<String>),
     Null,
-    Pointer(usize),
     Bool(bool),
     Int(i64),
     Float(f64),
-    Pair(Rc<RefCell<(Value, Value)>>),
+    Pointer(usize),
     Procedure { addr: usize },
+    Pair(Rc<RefCell<(Value, Value)>>),
 }
 
 impl From<Expr> for Value {
     fn from(expr: Expr) -> Self {
         match expr {
+            Expr::Symbol(x) => Value::Symbol(x),
             Expr::Bool(x) => Value::Bool(x),
             Expr::Integer(x) => Value::Int(x),
             Expr::Float(x) => Value::Float(x),
@@ -38,15 +41,6 @@ impl From<Expr> for Value {
                     )))),
                 }
             }
-            Expr::Symbol(s) => {
-                if let Ok(addr) = s.trim_start_matches("$Procedure@").parse::<usize>() {
-                    return Value::Procedure { addr };
-                }
-                if let Ok(addr) = s.trim_start_matches("$Pointer->").parse::<usize>() {
-                    return Value::Pointer(addr);
-                }
-                todo!("{expr:?}")
-            }
             _ => todo!("{expr:?}"),
         }
     }
@@ -55,10 +49,19 @@ impl From<Expr> for Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Value::Symbol(s) => write!(f, "{s}"),
             Value::Null => write!(f, "()"),
             Value::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
             Value::Int(v) => write!(f, "{v}"),
-            Value::Float(v) => write!(f, "{v}"),
+            Value::Float(v) => {
+                if v.fract() == 0.0 {
+                    write!(f, "{v:.1}")
+                } else {
+                    write!(f, "{v}")
+                }
+            }
+            Value::Procedure { addr } => write!(f, "$Procedure@{addr}"),
+            Value::Pointer(addr) => write!(f, "$Pointer->{addr}"),
             Value::Pair(_) => {
                 write!(f, "(")?;
                 let mut current = self.clone();
@@ -87,8 +90,6 @@ impl fmt::Display for Value {
                 }
                 Ok(())
             }
-            Value::Procedure { addr } => write!(f, "$Procedure@{addr}"),
-            Value::Pointer(addr) => write!(f, "$Pointer->{addr}"),
         }
     }
 }
