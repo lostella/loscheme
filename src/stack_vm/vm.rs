@@ -387,10 +387,33 @@ impl VM {
         }
     }
 
-    pub fn run(&mut self) {
+    fn _run(&mut self, debug: bool) {
+        if debug {
+            println!("========================================");
+            for (idx, instr) in self.code.iter().enumerate() {
+                println!("{idx:03}: {instr:?}")
+            }
+            println!("----------------------------------------");
+            println!("{self}")
+        }
         while self.ip < self.code.len() {
             self.step();
+            if debug {
+                println!("----------------------------------------");
+                println!("{self}")
+            }
         }
+        if debug {
+            println!("========================================");
+        }
+    }
+
+    pub fn run(&mut self) {
+        self._run(false)
+    }
+
+    pub fn debug(&mut self) {
+        self._run(true)
     }
 }
 
@@ -441,7 +464,7 @@ mod tests {
         ];
 
         let mut vm = VM::new(code, vec![Int(6), Int(1), Int(2)]);
-        vm.run();
+        vm.debug();
         assert_eq!(vm.clone_stack_top(), Some(Int(8)));
     }
 }

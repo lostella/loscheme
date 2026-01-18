@@ -5,7 +5,7 @@ fn run_example(code: &str) {
     let exprs = parse(code).unwrap();
     let mut compiler = Compiler::new();
     let mut vm = compiler.compile(&exprs).unwrap();
-    vm.run();
+    vm.debug();
 }
 
 fn main() {

@@ -651,7 +651,7 @@ mod tests {
         for (code, expected_res) in cases {
             let exprs = parse(code).unwrap();
             let mut vm = Compiler::new().compile(&exprs).unwrap();
-            vm.run();
+            vm.debug();
             assert_eq!(
                 vm.clone_stack_top()
                     .map(|x| x.to_string())
@@ -689,7 +689,7 @@ mod tests {
     fn test_car_errors() {
         let exprs = parse("(car '())").unwrap();
         let mut vm = Compiler::new().compile(&exprs).unwrap();
-        vm.run();
+        vm.debug();
     }
 
     #[test]
@@ -697,6 +697,6 @@ mod tests {
     fn test_cdr_errors() {
         let exprs = parse("(cdr '())").unwrap();
         let mut vm = Compiler::new().compile(&exprs).unwrap();
-        vm.run();
+        vm.debug();
     }
 }
