@@ -22,6 +22,11 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = "none"
+
 [lints.rust]
 warnings = "deny"
 

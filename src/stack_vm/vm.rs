@@ -209,12 +209,14 @@ impl VM {
     }
 
     pub fn step(&mut self) -> Result<(), &'static str> {
-        let instr = self.code[self.ip].clone();
+        let instr = &self.code[self.ip];
         self.ip += 1;
         match instr {
-            Instruction::StackAlloc { size } => self.sp += size as usize,
+            Instruction::StackAlloc { size } => self.sp += *size as usize,
             Instruction::Halt => self.ip = self.code.len(),
-            Instruction::LoadConst { offset } => self.push(self.constants[offset as usize].clone()),
+            Instruction::LoadConst { offset } => {
+                self.push(self.constants[*offset as usize].clone())
+            }
             Instruction::PushZero => self.push(Value::Int(0)),
             Instruction::PushOne => self.push(Value::Int(1)),
             Instruction::Add => {
@@ -326,34 +328,36 @@ impl VM {
                 self.push(rc.borrow().1.clone());
             }
             Instruction::LoadLocal { offset } => {
-                let src = if offset >= 0 {
-                    self.fp + offset as usize
+                let src = if *offset >= 0 {
+                    self.fp + *offset as usize
                 } else {
-                    self.fp - (-offset as usize)
+                    self.fp - (-*offset as usize)
                 };
                 self.push(self.stack[src].clone());
             }
             Instruction::StoreLocal { offset } => {
-                let dest = self.fp + offset as usize;
+                let dest = self.fp + *offset as usize;
                 self.stack[dest] = self.pop()?;
                 if self.sp <= dest {
                     self.sp = dest + 1
                 }
             }
             Instruction::LoadGlobal { offset } => {
-                self.push(self.globals[offset as usize].clone());
+                self.push(self.globals[*offset as usize].clone());
             }
             Instruction::StoreGlobal { offset } => {
+                let offset = *offset;
                 self.globals[offset as usize] = self.pop()?;
             }
             Instruction::Jump { offset } => {
-                if offset >= 0 {
-                    self.ip = self.ip.wrapping_add(offset as usize);
+                if *offset >= 0 {
+                    self.ip = self.ip.wrapping_add(*offset as usize);
                 } else {
-                    self.ip = self.ip.wrapping_sub((-offset) as usize);
+                    self.ip = self.ip.wrapping_sub(-*offset as usize);
                 }
             }
             Instruction::JumpIfTrue { offset } => {
+                let offset = *offset;
                 let cond = self.pop()?;
                 match cond {
                     Value::Bool(true) => {
@@ -367,7 +371,7 @@ impl VM {
                     _ => return Err("Invalid operand for JumpIfTrue"),
                 }
             }
-            Instruction::Call { addr } => self.call(addr),
+            Instruction::Call { addr } => self.call(*addr),
             Instruction::CallStack => {
                 let value = self.pop()?;
                 match value {
@@ -389,6 +393,7 @@ impl VM {
                 self.push(ret);
             }
             Instruction::Slide { n } => {
+                let n = *n;
                 let ret = self.pop()?;
                 self.drop(n)?;
                 self.push(ret);
