@@ -28,7 +28,7 @@ fn main() {
         Ret,
     ];
 
-    let mut vm = VM::new(code, vec![Int(35), Int(1), Int(2)]);
+    let mut vm = VM::new(code, vec![Int(40), Int(1), Int(2)]);
     vm.run();
     println!("{:?}", vm.clone_stack_top().unwrap());
 }

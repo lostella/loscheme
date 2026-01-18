@@ -206,186 +206,190 @@ impl VM {
         self.ip = addr;
     }
 
-    pub fn run(&mut self) {
-        while self.ip < self.code.len() {
-            let instr = unsafe { &self.code.get_unchecked(self.ip) };
-            self.ip += 1;
-            match instr {
-                Instruction::StackAlloc { size } => self.sp += *size as usize,
-                Instruction::Halt => break,
-                Instruction::LoadConst { offset } => {
-                    self.push(self.constants[*offset as usize].clone())
-                }
-                Instruction::PushZero => self.push(Value::Int(0)),
-                Instruction::PushOne => self.push(Value::Int(1)),
-                Instruction::Add => {
-                    let b = self.pop();
-                    let a = self.pop();
-                    match (a, b) {
-                        (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x + y)),
-                        (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) + y)),
-                        (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x + (y as f64))),
-                        (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x + y)),
-                        _ => panic!("Invalid operands for Add"),
-                    }
-                }
-                Instruction::Sub => {
-                    let b = self.pop();
-                    let a = self.pop();
-                    match (a, b) {
-                        (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x - y)),
-                        (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) - y)),
-                        (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x - (y as f64))),
-                        (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x - y)),
-                        _ => panic!("Invalid operands for Sub"),
-                    }
-                }
-                Instruction::Mul => {
-                    let b = self.pop();
-                    let a = self.pop();
-                    match (a, b) {
-                        (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x * y)),
-                        (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) * y)),
-                        (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x * (y as f64))),
-                        (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x * y)),
-                        _ => panic!("Invalid operands for Mul"),
-                    }
-                }
-                Instruction::Div => {
-                    let b = self.pop();
-                    let a = self.pop();
-                    match (a, b) {
-                        (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x / y)),
-                        (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) / y)),
-                        (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x / (y as f64))),
-                        _ => panic!("Invalid operands for Div"),
-                    }
-                }
-                Instruction::Abs => {
-                    let a = self.pop();
-                    match a {
-                        Value::Int(x) => self.push(Value::Int(x.abs())),
-                        Value::Float(x) => self.push(Value::Float(x.abs())),
-                        _ => panic!("Invalid operand for Abs"),
-                    }
-                }
-                Instruction::LessThan => {
-                    let b = self.pop();
-                    let a = self.pop();
-                    match (a, b) {
-                        (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x < y)),
-                        (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x < y)),
-                        _ => panic!("Invalid operands for LessThan"),
-                    }
-                }
-                Instruction::LessThanEqual => {
-                    let b = self.pop();
-                    let a = self.pop();
-                    match (a, b) {
-                        (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x <= y)),
-                        (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x <= y)),
-                        _ => panic!("Invalid operands for LessThan"),
-                    }
-                }
-                Instruction::GreaterThan => {
-                    let b = self.pop();
-                    let a = self.pop();
-                    match (a, b) {
-                        (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x > y)),
-                        (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x > y)),
-                        _ => panic!("Invalid operands for LessThan"),
-                    }
-                }
-                Instruction::GreaterThanEqual => {
-                    let b = self.pop();
-                    let a = self.pop();
-                    match (a, b) {
-                        (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x >= y)),
-                        (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x >= y)),
-                        _ => panic!("Invalid operands for LessThan"),
-                    }
-                }
-                Instruction::IsNull => match self.pop() {
-                    Value::Null => self.push(Value::Bool(true)),
-                    _ => self.push(Value::Bool(false)),
-                },
-                Instruction::Cons => {
-                    let cdr = self.pop();
-                    let car = self.pop();
-                    self.push(Value::Pair(Rc::new(RefCell::new((car, cdr)))));
-                }
-                Instruction::Car => {
-                    let Value::Pair(rc) = self.pop() else {
-                        panic!("Invalid operand for Car");
-                    };
-                    self.push(rc.borrow().0.clone());
-                }
-                Instruction::Cdr => {
-                    let Value::Pair(rc) = self.pop() else {
-                        panic!("Invalid operand for Cdr");
-                    };
-                    self.push(rc.borrow().1.clone());
-                }
-                Instruction::LoadLocal { offset } => {
-                    let src = self.fp.wrapping_add(*offset as usize);
-                    self.push(self.stack[src].clone());
-                }
-                Instruction::StoreLocal { offset } => {
-                    let dest = self.fp.wrapping_add(*offset as usize);
-                    self.stack[dest] = self.pop();
-                    if self.sp <= dest {
-                        self.sp = dest + 1
-                    }
-                }
-                Instruction::LoadGlobal { offset } => {
-                    self.push(self.globals[*offset as usize].clone());
-                }
-                Instruction::StoreGlobal { offset } => {
-                    let offset = *offset;
-                    self.globals[offset as usize] = self.pop();
-                }
-                Instruction::Jump { offset } => {
-                    self.ip = self.ip.wrapping_add(*offset as usize);
-                }
-                Instruction::JumpIfTrue { offset } => {
-                    let offset = *offset;
-                    let cond = self.pop();
-                    match cond {
-                        Value::Bool(true) => {
-                            self.ip = self.ip.wrapping_add(offset as usize);
-                        }
-                        Value::Bool(false) => (),
-                        _ => panic!("Invalid operand for JumpIfTrue"),
-                    }
-                }
-                Instruction::Call { addr } => self.call(*addr),
-                Instruction::CallStack => {
-                    let value = self.pop();
-                    match value {
-                        Value::Procedure { addr } => self.call(addr),
-                        _ => panic!("Invalid operand for CallStack"),
-                    }
-                }
-                Instruction::Ret => {
-                    let ret = self.pop();
-                    self.sp = self.fp - 2;
-                    self.ip = match self.stack[self.fp - 1] {
-                        Value::Pointer(i) => i,
-                        _ => panic!("Invalid return address"),
-                    };
-                    self.fp = match self.stack[self.fp - 2] {
-                        Value::Pointer(i) => i,
-                        _ => panic!("Invalid frame pointer"),
-                    };
-                    self.push(ret);
-                }
-                Instruction::Slide { n } => {
-                    let n = *n;
-                    let ret = self.pop();
-                    self.drop(n);
-                    self.push(ret);
+    fn step(&mut self) {
+        let instr = &self.code[self.ip];
+        self.ip += 1;
+        match instr {
+            Instruction::StackAlloc { size } => self.sp += *size as usize,
+            Instruction::Halt => self.ip = self.code.len(),
+            Instruction::LoadConst { offset } => {
+                self.push(self.constants[*offset as usize].clone())
+            }
+            Instruction::PushZero => self.push(Value::Int(0)),
+            Instruction::PushOne => self.push(Value::Int(1)),
+            Instruction::Add => {
+                let b = self.pop();
+                let a = self.pop();
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x + y)),
+                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) + y)),
+                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x + (y as f64))),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x + y)),
+                    _ => panic!("Invalid operands for Add"),
                 }
             }
+            Instruction::Sub => {
+                let b = self.pop();
+                let a = self.pop();
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x - y)),
+                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) - y)),
+                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x - (y as f64))),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x - y)),
+                    _ => panic!("Invalid operands for Sub"),
+                }
+            }
+            Instruction::Mul => {
+                let b = self.pop();
+                let a = self.pop();
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x * y)),
+                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) * y)),
+                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x * (y as f64))),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x * y)),
+                    _ => panic!("Invalid operands for Mul"),
+                }
+            }
+            Instruction::Div => {
+                let b = self.pop();
+                let a = self.pop();
+                match (a, b) {
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x / y)),
+                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) / y)),
+                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x / (y as f64))),
+                    _ => panic!("Invalid operands for Div"),
+                }
+            }
+            Instruction::Abs => {
+                let a = self.pop();
+                match a {
+                    Value::Int(x) => self.push(Value::Int(x.abs())),
+                    Value::Float(x) => self.push(Value::Float(x.abs())),
+                    _ => panic!("Invalid operand for Abs"),
+                }
+            }
+            Instruction::LessThan => {
+                let b = self.pop();
+                let a = self.pop();
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x < y)),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x < y)),
+                    _ => panic!("Invalid operands for LessThan"),
+                }
+            }
+            Instruction::LessThanEqual => {
+                let b = self.pop();
+                let a = self.pop();
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x <= y)),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x <= y)),
+                    _ => panic!("Invalid operands for LessThan"),
+                }
+            }
+            Instruction::GreaterThan => {
+                let b = self.pop();
+                let a = self.pop();
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x > y)),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x > y)),
+                    _ => panic!("Invalid operands for LessThan"),
+                }
+            }
+            Instruction::GreaterThanEqual => {
+                let b = self.pop();
+                let a = self.pop();
+                match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x >= y)),
+                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x >= y)),
+                    _ => panic!("Invalid operands for LessThan"),
+                }
+            }
+            Instruction::IsNull => match self.pop() {
+                Value::Null => self.push(Value::Bool(true)),
+                _ => self.push(Value::Bool(false)),
+            },
+            Instruction::Cons => {
+                let cdr = self.pop();
+                let car = self.pop();
+                self.push(Value::Pair(Rc::new(RefCell::new((car, cdr)))));
+            }
+            Instruction::Car => {
+                let Value::Pair(rc) = self.pop() else {
+                    panic!("Invalid operand for Car");
+                };
+                self.push(rc.borrow().0.clone());
+            }
+            Instruction::Cdr => {
+                let Value::Pair(rc) = self.pop() else {
+                    panic!("Invalid operand for Cdr");
+                };
+                self.push(rc.borrow().1.clone());
+            }
+            Instruction::LoadLocal { offset } => {
+                let src = self.fp.wrapping_add(*offset as usize);
+                self.push(self.stack[src].clone());
+            }
+            Instruction::StoreLocal { offset } => {
+                let dest = self.fp.wrapping_add(*offset as usize);
+                self.stack[dest] = self.pop();
+                if self.sp <= dest {
+                    self.sp = dest + 1
+                }
+            }
+            Instruction::LoadGlobal { offset } => {
+                self.push(self.globals[*offset as usize].clone());
+            }
+            Instruction::StoreGlobal { offset } => {
+                let offset = *offset;
+                self.globals[offset as usize] = self.pop();
+            }
+            Instruction::Jump { offset } => {
+                self.ip = self.ip.wrapping_add(*offset as usize);
+            }
+            Instruction::JumpIfTrue { offset } => {
+                let offset = *offset;
+                let cond = self.pop();
+                match cond {
+                    Value::Bool(true) => {
+                        self.ip = self.ip.wrapping_add(offset as usize);
+                    }
+                    Value::Bool(false) => (),
+                    _ => panic!("Invalid operand for JumpIfTrue"),
+                }
+            }
+            Instruction::Call { addr } => self.call(*addr),
+            Instruction::CallStack => {
+                let value = self.pop();
+                match value {
+                    Value::Procedure { addr } => self.call(addr),
+                    _ => panic!("Invalid operand for CallStack"),
+                }
+            }
+            Instruction::Ret => {
+                let ret = self.pop();
+                self.sp = self.fp - 2;
+                self.ip = match self.stack[self.fp - 1] {
+                    Value::Pointer(i) => i,
+                    _ => panic!("Invalid return address"),
+                };
+                self.fp = match self.stack[self.fp - 2] {
+                    Value::Pointer(i) => i,
+                    _ => panic!("Invalid frame pointer"),
+                };
+                self.push(ret);
+            }
+            Instruction::Slide { n } => {
+                let n = *n;
+                let ret = self.pop();
+                self.drop(n);
+                self.push(ret);
+            }
+        }
+    }
+
+    pub fn run(&mut self) {
+        while self.ip < self.code.len() {
+            self.step();
         }
     }
 }
