@@ -149,8 +149,8 @@ impl VM {
     pub fn new(code: Vec<Instruction>) -> Self {
         Self {
             code,
-            globals: vec![Value::Int(0); 1024],
-            stack: vec![Value::Int(0); 1024],
+            globals: vec![Value::default(); 1024],
+            stack: vec![Value::default(); 1024],
             sp: 0,
             fp: 0,
             ip: 0,
@@ -171,11 +171,13 @@ impl VM {
         }
     }
 
+    #[inline]
     fn push(&mut self, val: Value) {
         self.stack[self.sp] = val;
         self.sp += 1;
     }
 
+    #[inline]
     fn pop(&mut self) -> Result<Value, &'static str> {
         if self.sp == 0 {
             return Err("Stack is empty");
@@ -185,6 +187,7 @@ impl VM {
         Ok(top)
     }
 
+    #[inline]
     fn drop(&mut self, n: usize) -> Result<(), &'static str> {
         if self.sp < n {
             return Err("Stack is too small");
@@ -193,6 +196,7 @@ impl VM {
         Ok(())
     }
 
+    #[inline]
     fn call(&mut self, addr: usize) {
         self.push(Value::Pointer(self.fp));
         self.push(Value::Pointer(self.ip));
