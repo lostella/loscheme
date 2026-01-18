@@ -2,17 +2,21 @@ use crate::parser::{Expr, Keyword};
 use internment::Intern;
 use std::cell::RefCell;
 use std::fmt;
+use std::mem;
 use std::rc::Rc;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Value {
-    Symbol(Intern<String>),
+    #[default]
     Null,
+    Symbol(Intern<String>),
     Bool(bool),
     Int(i64),
     Float(f64),
     Pointer(usize),
-    Procedure { addr: usize },
+    Procedure {
+        addr: usize,
+    },
     Pair(Rc<RefCell<(Value, Value)>>),
 }
 
@@ -177,7 +181,8 @@ impl VM {
             return Err("Stack is empty");
         }
         self.sp -= 1;
-        Ok(self.stack[self.sp].clone())
+        let top = mem::take(&mut self.stack[self.sp]);
+        Ok(top)
     }
 
     fn drop(&mut self, n: usize) -> Result<(), &'static str> {
