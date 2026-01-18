@@ -332,7 +332,7 @@ impl VM {
                 self.push(self.stack[src].clone());
             }
             Instruction::StoreLocal { offset } => {
-                let dest = self.fp + *offset as usize;
+                let dest = self.fp.wrapping_add(*offset as usize);
                 self.stack[dest] = self.pop()?;
                 if self.sp <= dest {
                     self.sp = dest + 1
