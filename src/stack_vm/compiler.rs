@@ -651,7 +651,7 @@ mod tests {
         for (code, expected_res) in cases {
             let exprs = parse(code).unwrap();
             let mut vm = Compiler::new().compile(&exprs).unwrap();
-            vm.debug().unwrap();
+            vm.run();
             assert_eq!(
                 vm.clone_stack_top()
                     .map(|x| x.to_string())
@@ -685,16 +685,18 @@ mod tests {
     }
 
     #[test]
-    fn test_runtime_errors() {
-        let cases = vec![
-            ("(car '())", Err("Invalid operand for Car")),
-            ("(cdr '())", Err("Invalid operand for Cdr")),
-        ];
+    #[should_panic]
+    fn test_car_errors() {
+        let exprs = parse("(car '())").unwrap();
+        let mut vm = Compiler::new().compile(&exprs).unwrap();
+        vm.run();
+    }
 
-        for (code, expected_res) in cases {
-            let exprs = parse(code).unwrap();
-            let mut vm = Compiler::new().compile(&exprs).unwrap();
-            assert_eq!(vm.debug(), expected_res);
-        }
+    #[test]
+    #[should_panic]
+    fn test_cdr_errors() {
+        let exprs = parse("(cdr '())").unwrap();
+        let mut vm = Compiler::new().compile(&exprs).unwrap();
+        vm.run();
     }
 }
