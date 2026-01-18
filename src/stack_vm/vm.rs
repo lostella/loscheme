@@ -328,11 +328,7 @@ impl VM {
                 self.push(rc.borrow().1.clone());
             }
             Instruction::LoadLocal { offset } => {
-                let src = if *offset >= 0 {
-                    self.fp + *offset as usize
-                } else {
-                    self.fp - (-*offset as usize)
-                };
+                let src = self.fp.wrapping_add(*offset as usize);
                 self.push(self.stack[src].clone());
             }
             Instruction::StoreLocal { offset } => {
@@ -350,22 +346,14 @@ impl VM {
                 self.globals[offset as usize] = self.pop()?;
             }
             Instruction::Jump { offset } => {
-                if *offset >= 0 {
-                    self.ip = self.ip.wrapping_add(*offset as usize);
-                } else {
-                    self.ip = self.ip.wrapping_sub(-*offset as usize);
-                }
+                self.ip = self.ip.wrapping_add(*offset as usize);
             }
             Instruction::JumpIfTrue { offset } => {
                 let offset = *offset;
                 let cond = self.pop()?;
                 match cond {
                     Value::Bool(true) => {
-                        if offset >= 0 {
-                            self.ip = self.ip.wrapping_add(offset as usize);
-                        } else {
-                            self.ip = self.ip.wrapping_sub((-offset) as usize);
-                        }
+                        self.ip = self.ip.wrapping_add(offset as usize);
                     }
                     Value::Bool(false) => (),
                     _ => return Err("Invalid operand for JumpIfTrue"),
