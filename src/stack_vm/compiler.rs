@@ -6,6 +6,7 @@ use std::collections::HashMap;
 pub struct Compiler {
     global_scope: HashMap<String, SymbolInfo>,
     local_scopes: Vec<HashMap<String, SymbolInfo>>,
+    const_section: Vec<Value>,
     proc_section: Vec<Instruction>,
     main_section: Vec<Instruction>,
     emit_to_main: bool,
@@ -34,6 +35,7 @@ impl Compiler {
         Compiler {
             global_scope: HashMap::<String, SymbolInfo>::new(),
             local_scopes: vec![],
+            const_section: vec![],
             proc_section: vec![],
             main_section: vec![],
             emit_to_main: true,
@@ -47,15 +49,17 @@ impl Compiler {
         let addr_offset = code.len();
         code.append(&mut self.proc_section.clone());
         for instr in code.iter_mut() {
-            match instr {
-                Instruction::Call { addr } => *addr += addr_offset,
-                Instruction::Push {
-                    value: Value::Procedure { addr },
-                } => *addr += addr_offset,
-                _ => (),
+            if let Instruction::Call { addr } = instr {
+                *addr += addr_offset
             }
         }
-        Ok(VM::new(code))
+        let mut constants = self.const_section.clone();
+        for val in constants.iter_mut() {
+            if let Value::Procedure { addr } = val {
+                *addr += addr_offset
+            }
+        }
+        Ok(VM::new(code, constants))
     }
 
     fn emit(&mut self, instr: Instruction) {
@@ -94,25 +98,32 @@ impl Compiler {
         None
     }
 
+    fn get_or_insert_const(&mut self, val: Value) -> u8 {
+        if let Some(idx) = self.const_section.iter().position(|x| x == &val) {
+            idx as u8
+        } else {
+            let idx = self.const_section.len();
+            self.const_section.push(val);
+            idx as u8
+        }
+    }
+
     fn compile_expr(&mut self, expr: &Expr) -> Result<(), String> {
         match expr {
             Expr::List(v) => self.compile_list(v),
             Expr::Bool(b) => {
-                self.emit(Instruction::Push {
-                    value: Value::Bool(*b),
-                });
+                let offset = self.get_or_insert_const(Value::Bool(*b));
+                self.emit(Instruction::LoadConst { offset });
                 Ok(())
             }
             Expr::Integer(i) => {
-                self.emit(Instruction::Push {
-                    value: Value::Int(*i),
-                });
+                let offset = self.get_or_insert_const(Value::Int(*i));
+                self.emit(Instruction::LoadConst { offset });
                 Ok(())
             }
             Expr::Float(f) => {
-                self.emit(Instruction::Push {
-                    value: Value::Float(*f),
-                });
+                let offset = self.get_or_insert_const(Value::Float(*f));
+                self.emit(Instruction::LoadConst { offset });
                 Ok(())
             }
             Expr::Symbol(s) => {
@@ -147,9 +158,8 @@ impl Compiler {
                 let addr = self.get_section_length();
                 let res = self.compile_lambda(rest);
                 self.emit_to_main = was_emitting_to_main;
-                self.emit(Instruction::Push {
-                    value: Value::Procedure { addr },
-                });
+                let offset = self.get_or_insert_const(Value::Procedure { addr });
+                self.emit(Instruction::LoadConst { offset });
                 res
             }
             Expr::Symbol(s) => {
@@ -190,7 +200,8 @@ impl Compiler {
                     return Err("Quote needs exactly one argument".to_string());
                 };
                 let value = Value::from(arg.clone());
-                self.emit(Instruction::Push { value });
+                let offset = self.get_or_insert_const(value);
+                self.emit(Instruction::LoadConst { offset });
                 Ok(())
             }
             _ => todo!("list starting with: {first:?}"),
@@ -346,9 +357,7 @@ impl Compiler {
 
     fn compile_add(&mut self, args: &[Expr]) -> Result<(), String> {
         let Some((first, mut rest)) = args.split_first() else {
-            self.emit(Instruction::Push {
-                value: Value::Int(0),
-            });
+            self.emit(Instruction::PushZero);
             return Ok(());
         };
         self.compile_expr(first)?;
@@ -365,9 +374,7 @@ impl Compiler {
             return Err("`-` takes at least one argument".to_string());
         };
         if rest.is_empty() {
-            self.emit(Instruction::Push {
-                value: Value::Int(0),
-            });
+            self.emit(Instruction::PushZero);
             self.compile_expr(first)?;
             self.emit(Instruction::Sub);
             return Ok(());
@@ -383,9 +390,7 @@ impl Compiler {
 
     fn compile_mul(&mut self, args: &[Expr]) -> Result<(), String> {
         let Some((first, mut rest)) = args.split_first() else {
-            self.emit(Instruction::Push {
-                value: Value::Int(1),
-            });
+            self.emit(Instruction::PushOne);
             return Ok(());
         };
         self.compile_expr(first)?;
@@ -402,9 +407,7 @@ impl Compiler {
             return Err("`/` takes at least one argument".to_string());
         };
         if rest.is_empty() {
-            self.emit(Instruction::Push {
-                value: Value::Int(1),
-            });
+            self.emit(Instruction::PushOne);
             self.compile_expr(first)?;
             self.emit(Instruction::Div);
             return Ok(());

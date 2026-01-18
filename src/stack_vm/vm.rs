@@ -102,12 +102,14 @@ impl fmt::Display for Value {
 pub enum Instruction {
     // stack manipulation
     StackAlloc { size: u8 },
-    Push { value: Value },
+    LoadConst { offset: u8 },
     LoadLocal { offset: i8 },
     StoreLocal { offset: i8 },
     LoadGlobal { offset: u8 },
     StoreGlobal { offset: u8 },
     // numerical operations
+    PushZero,
+    PushOne,
     Add,
     Sub,
     Mul,
@@ -138,6 +140,7 @@ pub enum Instruction {
 #[derive(Debug, PartialEq)]
 pub struct VM {
     code: Vec<Instruction>,
+    constants: Vec<Value>,
     stack: Vec<Value>,
     globals: Vec<Value>,
     sp: usize,
@@ -146,9 +149,10 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new(code: Vec<Instruction>) -> Self {
+    pub fn new(code: Vec<Instruction>, constants: Vec<Value>) -> Self {
         Self {
             code,
+            constants,
             globals: vec![Value::default(); 1024],
             stack: vec![Value::default(); 1024],
             sp: 0,
@@ -210,7 +214,9 @@ impl VM {
         match instr {
             Instruction::StackAlloc { size } => self.sp += size as usize,
             Instruction::Halt => self.ip = self.code.len(),
-            Instruction::Push { value } => self.push(value),
+            Instruction::LoadConst { offset } => self.push(self.constants[offset as usize].clone()),
+            Instruction::PushZero => self.push(Value::Int(0)),
+            Instruction::PushOne => self.push(Value::Int(1)),
             Instruction::Add => {
                 let b = self.pop()?;
                 let a = self.pop()?;
@@ -444,23 +450,23 @@ mod tests {
     fn test_fib() {
         let code = vec![
             // main:
-            Push { value: Int(6) }, // argument for fib
-            Call { addr: 3 },       // call fib
-            Halt,                   // halt
+            LoadConst { offset: 0 }, // argument for fib
+            Call { addr: 3 },        // call fib
+            Halt,                    // halt
             // fib:
-            Push { value: Int(1) },   // push 1
+            LoadConst { offset: 1 },  // push 1
             LoadLocal { offset: -3 }, // put n on the stack
             LessThan,
             JumpIfTrue { offset: 2 }, // if 1 < n, jump to recursive case
             LoadLocal { offset: -3 }, // put n on the stack
             Ret,                      // return n
             LoadLocal { offset: -3 },
-            Push { value: Int(1) },
+            LoadConst { offset: 1 },
             Sub,
             Call { addr: 3 }, // fib(n - 1)
             StoreLocal { offset: 0 },
             LoadLocal { offset: -3 },
-            Push { value: Int(2) },
+            LoadConst { offset: 2 },
             Sub,
             Call { addr: 3 }, // fib(n - 2)
             LoadLocal { offset: 0 },
@@ -468,7 +474,7 @@ mod tests {
             Ret,
         ];
 
-        let mut vm = VM::new(code);
+        let mut vm = VM::new(code, vec![Int(6), Int(1), Int(2)]);
         vm.run().unwrap();
         assert_eq!(vm.clone_stack_top(), Some(Int(8)));
     }
