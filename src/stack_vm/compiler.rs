@@ -6,10 +6,10 @@ use std::collections::HashMap;
 pub struct Compiler {
     global_scope: HashMap<String, SymbolInfo>,
     local_scopes: Vec<HashMap<String, SymbolInfo>>,
+    proc_stack: Vec<Vec<Instruction>>,
     const_section: Vec<Value>,
     proc_section: Vec<Instruction>,
     main_section: Vec<Instruction>,
-    emit_to_main: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -35,10 +35,10 @@ impl Compiler {
         Compiler {
             global_scope: HashMap::<String, SymbolInfo>::new(),
             local_scopes: vec![],
+            proc_stack: vec![],
             const_section: vec![],
             proc_section: vec![],
             main_section: vec![],
-            emit_to_main: true,
         }
     }
 
@@ -63,26 +63,26 @@ impl Compiler {
     }
 
     fn emit(&mut self, instr: Instruction) {
-        if self.emit_to_main {
-            self.main_section.push(instr)
+        if let Some(code) = self.proc_stack.last_mut() {
+            code.push(instr)
         } else {
-            self.proc_section.push(instr)
+            self.main_section.push(instr)
         }
     }
 
     fn insert_code_at(&mut self, location: usize, instr: Instruction) {
-        if self.emit_to_main {
-            self.main_section.insert(location, instr)
+        if let Some(code) = self.proc_stack.last_mut() {
+            code.insert(location, instr)
         } else {
-            self.proc_section.insert(location, instr)
+            self.main_section.insert(location, instr)
         }
     }
 
     fn get_section_length(&self) -> usize {
-        if self.emit_to_main {
-            self.main_section.len()
+        if let Some(code) = self.proc_stack.last() {
+            code.len()
         } else {
-            self.proc_section.len()
+            self.main_section.len()
         }
     }
 
@@ -153,14 +153,16 @@ impl Compiler {
             Expr::Keyword(Keyword::Define) => self.compile_define(rest),
             Expr::Keyword(Keyword::Let) => self.compile_let(rest),
             Expr::Keyword(Keyword::Lambda) => {
-                let was_emitting_to_main = self.emit_to_main;
-                self.emit_to_main = false;
-                let addr = self.get_section_length();
-                let res = self.compile_lambda(rest);
-                self.emit_to_main = was_emitting_to_main;
+                self.proc_stack.push(vec![]);
+                self.compile_lambda(rest)?;
+                let Some(code) = self.proc_stack.pop() else {
+                    return Err("unreachable")
+                };
+                let addr = self.proc_section.len();
                 let offset = self.get_or_insert_const(Value::Procedure { addr });
+                self.proc_section.append(code);
                 self.emit(Instruction::LoadConst { offset });
-                res
+                Ok(())
             }
             Expr::Symbol(s) => {
                 let s = s.as_str();
