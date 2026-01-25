@@ -634,16 +634,16 @@ mod tests {
                 "#,
                 "1.4142156862745097",
             ),
-            // (
-            //     r#"
-            //     (define makeinc (lambda ()
-            //         (lambda (x)
-            //                 (+ 1 x))))
-            //     (define inc (makeinc))
-            //     (inc 4)
-            //     "#,
-            //     "5",
-            // ),
+            (
+                r#"
+                (define makeinc (lambda ()
+                    (lambda (x)
+                            (+ 1 x))))
+                (define inc (makeinc))
+                (inc 4)
+                "#,
+                "5",
+            ),
             // (
             //     "(define make-adder (lambda (a) (lambda (x) (+ a x)))) (define a 5) (define plus-a (make-adder a)) (define a 42) (plus-a 6)",
             //     "11",
