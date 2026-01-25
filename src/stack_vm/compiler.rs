@@ -156,11 +156,11 @@ impl Compiler {
                 self.proc_stack.push(vec![]);
                 self.compile_lambda(rest)?;
                 let Some(code) = self.proc_stack.pop() else {
-                    return Err("unreachable")
+                    return Err("unreachable".to_string())
                 };
                 let addr = self.proc_section.len();
                 let offset = self.get_or_insert_const(Value::Procedure { addr });
-                self.proc_section.append(code);
+                self.proc_section.append(&mut code);
                 self.emit(Instruction::LoadConst { offset });
                 Ok(())
             }
