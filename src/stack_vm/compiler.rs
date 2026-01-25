@@ -155,7 +155,7 @@ impl Compiler {
             Expr::Keyword(Keyword::Lambda) => {
                 self.proc_stack.push(vec![]);
                 self.compile_lambda(rest)?;
-                let Some(code) = self.proc_stack.pop() else {
+                let Some(mut code) = self.proc_stack.pop() else {
                     return Err("unreachable".to_string())
                 };
                 let addr = self.proc_section.len();
