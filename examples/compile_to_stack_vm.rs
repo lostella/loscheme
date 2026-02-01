@@ -24,5 +24,5 @@ fn main() {
     run_example("(define a 3) (define plus-a (lambda (x) (+ a 3)))");
     run_example("(define a 3) (define plus-a (lambda (x) (+ a x))) (plus-a 9)");
     run_example("(define a 3) (define plus-a (lambda (x) (+ a 3)))");
-    run_example("(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 10)");
+    run_example("(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 3)");
 }

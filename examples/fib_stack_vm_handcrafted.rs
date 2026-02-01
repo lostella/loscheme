@@ -31,5 +31,5 @@ fn main() {
 
     let mut vm = VM::new(code, vec![Int(40), Int(2)]);
     vm.run();
-    println!("{:?}", vm.clone_stack_top().unwrap());
+    println!("{}", vm.clone_stack_top().unwrap());
 }
