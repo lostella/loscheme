@@ -1,7 +1,6 @@
 use std::fmt;
-use std::mem;
 
-#[derive(Debug, Clone, PartialEq, Default, Copy)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Value {
     #[default]
     Null,
@@ -14,7 +13,7 @@ pub enum Value {
     Pair(usize, usize),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Instruction {
     // stack manipulation
     StackAlloc { size: u8 },
@@ -168,19 +167,8 @@ impl VM {
 
     #[inline]
     fn pop_from_stack(&mut self) -> Value {
-        if self.sp == 0 {
-            panic!("Stack is empty");
-        }
         self.sp -= 1;
-        mem::take(&mut self.stack[self.sp])
-    }
-
-    #[inline]
-    fn drop_from_stack(&mut self, n: usize) {
-        if self.sp < n {
-            panic!("Stack is too small");
-        }
-        self.sp -= n;
+        self.stack[self.sp]
     }
 
     #[inline]
@@ -198,12 +186,12 @@ impl VM {
     }
 
     fn step(&mut self) {
-        let instr = &self.code[self.ip];
+        let instr = self.code[self.ip];
         self.ip += 1;
         match instr {
-            Instruction::StackAlloc { size } => self.sp += *size as usize,
+            Instruction::StackAlloc { size } => self.sp += size as usize,
             Instruction::Halt => self.ip = self.code.len(),
-            Instruction::LoadConst { offset } => self.push_to_stack(self.data[*offset as usize]),
+            Instruction::LoadConst { offset } => self.push_to_stack(self.data[offset as usize]),
             Instruction::PushZero => self.push_to_stack(Value::Int(0)),
             Instruction::PushOne => self.push_to_stack(Value::Int(1)),
             Instruction::Add => {
@@ -333,28 +321,26 @@ impl VM {
                 self.push_to_stack(self.heap[cdr_addr]);
             }
             Instruction::LoadLocal { offset } => {
-                let src = self.fp.wrapping_add(*offset as usize);
+                let src = self.fp.wrapping_add(offset as usize);
                 self.push_to_stack(self.stack[src]);
             }
             Instruction::StoreLocal { offset } => {
-                let dest = self.fp.wrapping_add(*offset as usize);
+                let dest = self.fp.wrapping_add(offset as usize);
                 self.stack[dest] = self.pop_from_stack();
                 if self.sp <= dest {
                     self.sp = dest + 1
                 }
             }
             Instruction::LoadGlobal { offset } => {
-                self.push_to_stack(self.globals[*offset as usize]);
+                self.push_to_stack(self.globals[offset as usize]);
             }
             Instruction::StoreGlobal { offset } => {
-                let offset = *offset;
                 self.globals[offset as usize] = self.pop_from_stack();
             }
             Instruction::Jump { offset } => {
-                self.ip = self.ip.wrapping_add(*offset as usize);
+                self.ip = self.ip.wrapping_add(offset as usize);
             }
             Instruction::JumpIfTrue { offset } => {
-                let offset = *offset;
                 let cond = self.pop_from_stack();
                 match cond {
                     Value::Bool(true) => {
@@ -364,7 +350,7 @@ impl VM {
                     _ => panic!("Invalid operand for JumpIfTrue"),
                 }
             }
-            Instruction::Call { addr } => self.call(*addr),
+            Instruction::Call { addr } => self.call(addr),
             Instruction::CallStack => {
                 let value = self.pop_from_stack();
                 match value {
@@ -386,13 +372,12 @@ impl VM {
                 self.push_to_stack(ret);
             }
             Instruction::Slide { n } => {
-                let n = *n;
                 let ret = self.pop_from_stack();
-                self.drop_from_stack(n);
+                self.sp -= n;
                 self.push_to_stack(ret);
             }
             Instruction::Drop { n } => {
-                self.drop_from_stack(*n);
+                self.sp -= n;
             }
         }
     }
