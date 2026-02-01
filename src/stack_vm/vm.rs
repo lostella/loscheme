@@ -391,24 +391,28 @@ impl VM {
         }
     }
 
+    fn print_state(&self) {
+        println!(
+            "fp: {}, sp: {}, ip: {} ==> {:?}",
+            self.fp,
+            self.sp,
+            self.ip,
+            self.code.get(self.ip),
+        );
+        println!("stack: {:?}", self.clone_stack())
+    }
+
     fn execute<const DEBUG: bool>(&mut self) {
         if DEBUG {
             println!("========================================");
-            for (idx, value) in self.constants.iter().enumerate() {
-                println!("{idx:03}: {value:?}")
-            }
+            print!("{self}");
             println!("----------------------------------------");
-            for (idx, instr) in self.code.iter().enumerate() {
-                println!("{idx:03}: {instr:?}")
-            }
-            println!("----------------------------------------");
-            println!("{self}");
+            self.print_state();
         }
         while self.ip < self.code.len() {
             self.step();
             if DEBUG {
-                println!("----------------------------------------");
-                println!("{self}")
+                self.print_state();
             }
         }
         if DEBUG {
@@ -427,15 +431,13 @@ impl VM {
 
 impl fmt::Display for VM {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "fp: {}, sp: {}, ip: {} ==> {:?}",
-            self.fp,
-            self.sp,
-            self.ip,
-            self.code.get(self.ip),
-        )?;
-        write!(f, "stack: {:?}", self.clone_stack())
+        for (idx, value) in self.constants.iter().enumerate() {
+            writeln!(f, "D{idx:03}: {value:?}")?
+        }
+        for (idx, instr) in self.code.iter().enumerate() {
+            writeln!(f, "C{idx:03}: {instr:?}")?
+        }
+        Ok(())
     }
 }
 

@@ -3,32 +3,33 @@ use loscheme::stack_vm::vm::{Instruction::*, Value::*, VM};
 fn main() {
     let code = vec![
         // main:
-        LoadConst { offset: 0 }, // argument for fib
-        Call { addr: 3 },
+        LoadConst { offset: 0 }, // load argument
+        Call { addr: 3 },        // call fib
         Halt,
-        // fib:
-        StackAlloc { size: 1 },   // make room for 1 local variable
-        LoadConst { offset: 1 },  // push 1
-        LoadLocal { offset: -3 }, // put n on the stack
-        LessThan,
-        JumpIfTrue { offset: 2 }, // if 1 < n, jump to recursive case
-        LoadLocal { offset: -3 },
-        Ret, // otherwise return n
-        LoadLocal { offset: -3 },
-        LoadConst { offset: 1 }, // recursive case
-        Sub,
-        Call { addr: 3 },
-        StoreLocal { offset: 0 },
-        LoadLocal { offset: -3 },
-        LoadConst { offset: 2 },
-        Sub,
-        Call { addr: 3 },
-        LoadLocal { offset: 0 },
-        Add,
+        // fib(n):  n is at LoadLocal { offset: -3 }
+        StackAlloc { size: 1 },   // local[0] for fib(n-1) result
+        PushOne,                  // push 1
+        LoadLocal { offset: -3 }, // push n
+        LessThan,                 // 1 < n ?
+        JumpIfTrue { offset: 2 }, // if true, jump to recursive case
+        LoadLocal { offset: -3 }, // push n
+        Ret,                      // return n (base case)
+        // recursive case:
+        LoadLocal { offset: -3 }, // push n
+        PushOne,                  // push 1
+        Sub,                      // n - 1
+        Call { addr: 3 },         // fib(n-1)
+        StoreLocal { offset: 0 }, // local[0] = fib(n-1)
+        LoadLocal { offset: -3 }, // push n
+        LoadConst { offset: 1 },  // push 2
+        Sub,                      // n - 2
+        Call { addr: 3 },         // fib(n-2)
+        LoadLocal { offset: 0 },  // push fib(n-1)
+        Add,                      // fib(n-1) + fib(n-2)
         Ret,
     ];
 
-    let mut vm = VM::new(code, vec![Int(40), Int(1), Int(2)]);
+    let mut vm = VM::new(code, vec![Int(40), Int(2)]);
     vm.run();
     println!("{:?}", vm.clone_stack_top().unwrap());
 }

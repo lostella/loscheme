@@ -159,8 +159,14 @@ impl Compiler {
                 Ok(())
             }
             Expr::Integer(i) => {
-                let offset = self.get_or_insert_const(Value::Int(*i));
-                self.emit(Instruction::LoadConst { offset });
+                match i {
+                    0 => self.emit(Instruction::PushZero),
+                    1 => self.emit(Instruction::PushOne),
+                    _ => {
+                        let offset = self.get_or_insert_const(Value::Int(*i));
+                        self.emit(Instruction::LoadConst { offset });
+                    }
+                }
                 Ok(())
             }
             Expr::Float(f) => {
