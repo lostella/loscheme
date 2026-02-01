@@ -16,6 +16,7 @@ pub enum Value {
     Pointer(usize),
     Procedure {
         addr: usize,
+        captured: Vec<Value>,
     },
     Pair(Rc<RefCell<(Value, Value)>>),
 }
@@ -64,7 +65,7 @@ impl fmt::Display for Value {
                     write!(f, "{v}")
                 }
             }
-            Value::Procedure { addr } => write!(f, "$Procedure@{addr}"),
+            Value::Procedure { addr, captured: _ } => write!(f, "$Procedure@{addr}"),
             Value::Pointer(addr) => write!(f, "$Pointer->{addr}"),
             Value::Pair(_) => {
                 write!(f, "(")?;
@@ -133,6 +134,7 @@ pub enum Instruction {
     CallStack,
     Ret,
     Slide { n: usize },
+    Drop { n: usize },
     // others
     Halt,
 }
@@ -361,7 +363,7 @@ impl VM {
             Instruction::CallStack => {
                 let value = self.pop();
                 match value {
-                    Value::Procedure { addr } => self.call(addr),
+                    Value::Procedure { addr, captured: _ } => self.call(addr),
                     _ => panic!("Invalid operand for CallStack"),
                 }
             }
@@ -384,12 +386,19 @@ impl VM {
                 self.drop(n);
                 self.push(ret);
             }
+            Instruction::Drop { n } => {
+                self.drop(*n);
+            }
         }
     }
 
     fn _run(&mut self, debug: bool) {
         if debug {
             println!("========================================");
+            for (idx, value) in self.constants.iter().enumerate() {
+                println!("{idx:03}: {value:?}")
+            }
+            println!("----------------------------------------");
             for (idx, instr) in self.code.iter().enumerate() {
                 println!("{idx:03}: {instr:?}")
             }
