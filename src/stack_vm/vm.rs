@@ -16,7 +16,6 @@ pub enum Value {
     Pointer(usize),
     Procedure {
         addr: usize,
-        captured: Vec<Value>,
     },
     Pair(Rc<RefCell<(Value, Value)>>),
 }
@@ -65,7 +64,7 @@ impl fmt::Display for Value {
                     write!(f, "{v}")
                 }
             }
-            Value::Procedure { addr, captured: _ } => write!(f, "$Procedure@{addr}"),
+            Value::Procedure { addr } => write!(f, "$Procedure@{addr}"),
             Value::Pointer(addr) => write!(f, "$Pointer->{addr}"),
             Value::Pair(_) => {
                 write!(f, "(")?;
@@ -363,7 +362,7 @@ impl VM {
             Instruction::CallStack => {
                 let value = self.pop();
                 match value {
-                    Value::Procedure { addr, captured: _ } => self.call(addr),
+                    Value::Procedure { addr } => self.call(addr),
                     _ => panic!("Invalid operand for CallStack"),
                 }
             }

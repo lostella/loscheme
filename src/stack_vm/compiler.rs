@@ -57,7 +57,7 @@ impl Compiler {
         }
         let mut constants = self.const_section.clone();
         for val in constants.iter_mut() {
-            if let Value::Procedure { addr, captured: _ } = val {
+            if let Value::Procedure { addr } = val {
                 *addr += addr_offset
             }
         }
@@ -201,10 +201,7 @@ impl Compiler {
                     return Err("unreachable".to_string());
                 };
                 let addr = self.proc_section.len();
-                let offset = self.get_or_insert_const(Value::Procedure {
-                    addr,
-                    captured: vec![],
-                });
+                let offset = self.get_or_insert_const(Value::Procedure { addr });
                 self.proc_section.append(&mut code);
                 self.emit(Instruction::LoadConst { offset });
                 Ok(())
@@ -651,7 +648,22 @@ mod tests {
                 "7",
             ),
             // define as syntactic sugar for lambda
-            ("(define (f x y) (+ x y) (* x y)) (f 4 7)", "28"),
+            (
+                r#"
+                (define (f x y) (+ x y) (* x y))
+                (f 4 7)
+                "#,
+                "28",
+            ),
+            // redefining procedures
+            (
+                r#"
+                (define (f x) (* 2 x))
+                (define (f x) (* 3 x))
+                (f 7)
+                "#,
+                "21",
+            ),
             // let inside a lambda body
             (
                 r#"
