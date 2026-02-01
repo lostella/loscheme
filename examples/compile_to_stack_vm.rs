@@ -1,10 +1,12 @@
 use loscheme::parser::parse;
 use loscheme::stack_vm::compiler::Compiler;
+use loscheme::stack_vm::vm::VM;
 
 fn run_example(code: &str) {
     let exprs = parse(code).unwrap();
     let mut compiler = Compiler::new();
-    let mut vm = compiler.compile(&exprs).unwrap();
+    let program = compiler.compile(&exprs).unwrap();
+    let mut vm = VM::new(program, 1024);
     vm.debug();
 }
 

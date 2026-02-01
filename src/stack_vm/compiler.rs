@@ -1,5 +1,5 @@
 use crate::parser::{Expr, Keyword};
-use crate::stack_vm::vm::{Instruction, Value, VM};
+use crate::stack_vm::vm::{Instruction, Program, Value};
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -9,6 +9,7 @@ pub struct Compiler {
     stack_depth: i8,
     proc_stack: Vec<Vec<Instruction>>,
     const_section: Vec<Value>,
+    static_heap: Vec<Value>,
     proc_section: Vec<Instruction>,
     main_section: Vec<Instruction>,
 }
@@ -39,12 +40,13 @@ impl Compiler {
             stack_depth: 0,
             proc_stack: vec![],
             const_section: vec![],
+            static_heap: vec![],
             proc_section: vec![],
             main_section: vec![],
         }
     }
 
-    pub fn compile(&mut self, exprs: &[Expr]) -> Result<VM, String> {
+    pub fn compile(&mut self, exprs: &[Expr]) -> Result<Program, String> {
         self.compile_begin(exprs)?;
         let mut code = self.main_section.clone();
         code.push(Instruction::Halt);
@@ -55,13 +57,49 @@ impl Compiler {
                 *addr += addr_offset
             }
         }
-        let mut constants = self.const_section.clone();
-        for val in constants.iter_mut() {
-            if let Value::Procedure { addr } = val {
+        let mut data = self.const_section.clone();
+        for val in data.iter_mut() {
+            if let Value::Procedure(addr) = val {
                 *addr += addr_offset
             }
         }
-        Ok(VM::new(code, constants))
+        Ok(Program {
+            code,
+            data,
+            heap: self.static_heap.clone(),
+            num_globals: self.global_scope.len(),
+        })
+    }
+
+    fn create_value(&mut self, expr: &Expr) -> Value {
+        match expr {
+            Expr::Symbol(x) => Value::Symbol(*x),
+            Expr::Bool(x) => Value::Bool(*x),
+            Expr::Integer(x) => Value::Int(*x),
+            Expr::Float(x) => Value::Float(*x),
+            Expr::List(v) => {
+                let Some((first, rest)) = v.split_first() else {
+                    return Value::Null;
+                };
+                match first {
+                    Expr::Keyword(Keyword::Dot) => {
+                        if let Some(last) = rest.first() {
+                            self.create_value(last)
+                        } else {
+                            Value::Null
+                        }
+                    }
+                    _ => {
+                        let car = self.create_value(first);
+                        let cdr = self.create_value(&Expr::List(rest.to_vec()));
+                        self.static_heap.push(car);
+                        self.static_heap.push(cdr);
+                        Value::Pair(self.static_heap.len() - 2, self.static_heap.len() - 1)
+                    }
+                }
+            }
+            _ => todo!("{expr:?}"),
+        }
     }
 
     fn emit(&mut self, instr: Instruction) {
@@ -207,7 +245,7 @@ impl Compiler {
                     return Err("unreachable".to_string());
                 };
                 let addr = self.proc_section.len();
-                let offset = self.get_or_insert_const(Value::Procedure { addr });
+                let offset = self.get_or_insert_const(Value::Procedure(addr));
                 self.proc_section.append(&mut code);
                 self.emit(Instruction::LoadConst { offset });
                 Ok(())
@@ -249,7 +287,7 @@ impl Compiler {
                 let [arg] = rest else {
                     return Err("Quote needs exactly one argument".to_string());
                 };
-                let value = Value::from(arg.clone());
+                let value = self.create_value(arg);
                 let offset = self.get_or_insert_const(value);
                 self.emit(Instruction::LoadConst { offset });
                 Ok(())
@@ -529,6 +567,7 @@ impl Compiler {
 mod tests {
     use super::Compiler;
     use crate::parser::parse;
+    use crate::stack_vm::vm::VM;
 
     #[test]
     fn test_parse_compile_run() {
@@ -758,12 +797,11 @@ mod tests {
 
         for (code, expected_res) in cases {
             let exprs = parse(code).unwrap();
-            let mut vm = Compiler::new().compile(&exprs).unwrap();
+            let program = Compiler::new().compile(&exprs).unwrap();
+            let mut vm = VM::new(program, 1024);
             vm.debug();
             assert_eq!(
-                vm.clone_stack_top()
-                    .map(|x| x.to_string())
-                    .unwrap_or("".into()),
+                vm.represent_stack_top().unwrap_or("".into()),
                 expected_res,
                 "we are testing `{code}`"
             )
@@ -800,7 +838,8 @@ mod tests {
     #[should_panic]
     fn test_car_errors() {
         let exprs = parse("(car '())").unwrap();
-        let mut vm = Compiler::new().compile(&exprs).unwrap();
+        let program = Compiler::new().compile(&exprs).unwrap();
+        let mut vm = VM::new(program, 32);
         vm.debug();
     }
 
@@ -808,7 +847,24 @@ mod tests {
     #[should_panic]
     fn test_cdr_errors() {
         let exprs = parse("(cdr '())").unwrap();
-        let mut vm = Compiler::new().compile(&exprs).unwrap();
+        let program = Compiler::new().compile(&exprs).unwrap();
+        let mut vm = VM::new(program, 32);
         vm.debug();
+    }
+
+    #[test]
+    fn test_leakage() {
+        let code = r#"
+            (define fib (lambda (n)
+                (if (<= n 1)
+                    n
+                    (+ (fib (- n 1)) (fib (- n 2))))))
+            (fib 7)
+            "#;
+        let exprs = parse(code).unwrap();
+        let program = Compiler::new().compile(&exprs).unwrap();
+        let mut vm = VM::new(program, 1024);
+        vm.debug();
+        assert_eq!(vm.heap_size(), 0)
     }
 }

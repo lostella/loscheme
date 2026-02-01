@@ -1,5 +1,6 @@
 use loscheme::parser::parse;
 use loscheme::stack_vm::compiler::Compiler;
+use loscheme::stack_vm::vm::VM;
 
 fn main() {
     let exprs = parse(
@@ -13,8 +14,8 @@ fn main() {
     )
     .unwrap();
     let mut compiler = Compiler::new();
-    let mut vm = compiler.compile(&exprs).unwrap();
-    // println!("{}", vm);
+    let program = compiler.compile(&exprs).unwrap();
+    let mut vm = VM::new(program, 1024);
     vm.run();
-    println!("{}", vm.clone_stack_top().unwrap());
+    println!("{}", vm.represent_stack_top().unwrap());
 }

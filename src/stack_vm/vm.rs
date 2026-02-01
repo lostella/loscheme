@@ -1,11 +1,8 @@
-use crate::parser::{Expr, Keyword};
 use internment::Intern;
-use std::cell::RefCell;
 use std::fmt;
 use std::mem;
-use std::rc::Rc;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Copy)]
 pub enum Value {
     #[default]
     Null,
@@ -14,88 +11,8 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Pointer(usize),
-    Procedure {
-        addr: usize,
-    },
-    Pair(Rc<RefCell<(Value, Value)>>),
-}
-
-impl From<Expr> for Value {
-    fn from(expr: Expr) -> Self {
-        match expr {
-            Expr::Symbol(x) => Value::Symbol(x),
-            Expr::Bool(x) => Value::Bool(x),
-            Expr::Integer(x) => Value::Int(x),
-            Expr::Float(x) => Value::Float(x),
-            Expr::List(v) => {
-                let Some((first, rest)) = v.split_first() else {
-                    return Value::Null;
-                };
-                match first {
-                    Expr::Keyword(Keyword::Dot) => {
-                        if let Some(last) = rest.first() {
-                            Value::from(last.clone())
-                        } else {
-                            Value::Null
-                        }
-                    }
-                    _ => Value::Pair(Rc::new(RefCell::new((
-                        Value::from(first.clone()),
-                        Value::from(Expr::List(rest.to_vec())),
-                    )))),
-                }
-            }
-            _ => todo!("{expr:?}"),
-        }
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Value::Symbol(s) => write!(f, "{s}"),
-            Value::Null => write!(f, "()"),
-            Value::Bool(v) => write!(f, "{}", if *v { "#t" } else { "#f" }),
-            Value::Int(v) => write!(f, "{v}"),
-            Value::Float(v) => {
-                if v.fract() == 0.0 {
-                    write!(f, "{v:.1}")
-                } else {
-                    write!(f, "{v}")
-                }
-            }
-            Value::Procedure { addr } => write!(f, "$Procedure@{addr}"),
-            Value::Pointer(addr) => write!(f, "$Pointer->{addr}"),
-            Value::Pair(_) => {
-                write!(f, "(")?;
-                let mut current = self.clone();
-                let mut first = true;
-
-                loop {
-                    match current {
-                        Value::Pair(pair_rc) => {
-                            let pair = pair_rc.borrow();
-                            if !first {
-                                write!(f, " ")?;
-                            }
-                            write!(f, "{}", pair.0)?;
-                            current = pair.1.clone();
-                            first = false;
-                        }
-                        Value::Null => {
-                            write!(f, ")")?;
-                            break;
-                        }
-                        other => {
-                            write!(f, " . {other})")?;
-                            break;
-                        }
-                    }
-                }
-                Ok(())
-            }
-        }
-    }
+    Procedure(usize),
+    Pair(usize, usize),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -139,26 +56,82 @@ pub enum Instruction {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct Program {
+    pub code: Vec<Instruction>,
+    pub data: Vec<Value>,
+    pub heap: Vec<Value>,
+    pub num_globals: usize,
+}
+
+#[derive(PartialEq)]
 pub struct VM {
     code: Vec<Instruction>,
-    constants: Vec<Value>,
+    data: Vec<Value>,
     stack: Vec<Value>,
     globals: Vec<Value>,
+    heap: Vec<Value>,
     sp: usize,
     fp: usize,
     ip: usize,
 }
 
 impl VM {
-    pub fn new(code: Vec<Instruction>, constants: Vec<Value>) -> Self {
+    pub fn new(program: Program, stack_size: usize) -> Self {
         Self {
-            code,
-            constants,
-            globals: vec![Value::default(); 1024],
-            stack: vec![Value::default(); 1024],
+            code: program.code,
+            data: program.data,
+            heap: program.heap,
+            stack: vec![Value::default(); stack_size],
+            globals: vec![Value::default(); program.num_globals],
             sp: 0,
             fp: 0,
             ip: 0,
+        }
+    }
+
+    pub fn value_to_string(&self, value: &Value) -> String {
+        match value {
+            Value::Symbol(s) => format!("{s}"),
+            Value::Null => "()".to_string(),
+            Value::Bool(v) => (if *v { "#t" } else { "#f" }).to_string(),
+            Value::Int(v) => format!("{v}"),
+            Value::Float(v) => {
+                if v.fract() == 0.0 {
+                    format!("{v:.1}")
+                } else {
+                    format!("{v}")
+                }
+            }
+            Value::Procedure(addr) => format!("$Procedure@{addr}"),
+            Value::Pointer(addr) => format!("$Pointer->{addr}"),
+            Value::Pair(addr_car, addr_cdr) => {
+                let mut output = "(".to_string();
+                let car_string = self.value_to_string(&self.heap[*addr_car]);
+                output.push_str(&car_string);
+                let mut next = &self.heap[*addr_cdr];
+
+                loop {
+                    match next {
+                        Value::Null => {
+                            break;
+                        }
+                        Value::Pair(addr_car, addr_cdr) => {
+                            output.push(' ');
+                            let car_string = self.value_to_string(&self.heap[*addr_car]);
+                            output.push_str(&car_string);
+                            next = &self.heap[*addr_cdr];
+                        }
+                        other => {
+                            output.push_str(" . ");
+                            output.push_str(&self.value_to_string(other));
+                            break;
+                        }
+                    }
+                }
+
+                output.push(')');
+                output
+            }
         }
     }
 
@@ -168,22 +141,31 @@ impl VM {
         self.stack[..self.sp].to_vec()
     }
 
-    pub fn clone_stack_top(&self) -> Option<Value> {
+    pub fn get_stack_top(&self) -> Option<Value> {
         if self.sp == 0 {
             None
         } else {
-            Some(self.stack[self.sp - 1].clone())
+            Some(self.stack[self.sp - 1])
         }
     }
 
+    pub fn represent_stack_top(&self) -> Option<String> {
+        let stack_top = self.get_stack_top()?;
+        Some(self.value_to_string(&stack_top))
+    }
+
+    pub fn heap_size(&self) -> usize {
+        self.heap.len()
+    }
+
     #[inline]
-    fn push(&mut self, val: Value) {
+    fn push_to_stack(&mut self, val: Value) {
         self.stack[self.sp] = val;
         self.sp += 1;
     }
 
     #[inline]
-    fn pop(&mut self) -> Value {
+    fn pop_from_stack(&mut self) -> Value {
         if self.sp == 0 {
             panic!("Stack is empty");
         }
@@ -192,7 +174,7 @@ impl VM {
     }
 
     #[inline]
-    fn drop(&mut self, n: usize) {
+    fn drop_from_stack(&mut self, n: usize) {
         if self.sp < n {
             panic!("Stack is too small");
         }
@@ -200,9 +182,15 @@ impl VM {
     }
 
     #[inline]
+    fn add_to_heap(&mut self, val: Value) -> usize {
+        self.heap.push(val);
+        self.heap.len() - 1
+    }
+
+    #[inline]
     fn call(&mut self, addr: usize) {
-        self.push(Value::Pointer(self.fp));
-        self.push(Value::Pointer(self.ip));
+        self.push_to_stack(Value::Pointer(self.fp));
+        self.push_to_stack(Value::Pointer(self.ip));
         self.fp = self.sp;
         self.ip = addr;
     }
@@ -213,143 +201,159 @@ impl VM {
         match instr {
             Instruction::StackAlloc { size } => self.sp += *size as usize,
             Instruction::Halt => self.ip = self.code.len(),
-            Instruction::LoadConst { offset } => {
-                self.push(self.constants[*offset as usize].clone())
-            }
-            Instruction::PushZero => self.push(Value::Int(0)),
-            Instruction::PushOne => self.push(Value::Int(1)),
+            Instruction::LoadConst { offset } => self.push_to_stack(self.data[*offset as usize]),
+            Instruction::PushZero => self.push_to_stack(Value::Int(0)),
+            Instruction::PushOne => self.push_to_stack(Value::Int(1)),
             Instruction::Add => {
-                let b = self.pop();
-                let a = self.pop();
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
                 match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x + y)),
-                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) + y)),
-                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x + (y as f64))),
-                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x + y)),
+                    (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Int(x + y)),
+                    (Value::Int(x), Value::Float(y)) => {
+                        self.push_to_stack(Value::Float((x as f64) + y))
+                    }
+                    (Value::Float(x), Value::Int(y)) => {
+                        self.push_to_stack(Value::Float(x + (y as f64)))
+                    }
+                    (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Float(x + y)),
                     _ => panic!("Invalid operands for Add"),
                 }
             }
             Instruction::Sub => {
-                let b = self.pop();
-                let a = self.pop();
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
                 match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x - y)),
-                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) - y)),
-                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x - (y as f64))),
-                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x - y)),
+                    (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Int(x - y)),
+                    (Value::Int(x), Value::Float(y)) => {
+                        self.push_to_stack(Value::Float((x as f64) - y))
+                    }
+                    (Value::Float(x), Value::Int(y)) => {
+                        self.push_to_stack(Value::Float(x - (y as f64)))
+                    }
+                    (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Float(x - y)),
                     _ => panic!("Invalid operands for Sub"),
                 }
             }
             Instruction::Mul => {
-                let b = self.pop();
-                let a = self.pop();
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
                 match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x * y)),
-                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) * y)),
-                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x * (y as f64))),
-                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x * y)),
+                    (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Int(x * y)),
+                    (Value::Int(x), Value::Float(y)) => {
+                        self.push_to_stack(Value::Float((x as f64) * y))
+                    }
+                    (Value::Float(x), Value::Int(y)) => {
+                        self.push_to_stack(Value::Float(x * (y as f64)))
+                    }
+                    (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Float(x * y)),
                     _ => panic!("Invalid operands for Mul"),
                 }
             }
             Instruction::Div => {
-                let b = self.pop();
-                let a = self.pop();
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
                 match (a, b) {
-                    (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x / y)),
-                    (Value::Int(x), Value::Float(y)) => self.push(Value::Float((x as f64) / y)),
-                    (Value::Float(x), Value::Int(y)) => self.push(Value::Float(x / (y as f64))),
+                    (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Float(x / y)),
+                    (Value::Int(x), Value::Float(y)) => {
+                        self.push_to_stack(Value::Float((x as f64) / y))
+                    }
+                    (Value::Float(x), Value::Int(y)) => {
+                        self.push_to_stack(Value::Float(x / (y as f64)))
+                    }
                     _ => panic!("Invalid operands for Div"),
                 }
             }
             Instruction::Abs => {
-                let a = self.pop();
+                let a = self.pop_from_stack();
                 match a {
-                    Value::Int(x) => self.push(Value::Int(x.abs())),
-                    Value::Float(x) => self.push(Value::Float(x.abs())),
+                    Value::Int(x) => self.push_to_stack(Value::Int(x.abs())),
+                    Value::Float(x) => self.push_to_stack(Value::Float(x.abs())),
                     _ => panic!("Invalid operand for Abs"),
                 }
             }
             Instruction::LessThan => {
-                let b = self.pop();
-                let a = self.pop();
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
                 match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x < y)),
-                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x < y)),
+                    (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Bool(x < y)),
+                    (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Bool(x < y)),
                     _ => panic!("Invalid operands for LessThan"),
                 }
             }
             Instruction::LessThanEqual => {
-                let b = self.pop();
-                let a = self.pop();
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
                 match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x <= y)),
-                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x <= y)),
+                    (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Bool(x <= y)),
+                    (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Bool(x <= y)),
                     _ => panic!("Invalid operands for LessThan"),
                 }
             }
             Instruction::GreaterThan => {
-                let b = self.pop();
-                let a = self.pop();
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
                 match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x > y)),
-                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x > y)),
+                    (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Bool(x > y)),
+                    (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Bool(x > y)),
                     _ => panic!("Invalid operands for LessThan"),
                 }
             }
             Instruction::GreaterThanEqual => {
-                let b = self.pop();
-                let a = self.pop();
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
                 match (a, b) {
-                    (Value::Int(x), Value::Int(y)) => self.push(Value::Bool(x >= y)),
-                    (Value::Float(x), Value::Float(y)) => self.push(Value::Bool(x >= y)),
+                    (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Bool(x >= y)),
+                    (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Bool(x >= y)),
                     _ => panic!("Invalid operands for LessThan"),
                 }
             }
-            Instruction::IsNull => match self.pop() {
-                Value::Null => self.push(Value::Bool(true)),
-                _ => self.push(Value::Bool(false)),
+            Instruction::IsNull => match self.pop_from_stack() {
+                Value::Null => self.push_to_stack(Value::Bool(true)),
+                _ => self.push_to_stack(Value::Bool(false)),
             },
             Instruction::Cons => {
-                let cdr = self.pop();
-                let car = self.pop();
-                self.push(Value::Pair(Rc::new(RefCell::new((car, cdr)))));
+                let cdr = self.pop_from_stack();
+                let cdr_addr = self.add_to_heap(cdr);
+                let car = self.pop_from_stack();
+                let car_addr = self.add_to_heap(car);
+                self.push_to_stack(Value::Pair(car_addr, cdr_addr));
             }
             Instruction::Car => {
-                let Value::Pair(rc) = self.pop() else {
+                let Value::Pair(car_addr, _) = self.pop_from_stack() else {
                     panic!("Invalid operand for Car");
                 };
-                self.push(rc.borrow().0.clone());
+                self.push_to_stack(self.heap[car_addr]);
             }
             Instruction::Cdr => {
-                let Value::Pair(rc) = self.pop() else {
+                let Value::Pair(_, cdr_addr) = self.pop_from_stack() else {
                     panic!("Invalid operand for Cdr");
                 };
-                self.push(rc.borrow().1.clone());
+                self.push_to_stack(self.heap[cdr_addr]);
             }
             Instruction::LoadLocal { offset } => {
                 let src = self.fp.wrapping_add(*offset as usize);
-                self.push(self.stack[src].clone());
+                self.push_to_stack(self.stack[src]);
             }
             Instruction::StoreLocal { offset } => {
                 let dest = self.fp.wrapping_add(*offset as usize);
-                self.stack[dest] = self.pop();
+                self.stack[dest] = self.pop_from_stack();
                 if self.sp <= dest {
                     self.sp = dest + 1
                 }
             }
             Instruction::LoadGlobal { offset } => {
-                self.push(self.globals[*offset as usize].clone());
+                self.push_to_stack(self.globals[*offset as usize]);
             }
             Instruction::StoreGlobal { offset } => {
                 let offset = *offset;
-                self.globals[offset as usize] = self.pop();
+                self.globals[offset as usize] = self.pop_from_stack();
             }
             Instruction::Jump { offset } => {
                 self.ip = self.ip.wrapping_add(*offset as usize);
             }
             Instruction::JumpIfTrue { offset } => {
                 let offset = *offset;
-                let cond = self.pop();
+                let cond = self.pop_from_stack();
                 match cond {
                     Value::Bool(true) => {
                         self.ip = self.ip.wrapping_add(offset as usize);
@@ -360,14 +364,14 @@ impl VM {
             }
             Instruction::Call { addr } => self.call(*addr),
             Instruction::CallStack => {
-                let value = self.pop();
+                let value = self.pop_from_stack();
                 match value {
-                    Value::Procedure { addr } => self.call(addr),
+                    Value::Procedure(addr) => self.call(addr),
                     _ => panic!("Invalid operand for CallStack"),
                 }
             }
             Instruction::Ret => {
-                let ret = self.pop();
+                let ret = self.pop_from_stack();
                 self.sp = self.fp - 2;
                 self.ip = match self.stack[self.fp - 1] {
                     Value::Pointer(i) => i,
@@ -377,16 +381,16 @@ impl VM {
                     Value::Pointer(i) => i,
                     _ => panic!("Invalid frame pointer"),
                 };
-                self.push(ret);
+                self.push_to_stack(ret);
             }
             Instruction::Slide { n } => {
                 let n = *n;
-                let ret = self.pop();
-                self.drop(n);
-                self.push(ret);
+                let ret = self.pop_from_stack();
+                self.drop_from_stack(n);
+                self.push_to_stack(ret);
             }
             Instruction::Drop { n } => {
-                self.drop(*n);
+                self.drop_from_stack(*n);
             }
         }
     }
@@ -431,7 +435,7 @@ impl VM {
 
 impl fmt::Display for VM {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (idx, value) in self.constants.iter().enumerate() {
+        for (idx, value) in self.data.iter().enumerate() {
             writeln!(f, "D{idx:03}: {value:?}")?
         }
         for (idx, instr) in self.code.iter().enumerate() {
@@ -443,38 +447,42 @@ impl fmt::Display for VM {
 
 #[cfg(test)]
 mod tests {
-    use super::{Instruction::*, Value::*, VM};
+    use super::{Instruction::*, Program, Value::*, VM};
 
     #[test]
     fn test_fib() {
-        let code = vec![
-            // main:
-            LoadConst { offset: 0 }, // argument for fib
-            Call { addr: 3 },        // call fib
-            Halt,                    // halt
-            // fib:
-            LoadConst { offset: 1 },  // push 1
-            LoadLocal { offset: -3 }, // put n on the stack
-            LessThan,
-            JumpIfTrue { offset: 2 }, // if 1 < n, jump to recursive case
-            LoadLocal { offset: -3 }, // put n on the stack
-            Ret,                      // return n
-            LoadLocal { offset: -3 },
-            LoadConst { offset: 1 },
-            Sub,
-            Call { addr: 3 }, // fib(n - 1)
-            StoreLocal { offset: 0 },
-            LoadLocal { offset: -3 },
-            LoadConst { offset: 2 },
-            Sub,
-            Call { addr: 3 }, // fib(n - 2)
-            LoadLocal { offset: 0 },
-            Add,
-            Ret,
-        ];
-
-        let mut vm = VM::new(code, vec![Int(6), Int(1), Int(2)]);
+        let program = Program {
+            code: vec![
+                // main:
+                LoadConst { offset: 0 }, // argument for fib
+                Call { addr: 3 },        // call fib
+                Halt,                    // halt
+                // fib:
+                LoadConst { offset: 1 },  // push 1
+                LoadLocal { offset: -3 }, // put n on the stack
+                LessThan,
+                JumpIfTrue { offset: 2 }, // if 1 < n, jump to recursive case
+                LoadLocal { offset: -3 }, // put n on the stack
+                Ret,                      // return n
+                LoadLocal { offset: -3 },
+                LoadConst { offset: 1 },
+                Sub,
+                Call { addr: 3 }, // fib(n - 1)
+                StoreLocal { offset: 0 },
+                LoadLocal { offset: -3 },
+                LoadConst { offset: 2 },
+                Sub,
+                Call { addr: 3 }, // fib(n - 2)
+                LoadLocal { offset: 0 },
+                Add,
+                Ret,
+            ],
+            data: vec![Int(6), Int(1), Int(2)],
+            heap: vec![],
+            num_globals: 0,
+        };
+        let mut vm = VM::new(program, 1024);
         vm.debug();
-        assert_eq!(vm.clone_stack_top(), Some(Int(8)));
+        assert_eq!(vm.get_stack_top(), Some(Int(8)));
     }
 }
