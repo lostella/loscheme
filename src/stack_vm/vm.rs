@@ -391,8 +391,8 @@ impl VM {
         }
     }
 
-    fn _run(&mut self, debug: bool) {
-        if debug {
+    fn execute<const DEBUG: bool>(&mut self) {
+        if DEBUG {
             println!("========================================");
             for (idx, value) in self.constants.iter().enumerate() {
                 println!("{idx:03}: {value:?}")
@@ -402,26 +402,26 @@ impl VM {
                 println!("{idx:03}: {instr:?}")
             }
             println!("----------------------------------------");
-            println!("{self}")
+            println!("{self}");
         }
         while self.ip < self.code.len() {
             self.step();
-            if debug {
+            if DEBUG {
                 println!("----------------------------------------");
                 println!("{self}")
             }
         }
-        if debug {
+        if DEBUG {
             println!("========================================");
         }
     }
 
     pub fn run(&mut self) {
-        self._run(false)
+        self.execute::<false>();
     }
 
     pub fn debug(&mut self) {
-        self._run(true)
+        self.execute::<true>();
     }
 }
 
