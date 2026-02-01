@@ -32,6 +32,7 @@ fn main() {
         data: vec![Int(40), Int(2)],
         heap: vec![],
         num_globals: 0,
+        symbol_table: vec![],
     };
     let mut vm = VM::new(program, 1024);
     vm.run();

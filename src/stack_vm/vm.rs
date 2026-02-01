@@ -1,4 +1,3 @@
-use internment::Intern;
 use std::fmt;
 use std::mem;
 
@@ -6,7 +5,7 @@ use std::mem;
 pub enum Value {
     #[default]
     Null,
-    Symbol(Intern<String>),
+    Symbol(usize),
     Bool(bool),
     Int(i64),
     Float(f64),
@@ -61,6 +60,7 @@ pub struct Program {
     pub data: Vec<Value>,
     pub heap: Vec<Value>,
     pub num_globals: usize,
+    pub symbol_table: Vec<String>,
 }
 
 #[derive(PartialEq)]
@@ -70,6 +70,7 @@ pub struct VM {
     stack: Vec<Value>,
     globals: Vec<Value>,
     heap: Vec<Value>,
+    symbol_table: Vec<String>,
     sp: usize,
     fp: usize,
     ip: usize,
@@ -81,6 +82,7 @@ impl VM {
             code: program.code,
             data: program.data,
             heap: program.heap,
+            symbol_table: program.symbol_table,
             stack: vec![Value::default(); stack_size],
             globals: vec![Value::default(); program.num_globals],
             sp: 0,
@@ -91,7 +93,7 @@ impl VM {
 
     pub fn value_to_string(&self, value: &Value) -> String {
         match value {
-            Value::Symbol(s) => format!("{s}"),
+            Value::Symbol(idx) => self.symbol_table[*idx].clone(),
             Value::Null => "()".to_string(),
             Value::Bool(v) => (if *v { "#t" } else { "#f" }).to_string(),
             Value::Int(v) => format!("{v}"),
@@ -480,6 +482,7 @@ mod tests {
             data: vec![Int(6), Int(1), Int(2)],
             heap: vec![],
             num_globals: 0,
+            symbol_table: vec![],
         };
         let mut vm = VM::new(program, 1024);
         vm.debug();

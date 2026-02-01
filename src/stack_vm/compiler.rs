@@ -12,6 +12,7 @@ pub struct Compiler {
     static_heap: Vec<Value>,
     proc_section: Vec<Instruction>,
     main_section: Vec<Instruction>,
+    symbol_table: Vec<String>,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -43,6 +44,7 @@ impl Compiler {
             static_heap: vec![],
             proc_section: vec![],
             main_section: vec![],
+            symbol_table: vec![],
         }
     }
 
@@ -68,12 +70,26 @@ impl Compiler {
             data,
             heap: self.static_heap.clone(),
             num_globals: self.global_scope.len(),
+            symbol_table: self.symbol_table.clone(),
         })
+    }
+
+    fn intern_symbol(&mut self, name: &str) -> usize {
+        if let Some(idx) = self.symbol_table.iter().position(|s| s == name) {
+            idx
+        } else {
+            let idx = self.symbol_table.len();
+            self.symbol_table.push(name.to_string());
+            idx
+        }
     }
 
     fn create_value(&mut self, expr: &Expr) -> Value {
         match expr {
-            Expr::Symbol(x) => Value::Symbol(*x),
+            Expr::Symbol(x) => {
+                let idx = self.intern_symbol(x);
+                Value::Symbol(idx)
+            }
             Expr::Bool(x) => Value::Bool(*x),
             Expr::Integer(x) => Value::Int(*x),
             Expr::Float(x) => Value::Float(*x),
