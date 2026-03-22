@@ -797,6 +797,15 @@ mod tests {
                 "#,
                 "5",
             ),
+            // passing functions
+            (
+                r#"
+                (define (times-three x) (* 3 x))
+                (define (apply-then-inc g y) (+ 1 (g y)))
+                (apply-then-inc times-three 29)
+                "#,
+                "88",
+            ),
             // returning closures
             // (
             //     r#"
