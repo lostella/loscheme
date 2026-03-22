@@ -65,28 +65,31 @@ pub struct Program {
 #[derive(PartialEq)]
 pub struct VM {
     code: Vec<Instruction>,
-    data: Vec<Value>,
-    stack: Vec<Value>,
+    constants: Vec<Value>,
     globals: Vec<Value>,
-    heap: Vec<Value>,
+    memory: Vec<Value>,
     symbol_table: Vec<String>,
-    sp: usize,
-    fp: usize,
-    ip: usize,
+    stack_ptr: usize,
+    heap_ptr: usize,
+    frame_ptr: usize,
+    instr_ptr: usize,
 }
 
 impl VM {
-    pub fn new(program: Program, stack_size: usize) -> Self {
+    pub fn new(program: Program, memory_size: usize) -> Self {
+        let mut memory = program.heap.clone();
+        memory.resize(memory_size, Value::default());
+        let hp = program.heap.len();
         Self {
             code: program.code,
-            data: program.data,
-            heap: program.heap,
-            symbol_table: program.symbol_table,
-            stack: vec![Value::default(); stack_size],
+            constants: program.data,
             globals: vec![Value::default(); program.num_globals],
-            sp: 0,
-            fp: 0,
-            ip: 0,
+            memory,
+            symbol_table: program.symbol_table,
+            stack_ptr: memory_size - 1,
+            frame_ptr: memory_size - 1,
+            heap_ptr: hp,
+            instr_ptr: 0,
         }
     }
 
@@ -107,9 +110,9 @@ impl VM {
             Value::Pointer(addr) => format!("$Pointer->{addr}"),
             Value::Pair(addr_car, addr_cdr) => {
                 let mut output = "(".to_string();
-                let car_string = self.value_to_string(&self.heap[*addr_car]);
+                let car_string = self.value_to_string(&self.memory[*addr_car]);
                 output.push_str(&car_string);
-                let mut next = &self.heap[*addr_cdr];
+                let mut next = &self.memory[*addr_cdr];
 
                 loop {
                     match next {
@@ -118,9 +121,9 @@ impl VM {
                         }
                         Value::Pair(addr_car, addr_cdr) => {
                             output.push(' ');
-                            let car_string = self.value_to_string(&self.heap[*addr_car]);
+                            let car_string = self.value_to_string(&self.memory[*addr_car]);
                             output.push_str(&car_string);
-                            next = &self.heap[*addr_cdr];
+                            next = &self.memory[*addr_cdr];
                         }
                         other => {
                             output.push_str(" . ");
@@ -139,14 +142,14 @@ impl VM {
     pub fn clone_stack(&self) -> Vec<Value> {
         // pop does not actually shrink the stack
         // we clone only up to sp, to omit the "garbage"
-        self.stack[..self.sp].to_vec()
+        self.memory[self.stack_ptr + 1..].to_vec()
     }
 
     pub fn get_stack_top(&self) -> Option<Value> {
-        if self.sp == 0 {
+        if self.stack_ptr >= self.memory.len() - 1 {
             None
         } else {
-            Some(self.stack[self.sp - 1])
+            Some(self.memory[self.stack_ptr + 1])
         }
     }
 
@@ -156,42 +159,45 @@ impl VM {
     }
 
     pub fn heap_size(&self) -> usize {
-        self.heap.len()
+        self.heap_ptr
     }
 
     #[inline]
     fn push_to_stack(&mut self, val: Value) {
-        self.stack[self.sp] = val;
-        self.sp += 1;
+        self.memory[self.stack_ptr] = val;
+        self.stack_ptr -= 1;
     }
 
     #[inline]
     fn pop_from_stack(&mut self) -> Value {
-        self.sp -= 1;
-        self.stack[self.sp]
+        self.stack_ptr += 1;
+        self.memory[self.stack_ptr]
     }
 
     #[inline]
     fn add_to_heap(&mut self, val: Value) -> usize {
-        self.heap.push(val);
-        self.heap.len() - 1
+        self.memory[self.heap_ptr] = val;
+        self.heap_ptr += 1;
+        self.heap_ptr - 1
     }
 
     #[inline]
     fn call(&mut self, addr: usize) {
-        self.push_to_stack(Value::Pointer(self.fp));
-        self.push_to_stack(Value::Pointer(self.ip));
-        self.fp = self.sp;
-        self.ip = addr;
+        self.push_to_stack(Value::Pointer(self.frame_ptr));
+        self.push_to_stack(Value::Pointer(self.instr_ptr));
+        self.frame_ptr = self.stack_ptr;
+        self.instr_ptr = addr;
     }
 
     fn step(&mut self) {
-        let instr = self.code[self.ip];
-        self.ip += 1;
+        let instr = self.code[self.instr_ptr];
+        self.instr_ptr += 1;
         match instr {
-            Instruction::StackAlloc { size } => self.sp += size as usize,
-            Instruction::Halt => self.ip = self.code.len(),
-            Instruction::LoadConst { offset } => self.push_to_stack(self.data[offset as usize]),
+            Instruction::StackAlloc { size } => self.stack_ptr -= size as usize,
+            Instruction::Halt => self.instr_ptr = self.code.len(),
+            Instruction::LoadConst { offset } => {
+                self.push_to_stack(self.constants[offset as usize])
+            }
             Instruction::PushZero => self.push_to_stack(Value::Int(0)),
             Instruction::PushOne => self.push_to_stack(Value::Int(1)),
             Instruction::Add => {
@@ -312,23 +318,23 @@ impl VM {
                 let Value::Pair(car_addr, _) = self.pop_from_stack() else {
                     panic!("Invalid operand for Car");
                 };
-                self.push_to_stack(self.heap[car_addr]);
+                self.push_to_stack(self.memory[car_addr]);
             }
             Instruction::Cdr => {
                 let Value::Pair(_, cdr_addr) = self.pop_from_stack() else {
                     panic!("Invalid operand for Cdr");
                 };
-                self.push_to_stack(self.heap[cdr_addr]);
+                self.push_to_stack(self.memory[cdr_addr]);
             }
             Instruction::LoadLocal { offset } => {
-                let src = self.fp.wrapping_add(offset as usize);
-                self.push_to_stack(self.stack[src]);
+                let src = self.frame_ptr.wrapping_sub(offset as usize);
+                self.push_to_stack(self.memory[src]);
             }
             Instruction::StoreLocal { offset } => {
-                let dest = self.fp.wrapping_add(offset as usize);
-                self.stack[dest] = self.pop_from_stack();
-                if self.sp <= dest {
-                    self.sp = dest + 1
+                let dest = self.frame_ptr.wrapping_sub(offset as usize);
+                self.memory[dest] = self.pop_from_stack();
+                if self.stack_ptr >= dest {
+                    self.stack_ptr = dest - 1
                 }
             }
             Instruction::LoadGlobal { offset } => {
@@ -338,13 +344,13 @@ impl VM {
                 self.globals[offset as usize] = self.pop_from_stack();
             }
             Instruction::Jump { offset } => {
-                self.ip = self.ip.wrapping_add(offset as usize);
+                self.instr_ptr = self.instr_ptr.wrapping_add(offset as usize);
             }
             Instruction::JumpIfTrue { offset } => {
                 let cond = self.pop_from_stack();
                 match cond {
                     Value::Bool(true) => {
-                        self.ip = self.ip.wrapping_add(offset as usize);
+                        self.instr_ptr = self.instr_ptr.wrapping_add(offset as usize);
                     }
                     Value::Bool(false) => (),
                     _ => panic!("Invalid operand for JumpIfTrue"),
@@ -360,12 +366,12 @@ impl VM {
             }
             Instruction::Ret => {
                 let ret = self.pop_from_stack();
-                self.sp = self.fp - 2;
-                self.ip = match self.stack[self.fp - 1] {
+                self.stack_ptr = self.frame_ptr + 2;
+                self.instr_ptr = match self.memory[self.frame_ptr + 1] {
                     Value::Pointer(i) => i,
                     _ => panic!("Invalid return address"),
                 };
-                self.fp = match self.stack[self.fp - 2] {
+                self.frame_ptr = match self.memory[self.frame_ptr + 2] {
                     Value::Pointer(i) => i,
                     _ => panic!("Invalid frame pointer"),
                 };
@@ -373,24 +379,24 @@ impl VM {
             }
             Instruction::Slide { n } => {
                 let ret = self.pop_from_stack();
-                self.sp -= n;
+                self.stack_ptr += n;
                 self.push_to_stack(ret);
             }
             Instruction::Drop { n } => {
-                self.sp -= n;
+                self.stack_ptr += n;
             }
         }
     }
 
     fn print_state(&self) {
+        println!("stack: {:?}", self.clone_stack());
         println!(
             "fp: {}, sp: {}, ip: {} ==> {:?}",
-            self.fp,
-            self.sp,
-            self.ip,
-            self.code.get(self.ip),
-        );
-        println!("stack: {:?}", self.clone_stack())
+            self.frame_ptr,
+            self.stack_ptr,
+            self.instr_ptr,
+            self.code.get(self.instr_ptr),
+        )
     }
 
     fn execute<const DEBUG: bool>(&mut self) {
@@ -400,9 +406,10 @@ impl VM {
             println!("----------------------------------------");
             self.print_state();
         }
-        while self.ip < self.code.len() {
+        while self.instr_ptr < self.code.len() {
             self.step();
             if DEBUG {
+                println!("----------------------------------------");
                 self.print_state();
             }
         }
@@ -422,7 +429,7 @@ impl VM {
 
 impl fmt::Display for VM {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (idx, value) in self.data.iter().enumerate() {
+        for (idx, value) in self.constants.iter().enumerate() {
             writeln!(f, "D{idx:03}: {value:?}")?
         }
         for (idx, instr) in self.code.iter().enumerate() {
