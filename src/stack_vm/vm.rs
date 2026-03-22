@@ -162,8 +162,18 @@ impl VM {
         self.heap_ptr
     }
 
+    fn panic_if_oom(&self) {
+        if self.stack_ptr < self.heap_ptr {
+            panic!(
+                "Out of memory: stack_ptr={} < heap_ptr={}",
+                self.stack_ptr, self.heap_ptr
+            )
+        }
+    }
+
     #[inline]
     fn push_to_stack(&mut self, val: Value) {
+        self.panic_if_oom();
         self.memory[self.stack_ptr] = val;
         self.stack_ptr -= 1;
     }
@@ -176,6 +186,7 @@ impl VM {
 
     #[inline]
     fn add_to_heap(&mut self, val: Value) -> usize {
+        self.panic_if_oom();
         self.memory[self.heap_ptr] = val;
         self.heap_ptr += 1;
         self.heap_ptr - 1
