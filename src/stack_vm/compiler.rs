@@ -15,7 +15,7 @@ pub struct Compiler {
     symbol_table: Vec<String>,
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq)]
 enum SymbolKind {
     Local,
     Global,
@@ -49,7 +49,7 @@ impl Compiler {
     }
 
     pub fn compile(&mut self, exprs: &[Expr]) -> Result<Program, String> {
-        self.compile_begin(exprs)?;
+        self.compile_begin(exprs, false)?;
         let mut code = self.main_section.clone();
         code.push(Instruction::Halt);
         let addr_offset = code.len();
@@ -204,9 +204,9 @@ impl Compiler {
         }
     }
 
-    fn compile_expr(&mut self, expr: &Expr) -> Result<(), String> {
+    fn compile_expr(&mut self, expr: &Expr, is_tail: bool) -> Result<(), String> {
         match expr {
-            Expr::List(v) => self.compile_list(v),
+            Expr::List(v) => self.compile_list(v, is_tail),
             Expr::Bool(b) => {
                 let offset = self.get_or_insert_const(Value::Bool(*b));
                 self.emit(Instruction::LoadConst { offset });
@@ -245,15 +245,47 @@ impl Compiler {
         }
     }
 
-    fn compile_list(&mut self, exprs: &[Expr]) -> Result<(), String> {
+    fn can_optimize_call(&self, is_tail: bool, num_args: usize) -> bool {
+        let Some(local_scope) = self.local_scopes.last() else {
+            return false;
+        };
+        let mut available_arg_slots: usize = 0;
+        for v in local_scope.values() {
+            // NOTE: this is tied to the call convention
+            // by which call arguments get a negative offset
+            if v.kind == SymbolKind::Local && v.index < 0 {
+                available_arg_slots += 1;
+            }
+        }
+        is_tail && num_args <= available_arg_slots
+    }
+
+    fn prepare_call_frame(&mut self, args: &[Expr]) -> Result<(), String> {
+        for expr in args.iter().rev() {
+            self.compile_expr(expr, false)?;
+        }
+        Ok(())
+    }
+
+    fn recycle_call_frame(&mut self, args: &[Expr]) -> Result<(), String> {
+        for (idx, expr) in args.iter().enumerate() {
+            self.compile_expr(expr, false)?;
+            self.emit(Instruction::StoreLocal {
+                offset: -(idx as i8) - 3,
+            })
+        }
+        Ok(())
+    }
+
+    fn compile_list(&mut self, exprs: &[Expr], is_tail: bool) -> Result<(), String> {
         let Some((first, rest)) = exprs.split_first() else {
             return Err("Cannot compile the empty list".to_string());
         };
         match first {
-            Expr::Keyword(Keyword::If) => self.compile_if(rest),
-            Expr::Keyword(Keyword::Begin) => self.compile_begin(rest),
+            Expr::Keyword(Keyword::If) => self.compile_if(rest, is_tail),
+            Expr::Keyword(Keyword::Begin) => self.compile_begin(rest, is_tail),
             Expr::Keyword(Keyword::Define) => self.compile_define(rest),
-            Expr::Keyword(Keyword::Let) => self.compile_let(rest),
+            Expr::Keyword(Keyword::Let) => self.compile_let(rest, is_tail),
             Expr::Keyword(Keyword::Lambda) => {
                 self.proc_stack.push(vec![]);
                 self.compile_lambda(rest)?;
@@ -280,22 +312,30 @@ impl Compiler {
                     "cdr" => self.compile_cdr(rest),
                     "null?" => self.compile_isnull(rest),
                     _ => {
-                        for expr in rest.iter().rev() {
-                            self.compile_expr(expr)?;
+                        if self.can_optimize_call(is_tail, rest.len()) {
+                            self.recycle_call_frame(rest)?;
+                            self.compile_expr(first, false)?;
+                            self.emit(Instruction::CallStackRec);
+                        } else {
+                            self.prepare_call_frame(rest)?;
+                            self.compile_expr(first, false)?;
+                            self.emit(Instruction::CallStack);
                         }
-                        self.compile_expr(first)?;
-                        self.emit(Instruction::CallStack);
                         self.emit(Instruction::Slide { n: rest.len() });
                         Ok(())
                     }
                 }
             }
             Expr::List(v) => {
-                for expr in rest.iter().rev() {
-                    self.compile_expr(expr)?;
+                if self.can_optimize_call(is_tail, rest.len()) {
+                    self.recycle_call_frame(rest)?;
+                    self.compile_list(v, false)?;
+                    self.emit(Instruction::CallStackRec);
+                } else {
+                    self.prepare_call_frame(rest)?;
+                    self.compile_list(v, false)?;
+                    self.emit(Instruction::CallStack);
                 }
-                self.compile_list(v)?;
-                self.emit(Instruction::CallStack);
                 self.emit(Instruction::Slide { n: rest.len() });
                 Ok(())
             }
@@ -312,20 +352,20 @@ impl Compiler {
         }
     }
 
-    fn compile_if(&mut self, args: &[Expr]) -> Result<(), String> {
+    fn compile_if(&mut self, args: &[Expr], is_tail: bool) -> Result<(), String> {
         let [cond, branch_true, branch_false] = args else {
             return Err("`if` takes exactly 3 arguments".to_string());
         };
-        self.compile_expr(cond)?;
+        self.compile_expr(cond, false)?;
         // JumpIfTrue will pop the condition at runtime
         self.stack_depth -= 1;
         let depth_before_branch = self.stack_depth;
         let len = self.get_section_length();
-        self.compile_expr(branch_false)?;
+        self.compile_expr(branch_false, is_tail)?;
         let len_branch_false = self.get_section_length();
         // reset depth for the other branch (they're alternatives)
         self.stack_depth = depth_before_branch;
-        self.compile_expr(branch_true)?;
+        self.compile_expr(branch_true, is_tail)?;
         let len_branch_true = self.get_section_length();
         self.insert_code_at(
             len,
@@ -342,9 +382,12 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_begin(&mut self, args: &[Expr]) -> Result<(), String> {
-        for expr in args.iter() {
-            self.compile_expr(expr)?;
+    fn compile_begin(&mut self, args: &[Expr], is_tail: bool) -> Result<(), String> {
+        if let Some((last, rest)) = args.split_last() {
+            for expr in rest.iter() {
+                self.compile_expr(expr, false)?;
+            }
+            self.compile_expr(last, is_tail)?;
         }
         Ok(())
     }
@@ -372,12 +415,12 @@ impl Compiler {
             },
             SymbolKind::Local => Instruction::StoreLocal { offset: info.index },
         };
-        self.compile_expr(expr)?;
+        self.compile_expr(expr, false)?;
         self.emit(store_instr);
         Ok(())
     }
 
-    fn compile_let(&mut self, args: &[Expr]) -> Result<(), String> {
+    fn compile_let(&mut self, args: &[Expr], is_tail: bool) -> Result<(), String> {
         let Some((Expr::List(bindings), body)) = args.split_first() else {
             return Err("`let`: needs at least 1 argument (a list of bindings)".to_string());
         };
@@ -402,11 +445,11 @@ impl Compiler {
                 },
             );
             // compile binding expression (increments stack_depth)
-            self.compile_expr(value)?;
+            self.compile_expr(value, false)?;
         }
         // enter scope, compile body, exit scope
         self.local_scopes.push(local_scope);
-        self.compile_begin(body)?;
+        self.compile_begin(body, is_tail)?;
         self.local_scopes.pop();
         // slide: keep the result on top, drop all slots allocated since entry
         let slots_to_drop = (self.stack_depth - base_depth - 1) as usize;
@@ -439,7 +482,7 @@ impl Compiler {
             );
         }
         self.local_scopes.push(local_scope);
-        self.compile_begin(body)?;
+        self.compile_begin(body, true)?;
         self.emit(Instruction::Ret);
         self.local_scopes.pop();
         // restore stack depth
@@ -451,8 +494,8 @@ impl Compiler {
         let [left, right] = args else {
             return Err(format!("`{cmp}` takes exactly 2 arguments"));
         };
-        self.compile_expr(left)?;
-        self.compile_expr(right)?;
+        self.compile_expr(left, false)?;
+        self.compile_expr(right, false)?;
         match cmp {
             "<" => self.emit(Instruction::LessThan),
             "<=" => self.emit(Instruction::LessThanEqual),
@@ -468,9 +511,9 @@ impl Compiler {
             self.emit(Instruction::PushZero);
             return Ok(());
         };
-        self.compile_expr(first)?;
+        self.compile_expr(first, false)?;
         while let Some((first, next_rest)) = rest.split_first() {
-            self.compile_expr(first)?;
+            self.compile_expr(first, false)?;
             self.emit(Instruction::Add);
             rest = next_rest;
         }
@@ -483,13 +526,13 @@ impl Compiler {
         };
         if rest.is_empty() {
             self.emit(Instruction::PushZero);
-            self.compile_expr(first)?;
+            self.compile_expr(first, false)?;
             self.emit(Instruction::Sub);
             return Ok(());
         }
-        self.compile_expr(first)?;
+        self.compile_expr(first, false)?;
         while let Some((first, next_rest)) = rest.split_first() {
-            self.compile_expr(first)?;
+            self.compile_expr(first, false)?;
             self.emit(Instruction::Sub);
             rest = next_rest;
         }
@@ -501,9 +544,9 @@ impl Compiler {
             self.emit(Instruction::PushOne);
             return Ok(());
         };
-        self.compile_expr(first)?;
+        self.compile_expr(first, false)?;
         while let Some((first, next_rest)) = rest.split_first() {
-            self.compile_expr(first)?;
+            self.compile_expr(first, false)?;
             self.emit(Instruction::Mul);
             rest = next_rest;
         }
@@ -516,13 +559,13 @@ impl Compiler {
         };
         if rest.is_empty() {
             self.emit(Instruction::PushOne);
-            self.compile_expr(first)?;
+            self.compile_expr(first, false)?;
             self.emit(Instruction::Div);
             return Ok(());
         }
-        self.compile_expr(first)?;
+        self.compile_expr(first, false)?;
         while let Some((first, next_rest)) = rest.split_first() {
-            self.compile_expr(first)?;
+            self.compile_expr(first, false)?;
             self.emit(Instruction::Div);
             rest = next_rest;
         }
@@ -536,7 +579,7 @@ impl Compiler {
         if !rest.is_empty() {
             return Err("`abs` expects one argument".to_string());
         }
-        self.compile_expr(first)?;
+        self.compile_expr(first, false)?;
         self.emit(Instruction::Abs);
         Ok(())
     }
@@ -545,8 +588,8 @@ impl Compiler {
         let [car, cdr] = args else {
             return Err("`cons` takes exactly 2 arguments".to_string());
         };
-        self.compile_expr(car)?;
-        self.compile_expr(cdr)?;
+        self.compile_expr(car, false)?;
+        self.compile_expr(cdr, false)?;
         self.emit(Instruction::Cons);
         Ok(())
     }
@@ -555,7 +598,7 @@ impl Compiler {
         let [arg] = args else {
             return Err("`null?` takes exactly 1 argument".to_string());
         };
-        self.compile_expr(arg)?;
+        self.compile_expr(arg, false)?;
         self.emit(Instruction::IsNull);
         Ok(())
     }
@@ -564,7 +607,7 @@ impl Compiler {
         let [pair] = args else {
             return Err("`car` takes exactly 1 arguments".to_string());
         };
-        self.compile_expr(pair)?;
+        self.compile_expr(pair, false)?;
         self.emit(Instruction::Car);
         Ok(())
     }
@@ -573,7 +616,7 @@ impl Compiler {
         let [pair] = args else {
             return Err("`cdr` takes exactly 1 arguments".to_string());
         };
-        self.compile_expr(pair)?;
+        self.compile_expr(pair, false)?;
         self.emit(Instruction::Cdr);
         Ok(())
     }
@@ -678,6 +721,7 @@ mod tests {
             ("(define a 3) (+ a (let ((a 42)) (+ a 1)))", "46"),
             // nested let accessing both scopes
             ("(let ((a 1)) (let ((b 2)) (+ a b)))", "3"),
+            ("(let ((a 1)) (let ((b 2)) (let ((c 3)) (+ a b c))))", "6"),
             // let inside if branch
             ("(if #t (let ((x 10)) (+ x 1)) 0)", "11"),
             ("(if #f 0 (let ((x 20)) (+ x 1)))", "21"),
@@ -767,6 +811,17 @@ mod tests {
                 "#,
                 "13",
             ),
+            // tail call optimization
+            (
+                r#"
+                (define count (lambda (m n)
+                    (if (>= m n)
+                        m
+                        (count (+ m 1) n))))
+                (count 0 1024)
+                "#,
+                "1024",
+            ),
             // newton method for square root
             (
                 r#"
@@ -822,6 +877,7 @@ mod tests {
 
         for (code, expected_res) in cases {
             let exprs = parse(code).unwrap();
+            println!("{code}");
             let program = Compiler::new().compile(&exprs).unwrap();
             let mut vm = VM::new(program, 1024);
             vm.debug();
@@ -849,6 +905,10 @@ mod tests {
             (
                 "(let ((a 3) (b (+ a 1))) b)",
                 Err("Not found in scope: a".into()),
+            ),
+            (
+                "(lambda (a b 42) (+ a b))",
+                Err("`lambda`: the list of arguments must contain symbols".into()),
             ),
         ];
 

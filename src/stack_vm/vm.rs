@@ -45,7 +45,9 @@ pub enum Instruction {
     JumpIfTrue { offset: i16 },
     // procedure calling
     Call { addr: usize },
+    CallRec { addr: usize },
     CallStack,
+    CallStackRec,
     Ret,
     Slide { n: usize },
     Drop { n: usize },
@@ -197,6 +199,12 @@ impl VM {
         self.push_to_stack(Value::Pointer(self.frame_ptr));
         self.push_to_stack(Value::Pointer(self.instr_ptr));
         self.frame_ptr = self.stack_ptr;
+        self.instr_ptr = addr;
+    }
+
+    #[inline]
+    fn call_recycle_frame(&mut self, addr: usize) {
+        self.stack_ptr = self.frame_ptr;
         self.instr_ptr = addr;
     }
 
@@ -368,11 +376,19 @@ impl VM {
                 }
             }
             Instruction::Call { addr } => self.call(addr),
+            Instruction::CallRec { addr } => self.call_recycle_frame(addr),
             Instruction::CallStack => {
                 let value = self.pop_from_stack();
                 match value {
                     Value::Procedure(addr) => self.call(addr),
                     _ => panic!("Invalid operand for CallStack"),
+                }
+            }
+            Instruction::CallStackRec => {
+                let value = self.pop_from_stack();
+                match value {
+                    Value::Procedure(addr) => self.call_recycle_frame(addr),
+                    _ => panic!("Invalid operand for CallStackRec"),
                 }
             }
             Instruction::Ret => {
