@@ -6,7 +6,7 @@ use std::collections::HashMap;
 pub struct Compiler {
     global_scope: HashMap<String, SymbolInfo>,
     local_scopes: Vec<HashMap<String, SymbolInfo>>,
-    stack_depth: i8,
+    stack_depth: usize,
     proc_stack: Vec<Vec<Instruction>>,
     const_section: Vec<Value>,
     static_heap: Vec<Value>,
@@ -17,6 +17,7 @@ pub struct Compiler {
 
 #[derive(Clone, Debug, Copy, PartialEq)]
 enum SymbolKind {
+    Argument,
     Local,
     Global,
 }
@@ -24,7 +25,7 @@ enum SymbolKind {
 #[derive(Clone, Debug, Copy)]
 struct SymbolInfo {
     kind: SymbolKind,
-    index: i8,
+    index: usize,
 }
 
 impl Default for Compiler {
@@ -119,21 +120,32 @@ impl Compiler {
     }
 
     fn emit(&mut self, instr: Instruction) {
-        self.stack_depth += match instr {
-            Instruction::LoadConst { offset: _ } => 1,
-            Instruction::LoadGlobal { offset: _ } => 1,
-            Instruction::LoadLocal { offset: _ } => 1,
-            Instruction::StoreGlobal { offset: _ } => -1,
-            Instruction::StoreLocal { offset: _ } => -1,
-            Instruction::CallStack => -1,
-            Instruction::Slide { n } => -(n as i8),
-            Instruction::Drop { n } => -(n as i8),
-            Instruction::LessThan | Instruction::LessThanEqual => -1,
-            Instruction::GreaterThan | Instruction::GreaterThanEqual => -1,
-            Instruction::PushZero | Instruction::PushOne => 1,
-            Instruction::Add | Instruction::Sub => -1,
-            Instruction::Mul | Instruction::Div => -1,
-            _ => 0,
+        match instr {
+            Instruction::LoadConst { offset: _ } => self.stack_depth += 1,
+            Instruction::LoadGlobal { offset: _ } => self.stack_depth += 1,
+            Instruction::LoadLocal { offset: _ } => self.stack_depth += 1,
+            Instruction::StoreGlobal { offset: _ } => self.stack_depth -= 1,
+            Instruction::StoreLocal { offset: _ } => self.stack_depth -= 1,
+            Instruction::CallStack => (),
+            Instruction::CallStackRec => (),
+            Instruction::Call { addr: _ } => self.stack_depth += 1,
+            Instruction::CallRec { addr: _ } => self.stack_depth += 1,
+            Instruction::Slide { n } => self.stack_depth -= n,
+            Instruction::Drop { n } => self.stack_depth -= n,
+            Instruction::LessThan | Instruction::LessThanEqual => self.stack_depth -= 1,
+            Instruction::GreaterThan | Instruction::GreaterThanEqual => self.stack_depth -= 1,
+            Instruction::PushZero | Instruction::PushOne => self.stack_depth += 1,
+            Instruction::Abs => (),
+            Instruction::Add | Instruction::Sub => self.stack_depth -= 1,
+            Instruction::Mul | Instruction::Div => self.stack_depth -= 1,
+            Instruction::StackAlloc { size } => self.stack_depth += size as usize,
+            Instruction::IsNull => (),
+            Instruction::Cons => self.stack_depth -= 1,
+            Instruction::Car | Instruction::Cdr => (),
+            Instruction::Jump { offset: _ } => (),
+            Instruction::JumpIfTrue { offset: _ } => self.stack_depth -= 1,
+            Instruction::Ret => (),
+            Instruction::Halt => (),
         };
         if let Some(code) = self.proc_stack.last_mut() {
             code.push(instr)
@@ -176,7 +188,7 @@ impl Compiler {
         }
         let info = SymbolInfo {
             kind: SymbolKind::Global,
-            index: self.global_scope.len() as i8,
+            index: self.global_scope.len(),
         };
         self.global_scope.insert(s, info);
         info
@@ -236,7 +248,13 @@ impl Compiler {
                     SymbolKind::Global => Instruction::LoadGlobal {
                         offset: info.index as u8,
                     },
-                    SymbolKind::Local => Instruction::LoadLocal { offset: info.index },
+                    SymbolKind::Local => Instruction::LoadLocal {
+                        offset: -(info.index as i8),
+                    },
+                    SymbolKind::Argument => Instruction::LoadLocal {
+                        // NOTE: this is because of our call convention
+                        offset: info.index as i8 + 3,
+                    },
                 };
                 self.emit(instr);
                 Ok(())
@@ -251,9 +269,7 @@ impl Compiler {
         };
         let mut available_arg_slots: usize = 0;
         for v in local_scope.values() {
-            // NOTE: this is tied to the call convention
-            // by which call arguments get a negative offset
-            if v.kind == SymbolKind::Local && v.index < 0 {
+            if v.kind == SymbolKind::Argument {
                 available_arg_slots += 1;
             }
         }
@@ -271,7 +287,8 @@ impl Compiler {
         for (idx, expr) in args.iter().enumerate() {
             self.compile_expr(expr, false)?;
             self.emit(Instruction::StoreLocal {
-                offset: -(idx as i8) - 3,
+                // NOTE: this is because of the call convention
+                offset: idx as i8 + 3,
             })
         }
         Ok(())
@@ -320,8 +337,8 @@ impl Compiler {
                             self.prepare_call_frame(rest)?;
                             self.compile_expr(first, false)?;
                             self.emit(Instruction::CallStack);
+                            self.emit(Instruction::Slide { n: rest.len() });
                         }
-                        self.emit(Instruction::Slide { n: rest.len() });
                         Ok(())
                     }
                 }
@@ -335,8 +352,8 @@ impl Compiler {
                     self.prepare_call_frame(rest)?;
                     self.compile_list(v, false)?;
                     self.emit(Instruction::CallStack);
+                    self.emit(Instruction::Slide { n: rest.len() });
                 }
-                self.emit(Instruction::Slide { n: rest.len() });
                 Ok(())
             }
             Expr::Keyword(Keyword::Quote) => {
@@ -413,7 +430,13 @@ impl Compiler {
             SymbolKind::Global => Instruction::StoreGlobal {
                 offset: info.index as u8,
             },
-            SymbolKind::Local => Instruction::StoreLocal { offset: info.index },
+            SymbolKind::Local => Instruction::StoreLocal {
+                offset: -(info.index as i8),
+            },
+            SymbolKind::Argument => Instruction::StoreLocal {
+                // NOTE: this is because of the call convention
+                offset: info.index as i8 + 3,
+            },
         };
         self.compile_expr(expr, false)?;
         self.emit(store_instr);
@@ -452,7 +475,7 @@ impl Compiler {
         self.compile_begin(body, is_tail)?;
         self.local_scopes.pop();
         // slide: keep the result on top, drop all slots allocated since entry
-        let slots_to_drop = (self.stack_depth - base_depth - 1) as usize;
+        let slots_to_drop = self.stack_depth - base_depth - 1;
         if slots_to_drop > 0 {
             self.emit(Instruction::Slide { n: slots_to_drop });
         }
@@ -468,16 +491,15 @@ impl Compiler {
         self.stack_depth = 0;
         // create local scope
         let mut local_scope = HashMap::<String, SymbolInfo>::new();
-        for (idx, argument) in arguments.iter().enumerate() {
+        for (index, argument) in arguments.iter().enumerate() {
             let Expr::Symbol(s) = argument else {
                 return Err("`lambda`: the list of arguments must contain symbols".to_string());
             };
             local_scope.insert(
                 s.to_string(),
                 SymbolInfo {
-                    kind: SymbolKind::Local,
-                    // NOTE: index is set based on the calling conventions
-                    index: -(idx as i8 + 3),
+                    kind: SymbolKind::Argument,
+                    index,
                 },
             );
         }

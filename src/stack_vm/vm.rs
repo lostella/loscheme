@@ -231,7 +231,7 @@ impl VM {
                         self.push_to_stack(Value::Float(x + (y as f64)))
                     }
                     (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Float(x + y)),
-                    _ => panic!("Invalid operands for Add"),
+                    _ => panic!("Invalid operands for Add: {a:?}, {b:?}"),
                 }
             }
             Instruction::Sub => {
@@ -246,7 +246,7 @@ impl VM {
                         self.push_to_stack(Value::Float(x - (y as f64)))
                     }
                     (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Float(x - y)),
-                    _ => panic!("Invalid operands for Sub"),
+                    _ => panic!("Invalid operands for Sub: {a:?}, {b:?}"),
                 }
             }
             Instruction::Mul => {
@@ -261,7 +261,7 @@ impl VM {
                         self.push_to_stack(Value::Float(x * (y as f64)))
                     }
                     (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Float(x * y)),
-                    _ => panic!("Invalid operands for Mul"),
+                    _ => panic!("Invalid operands for Mul: {a:?}, {b:?}"),
                 }
             }
             Instruction::Div => {
@@ -275,7 +275,7 @@ impl VM {
                     (Value::Float(x), Value::Int(y)) => {
                         self.push_to_stack(Value::Float(x / (y as f64)))
                     }
-                    _ => panic!("Invalid operands for Div"),
+                    _ => panic!("Invalid operands for Div: {a:?}, {b:?}"),
                 }
             }
             Instruction::Abs => {
@@ -283,7 +283,7 @@ impl VM {
                 match a {
                     Value::Int(x) => self.push_to_stack(Value::Int(x.abs())),
                     Value::Float(x) => self.push_to_stack(Value::Float(x.abs())),
-                    _ => panic!("Invalid operand for Abs"),
+                    _ => panic!("Invalid operand for Abs: {a:?}"),
                 }
             }
             Instruction::LessThan => {
@@ -292,7 +292,7 @@ impl VM {
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Bool(x < y)),
                     (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Bool(x < y)),
-                    _ => panic!("Invalid operands for LessThan"),
+                    _ => panic!("Invalid operands for LessThan: {a:?}, {b:?}"),
                 }
             }
             Instruction::LessThanEqual => {
@@ -301,7 +301,7 @@ impl VM {
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Bool(x <= y)),
                     (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Bool(x <= y)),
-                    _ => panic!("Invalid operands for LessThan"),
+                    _ => panic!("Invalid operands for LessThanEqual: {a:?}, {b:?}"),
                 }
             }
             Instruction::GreaterThan => {
@@ -310,7 +310,7 @@ impl VM {
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Bool(x > y)),
                     (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Bool(x > y)),
-                    _ => panic!("Invalid operands for LessThan"),
+                    _ => panic!("Invalid operands for GreaterThan: {a:?}, {b:?}"),
                 }
             }
             Instruction::GreaterThanEqual => {
@@ -319,7 +319,7 @@ impl VM {
                 match (a, b) {
                     (Value::Int(x), Value::Int(y)) => self.push_to_stack(Value::Bool(x >= y)),
                     (Value::Float(x), Value::Float(y)) => self.push_to_stack(Value::Bool(x >= y)),
-                    _ => panic!("Invalid operands for LessThan"),
+                    _ => panic!("Invalid operands for GreaterThanEqual: {a:?}, {b:?}"),
                 }
             }
             Instruction::IsNull => match self.pop_from_stack() {
@@ -334,23 +334,25 @@ impl VM {
                 self.push_to_stack(Value::Pair(car_addr, cdr_addr));
             }
             Instruction::Car => {
-                let Value::Pair(car_addr, _) = self.pop_from_stack() else {
-                    panic!("Invalid operand for Car");
+                let top = self.pop_from_stack();
+                let Value::Pair(car_addr, _) = top else {
+                    panic!("Invalid operand for Car: {top:?}");
                 };
                 self.push_to_stack(self.memory[car_addr]);
             }
             Instruction::Cdr => {
-                let Value::Pair(_, cdr_addr) = self.pop_from_stack() else {
-                    panic!("Invalid operand for Cdr");
+                let top = self.pop_from_stack();
+                let Value::Pair(_, cdr_addr) = top else {
+                    panic!("Invalid operand for Cdr: {top:?}");
                 };
                 self.push_to_stack(self.memory[cdr_addr]);
             }
             Instruction::LoadLocal { offset } => {
-                let src = self.frame_ptr.wrapping_sub(offset as usize);
+                let src = self.frame_ptr.wrapping_add(offset as usize);
                 self.push_to_stack(self.memory[src]);
             }
             Instruction::StoreLocal { offset } => {
-                let dest = self.frame_ptr.wrapping_sub(offset as usize);
+                let dest = self.frame_ptr.wrapping_add(offset as usize);
                 self.memory[dest] = self.pop_from_stack();
                 if self.stack_ptr >= dest {
                     self.stack_ptr = dest - 1
@@ -372,7 +374,7 @@ impl VM {
                         self.instr_ptr = self.instr_ptr.wrapping_add(offset as usize);
                     }
                     Value::Bool(false) => (),
-                    _ => panic!("Invalid operand for JumpIfTrue"),
+                    _ => panic!("Invalid operand for JumpIfTrue: {cond:?}"),
                 }
             }
             Instruction::Call { addr } => self.call(addr),
@@ -381,14 +383,14 @@ impl VM {
                 let value = self.pop_from_stack();
                 match value {
                     Value::Procedure(addr) => self.call(addr),
-                    _ => panic!("Invalid operand for CallStack"),
+                    _ => panic!("Invalid operand for CallStack: {value:?}"),
                 }
             }
             Instruction::CallStackRec => {
                 let value = self.pop_from_stack();
                 match value {
                     Value::Procedure(addr) => self.call_recycle_frame(addr),
-                    _ => panic!("Invalid operand for CallStackRec"),
+                    _ => panic!("Invalid operand for CallStackRec: {value:?}"),
                 }
             }
             Instruction::Ret => {
@@ -396,11 +398,17 @@ impl VM {
                 self.stack_ptr = self.frame_ptr + 2;
                 self.instr_ptr = match self.memory[self.frame_ptr + 1] {
                     Value::Pointer(i) => i,
-                    _ => panic!("Invalid return address"),
+                    _ => panic!(
+                        "Invalid return address: {:?}",
+                        self.memory[self.frame_ptr + 1]
+                    ),
                 };
                 self.frame_ptr = match self.memory[self.frame_ptr + 2] {
                     Value::Pointer(i) => i,
-                    _ => panic!("Invalid frame pointer"),
+                    _ => panic!(
+                        "Invalid frame pointer: {:?}",
+                        self.memory[self.frame_ptr + 2]
+                    ),
                 };
                 self.push_to_stack(ret);
             }
@@ -479,18 +487,18 @@ mod tests {
                 Call { addr: 3 },        // call fib
                 Halt,                    // halt
                 // fib:
-                LoadConst { offset: 1 },  // push 1
-                LoadLocal { offset: -3 }, // put n on the stack
+                LoadConst { offset: 1 }, // push 1
+                LoadLocal { offset: 3 }, // put n on the stack
                 LessThan,
                 JumpIfTrue { offset: 2 }, // if 1 < n, jump to recursive case
-                LoadLocal { offset: -3 }, // put n on the stack
+                LoadLocal { offset: 3 },  // put n on the stack
                 Ret,                      // return n
-                LoadLocal { offset: -3 },
+                LoadLocal { offset: 3 },
                 LoadConst { offset: 1 },
                 Sub,
                 Call { addr: 3 }, // fib(n - 1)
                 StoreLocal { offset: 0 },
-                LoadLocal { offset: -3 },
+                LoadLocal { offset: 3 },
                 LoadConst { offset: 2 },
                 Sub,
                 Call { addr: 3 }, // fib(n - 2)
