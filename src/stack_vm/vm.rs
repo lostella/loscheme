@@ -22,6 +22,13 @@ pub enum Instruction {
     StoreLocal { offset: i8 },
     LoadGlobal { offset: u8 },
     StoreGlobal { offset: u8 },
+    StoreRegistry,
+    LoadRegistry,
+    // logical operations
+    PushTrue,
+    And,
+    Or,
+    Not,
     // numerical operations
     PushZero,
     PushOne,
@@ -49,8 +56,8 @@ pub enum Instruction {
     CallStack,
     CallStackRec,
     Ret,
+    // stack management
     Slide { n: usize },
-    Drop { n: usize },
     // others
     Halt,
 }
@@ -70,6 +77,7 @@ pub struct VM {
     constants: Vec<Value>,
     globals: Vec<Value>,
     memory: Vec<Value>,
+    registries: [Value; 1],
     symbol_table: Vec<String>,
     stack_ptr: usize,
     heap_ptr: usize,
@@ -87,6 +95,7 @@ impl VM {
             constants: program.data,
             globals: vec![Value::default(); program.num_globals],
             memory,
+            registries: [Value::default(); 1],
             symbol_table: program.symbol_table,
             stack_ptr: memory_size - 1,
             frame_ptr: memory_size - 1,
@@ -216,6 +225,30 @@ impl VM {
             Instruction::Halt => self.instr_ptr = self.code.len(),
             Instruction::LoadConst { offset } => {
                 self.push_to_stack(self.constants[offset as usize])
+            }
+            Instruction::PushTrue => self.push_to_stack(Value::Bool(true)),
+            Instruction::And => {
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
+                match (a, b) {
+                    (Value::Bool(a), Value::Bool(b)) => self.push_to_stack(Value::Bool(a && b)),
+                    _ => panic!("Invalid operands for And: {a:?}, {b:?}"),
+                }
+            }
+            Instruction::Or => {
+                let b = self.pop_from_stack();
+                let a = self.pop_from_stack();
+                match (a, b) {
+                    (Value::Bool(a), Value::Bool(b)) => self.push_to_stack(Value::Bool(a || b)),
+                    _ => panic!("Invalid operands for Or: {a:?}, {b:?}"),
+                }
+            }
+            Instruction::Not => {
+                let a = self.pop_from_stack();
+                match a {
+                    Value::Bool(v) => self.push_to_stack(Value::Bool(!v)),
+                    _ => panic!("Invalid operand for Not: {a:?}"),
+                }
             }
             Instruction::PushZero => self.push_to_stack(Value::Int(0)),
             Instruction::PushOne => self.push_to_stack(Value::Int(1)),
@@ -364,6 +397,12 @@ impl VM {
             Instruction::StoreGlobal { offset } => {
                 self.globals[offset as usize] = self.pop_from_stack();
             }
+            Instruction::LoadRegistry => {
+                self.push_to_stack(self.registries[0]);
+            }
+            Instruction::StoreRegistry => {
+                self.registries[0] = self.pop_from_stack();
+            }
             Instruction::Jump { offset } => {
                 self.instr_ptr = self.instr_ptr.wrapping_add(offset as usize);
             }
@@ -416,9 +455,6 @@ impl VM {
                 let ret = self.pop_from_stack();
                 self.stack_ptr += n;
                 self.push_to_stack(ret);
-            }
-            Instruction::Drop { n } => {
-                self.stack_ptr += n;
             }
         }
     }

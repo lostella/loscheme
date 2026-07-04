@@ -124,18 +124,22 @@ impl Compiler {
             Instruction::LoadConst { offset: _ } => self.stack_depth += 1,
             Instruction::LoadGlobal { offset: _ } => self.stack_depth += 1,
             Instruction::LoadLocal { offset: _ } => self.stack_depth += 1,
+            Instruction::LoadRegistry => self.stack_depth += 1,
             Instruction::StoreGlobal { offset: _ } => self.stack_depth -= 1,
             Instruction::StoreLocal { offset: _ } => self.stack_depth -= 1,
+            Instruction::StoreRegistry => self.stack_depth -= 1,
             Instruction::CallStack => (),
             Instruction::CallStackRec => (),
             Instruction::Call { addr: _ } => self.stack_depth += 1,
             Instruction::CallRec { addr: _ } => self.stack_depth += 1,
             Instruction::Slide { n } => self.stack_depth -= n,
-            Instruction::Drop { n } => self.stack_depth -= n,
             Instruction::LessThan | Instruction::LessThanEqual => self.stack_depth -= 1,
             Instruction::GreaterThan | Instruction::GreaterThanEqual => self.stack_depth -= 1,
+            Instruction::PushTrue => self.stack_depth += 1,
             Instruction::PushZero | Instruction::PushOne => self.stack_depth += 1,
             Instruction::Abs => (),
+            Instruction::Not => (),
+            Instruction::And | Instruction::Or => self.stack_depth -= 1,
             Instruction::Add | Instruction::Sub => self.stack_depth -= 1,
             Instruction::Mul | Instruction::Div => self.stack_depth -= 1,
             Instruction::StackAlloc { size } => self.stack_depth += size as usize,
@@ -513,18 +517,32 @@ impl Compiler {
     }
 
     fn compile_cmp(&mut self, cmp: &str, args: &[Expr]) -> Result<(), String> {
-        let [left, right] = args else {
-            return Err(format!("`{cmp}` takes exactly 2 arguments"));
-        };
-        self.compile_expr(left, false)?;
-        self.compile_expr(right, false)?;
-        match cmp {
-            "<" => self.emit(Instruction::LessThan),
-            "<=" => self.emit(Instruction::LessThanEqual),
-            ">" => self.emit(Instruction::GreaterThan),
-            ">=" => self.emit(Instruction::GreaterThanEqual),
+        let cmp_instr = match cmp {
+            "<" => Instruction::LessThan,
+            "<=" => Instruction::LessThanEqual,
+            ">" => Instruction::GreaterThan,
+            ">=" => Instruction::GreaterThanEqual,
             _ => todo!("comparison operator: {cmp}"),
+        };
+        self.emit(Instruction::PushTrue);
+        let Some((first, rest)) = args.split_first() else {
+            return Ok(());
+        };
+        let Some((last, mid)) = rest.split_last() else {
+            return Ok(());
+        };
+        self.compile_expr(first, false)?;
+        for arg in mid {
+            self.compile_expr(arg, false)?;
+            self.emit(Instruction::StoreRegistry);
+            self.emit(Instruction::LoadRegistry);
+            self.emit(cmp_instr);
+            self.emit(Instruction::And);
+            self.emit(Instruction::LoadRegistry);
         }
+        self.compile_expr(last, false)?;
+        self.emit(cmp_instr);
+        self.emit(Instruction::And);
         Ok(())
     }
 
@@ -659,18 +677,44 @@ mod tests {
             ("42", "42"),
             ("42.", "42.0"),
             ("42.0", "42.0"),
+            ("(<)", "#t"),
+            ("(<=)", "#t"),
+            ("(>)", "#t"),
+            ("(>=)", "#t"),
+            ("(< 42)", "#t"),
+            ("(<= 42)", "#t"),
+            ("(> 42)", "#t"),
+            ("(>= 42)", "#t"),
             ("(< 2 3)", "#t"),
             ("(< 3 3)", "#f"),
             ("(< 4 3)", "#f"),
+            ("(< 2 3 4)", "#t"),
+            ("(< 2 2 4)", "#f"),
+            ("(< 2 1 4)", "#f"),
+            ("(< 2 3 3)", "#f"),
+            ("(< 2 3 2)", "#f"),
             ("(<= 2 3)", "#t"),
             ("(<= 3 3)", "#t"),
             ("(<= 4 3)", "#f"),
+            ("(<= 2 3 4)", "#t"),
+            ("(<= 2 2 4)", "#t"),
+            ("(<= 2 1 4)", "#f"),
+            ("(<= 2 3 3)", "#t"),
+            ("(<= 2 3 2)", "#f"),
             ("(> 2 3)", "#f"),
             ("(> 3 3)", "#f"),
             ("(> 4 3)", "#t"),
+            ("(> 2 3 2)", "#f"),
+            ("(> 3 2 3)", "#f"),
+            ("(> 4 3 3)", "#f"),
+            ("(> 4 3 2)", "#t"),
             ("(>= 2 3)", "#f"),
             ("(>= 3 3)", "#t"),
             ("(>= 4 3)", "#t"),
+            ("(>= 2 3 2)", "#f"),
+            ("(>= 3 2 3)", "#f"),
+            ("(>= 4 3 3)", "#t"),
+            ("(>= 4 3 2)", "#t"),
             ("(+ 3)", "3"),
             ("(+ 3 4 5 6)", "18"),
             ("(- 7)", "-7"),
