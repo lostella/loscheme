@@ -22,8 +22,8 @@ pub enum Instruction {
     StoreLocal { offset: i8 },
     LoadGlobal { offset: u8 },
     StoreGlobal { offset: u8 },
-    StoreRegistry,
-    LoadRegistry,
+    StoreRegistry { index: u8 },
+    LoadRegistry { index: u8 },
     // logical operations
     PushTrue,
     And,
@@ -77,7 +77,7 @@ pub struct VM {
     constants: Vec<Value>,
     globals: Vec<Value>,
     memory: Vec<Value>,
-    registries: [Value; 1],
+    registries: [Value; 4],
     symbol_table: Vec<String>,
     stack_ptr: usize,
     heap_ptr: usize,
@@ -95,7 +95,7 @@ impl VM {
             constants: program.data,
             globals: vec![Value::default(); program.num_globals],
             memory,
-            registries: [Value::default(); 1],
+            registries: [Value::default(); 4],
             symbol_table: program.symbol_table,
             stack_ptr: memory_size - 1,
             frame_ptr: memory_size - 1,
@@ -397,11 +397,11 @@ impl VM {
             Instruction::StoreGlobal { offset } => {
                 self.globals[offset as usize] = self.pop_from_stack();
             }
-            Instruction::LoadRegistry => {
-                self.push_to_stack(self.registries[0]);
+            Instruction::LoadRegistry { index } => {
+                self.push_to_stack(self.registries[index as usize]);
             }
-            Instruction::StoreRegistry => {
-                self.registries[0] = self.pop_from_stack();
+            Instruction::StoreRegistry { index } => {
+                self.registries[index as usize] = self.pop_from_stack();
             }
             Instruction::Jump { offset } => {
                 self.instr_ptr = self.instr_ptr.wrapping_add(offset as usize);

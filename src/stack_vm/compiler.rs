@@ -124,10 +124,10 @@ impl Compiler {
             Instruction::LoadConst { offset: _ } => self.stack_depth += 1,
             Instruction::LoadGlobal { offset: _ } => self.stack_depth += 1,
             Instruction::LoadLocal { offset: _ } => self.stack_depth += 1,
-            Instruction::LoadRegistry => self.stack_depth += 1,
+            Instruction::LoadRegistry { index: _ } => self.stack_depth += 1,
             Instruction::StoreGlobal { offset: _ } => self.stack_depth -= 1,
             Instruction::StoreLocal { offset: _ } => self.stack_depth -= 1,
-            Instruction::StoreRegistry => self.stack_depth -= 1,
+            Instruction::StoreRegistry { index: _ } => self.stack_depth -= 1,
             Instruction::CallStack => (),
             Instruction::CallStackRec => (),
             Instruction::Call { addr: _ } => self.stack_depth += 1,
@@ -534,11 +534,11 @@ impl Compiler {
         self.compile_expr(first, false)?;
         for arg in mid {
             self.compile_expr(arg, false)?;
-            self.emit(Instruction::StoreRegistry);
-            self.emit(Instruction::LoadRegistry);
+            self.emit(Instruction::StoreRegistry { index: 0 });
+            self.emit(Instruction::LoadRegistry { index: 0 });
             self.emit(cmp_instr);
             self.emit(Instruction::And);
-            self.emit(Instruction::LoadRegistry);
+            self.emit(Instruction::LoadRegistry { index: 0 });
         }
         self.compile_expr(last, false)?;
         self.emit(cmp_instr);
