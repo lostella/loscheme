@@ -306,6 +306,7 @@ impl Compiler {
             Expr::Keyword(Keyword::If) => self.compile_if(rest, is_tail),
             Expr::Keyword(Keyword::Begin) => self.compile_begin(rest, is_tail),
             Expr::Keyword(Keyword::Define) => self.compile_define(rest),
+            Expr::Keyword(Keyword::Set) => self.compile_set(rest),
             Expr::Keyword(Keyword::Let) => self.compile_let(rest, is_tail),
             Expr::Keyword(Keyword::Lambda) => {
                 self.proc_stack.push(vec![]);
@@ -430,6 +431,31 @@ impl Compiler {
             return Err("`define` takes 2 arguments".to_string());
         };
         let info = self.insert_symbol_info(s.to_string());
+        let store_instr = match info.kind {
+            SymbolKind::Global => Instruction::StoreGlobal {
+                offset: info.index as u8,
+            },
+            SymbolKind::Local => Instruction::StoreLocal {
+                offset: -(info.index as i8),
+            },
+            SymbolKind::Argument => Instruction::StoreLocal {
+                // NOTE: this is because of the call convention
+                offset: info.index as i8 + 3,
+            },
+        };
+        self.compile_expr(expr, false)?;
+        self.emit(store_instr);
+        Ok(())
+    }
+
+    fn compile_set(&mut self, args: &[Expr]) -> Result<(), String> {
+        let [Expr::Symbol(s), expr] = args else {
+            // Assume: (set! a expr)
+            return Err("`set!` takes 2 arguments".to_string());
+        };
+        let Some(info) = self.get_symbol_info(&s.to_string()) else {
+            return Err(format!("`set!` got an undefined symbol: {s}"));
+        };
         let store_instr = match info.kind {
             SymbolKind::Global => Instruction::StoreGlobal {
                 offset: info.index as u8,
@@ -772,6 +798,42 @@ mod tests {
                 "(define a (cons 3 5)) (define b (cons 7 a)) (cdr (cdr b))",
                 "5",
             ),
+            // set!
+            ("(define x 3) (set! x 42) x", "42"),
+            (
+                "
+                (define (f x) (set! x 42) x)
+                (define a 3)
+                (define b (f a))
+                (+ a b)
+                ",
+                "45",
+            ),
+            (
+                "
+                (define (f x) (* 2 x))
+                (define a (f 7))
+                (set! f (lambda (x) (- x 2)))
+                (define b (f 7))
+                (+ a b)
+                ",
+                "19",
+            ),
+            ("(let ((a 1)) (set! a 2) a)", "2"),
+            ("(let ((a 1)) (let ((b 2)) (set! a 99)) a)", "99"),
+            (
+                "(let ((a 0)) (set! a (+ a 1)) (set! a (+ a 1)) (set! a (+ a 1)) a)",
+                "3",
+            ),
+            (
+                "
+                (define (count-set n)
+                    (set! n (+ n 1))
+                    (if (>= n 10) n (count-set n)))
+                (count-set 0)
+                ",
+                "10",
+            ),
             // let
             ("(let ((a 3)) (+ a 1))", "4"),
             ("(let ((a 3) (b 4)) (+ a b))", "7"),
@@ -795,102 +857,102 @@ mod tests {
             ("(lambda (x) (+ x 1))", "$Procedure@2"),
             ("((lambda (x) (+ x 1)) 3)", "4"),
             (
-                r#"
+                "
                 (define a 3)
                 (define plus-a (lambda (x) (+ a x)))
                 (plus-a 42)
-                "#,
+                ",
                 "45",
             ),
             (
-                r#"
+                "
                 (define a 3)
                 (define plus-a (lambda (x) (+ a x)))
                 (define a 16)
                 (plus-a 42)
-                "#,
+                ",
                 "58",
             ),
             (
-                r#"
+                "
                 (define f (lambda (x) (define g (lambda (y) (+ 3 y))) (g x)))
                 (f 4)
-                "#,
+                ",
                 "7",
             ),
             // define as syntactic sugar for lambda
             (
-                r#"
+                "
                 (define (f x y) (+ x y) (* x y))
                 (f 4 7)
-                "#,
+                ",
                 "28",
             ),
             // redefining procedures
             (
-                r#"
+                "
                 (define (f x) (* 2 x))
                 (define (f x) (* 3 x))
                 (f 7)
-                "#,
+                ",
                 "21",
             ),
             // let inside a lambda body
             (
-                r#"
+                "
                 (define f (lambda (x)
                     (let ((y (+ x 1)))
                         (* x y))))
                 (f 5)
-                "#,
+                ",
                 "30",
             ),
             // define then let inside lambda
             (
-                r#"
+                "
                 (define f (lambda (x)
                     (define y 10)
                     (let ((z 20))
                         (+ x y z))))
                 (f 5)
-                "#,
+                ",
                 "35",
             ),
             // recursion
             (
-                r#"
+                "
                 (define count (lambda (m n)
                     (if (>= m n)
                         m
                         (count (+ m 1) n))))
                 (count 0 10)
-                "#,
+                ",
                 "10",
             ),
             (
-                r#"
+                "
                 (define fib (lambda (n)
                     (if (<= n 1)
                         n
                         (+ (fib (- n 1)) (fib (- n 2))))))
                 (fib 7)
-                "#,
+                ",
                 "13",
             ),
             // tail call optimization
             (
-                r#"
+                "
                 (define count (lambda (m n)
                     (if (>= m n)
                         m
                         (count (+ m 1) n))))
                 (count 0 1024)
-                "#,
+                ",
                 "1024",
             ),
             // newton method for square root
             (
-                r#"
+                "
                 (define (square x) (* x x))
                 (define (average x y) (/ (+ x y) 2))
                 (define (good-enough? guess x)
@@ -904,39 +966,39 @@ mod tests {
                 (define (sqrt x)
                     (sqrt-iter 1.0 x))
                 (sqrt 2)
-                "#,
+                ",
                 "1.4142156862745097",
             ),
             // returning procedures
             (
-                r#"
+                "
                 (define make-inc (lambda ()
                     (lambda (x)
                             (+ 1 x))))
                 (define inc (make-inc))
                 (inc 4)
-                "#,
+                ",
                 "5",
             ),
             // passing functions
             (
-                r#"
+                "
                 (define (times-three x) (* 3 x))
                 (define (apply-then-inc g y) (+ 1 (g y)))
                 (apply-then-inc times-three 29)
-                "#,
+                ",
                 "88",
             ),
             // returning closures
             // (
-            //     r#"
+            //     "
             //     (define make-inc-by (lambda (a)
             //         (lambda (x)
             //                 (+ a x))))
             //     (define a 13)
             //     (define inc-by-a (make-inc-by a))
             //     (define a 42)
-            //     (inc-by-a 6)"#,
+            //     (inc-by-a 6)",
             //     "19",
             // ),
         ];
@@ -958,6 +1020,7 @@ mod tests {
     #[test]
     fn test_compilation_errors() {
         let cases = vec![
+            ("(define a 42 43)", Err("`define` takes 2 arguments".into())),
             (
                 "(let ((a 3) (b 4)) (+ a b)) a",
                 Err("Not found in scope: a".into()),
@@ -975,6 +1038,10 @@ mod tests {
             (
                 "(lambda (a b 42) (+ a b))",
                 Err("`lambda`: the list of arguments must contain symbols".into()),
+            ),
+            (
+                "(set! z 42)",
+                Err("`set!` got an undefined symbol: z".into()),
             ),
         ];
 
