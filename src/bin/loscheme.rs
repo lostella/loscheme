@@ -168,7 +168,7 @@ mod test {
                     1
                     (* n (fact (- n 1))))))
         "#;
-        assert_eq!(parens_balanced(&balanced_code), true);
+        assert!(parens_balanced(balanced_code));
 
         let unbalanced_code = r#"
             (define fact
@@ -178,6 +178,6 @@ mod test {
                     1
                     (* n (fact (- n 1)))))
         "#;
-        assert_eq!(parens_balanced(&unbalanced_code), false)
+        assert!(!parens_balanced(unbalanced_code))
     }
 }
