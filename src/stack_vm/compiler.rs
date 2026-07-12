@@ -2,19 +2,6 @@ use crate::parser::{Expr, Keyword};
 use crate::stack_vm::vm::{Instruction, Program, Value};
 use std::collections::HashMap;
 
-#[derive(Debug)]
-pub struct Compiler {
-    global_scope: HashMap<String, SymbolInfo>,
-    local_scopes: Vec<HashMap<String, SymbolInfo>>,
-    stack_depth: usize,
-    proc_stack: Vec<Vec<Instruction>>,
-    const_section: Vec<Value>,
-    static_heap: Vec<Value>,
-    proc_section: Vec<Instruction>,
-    main_section: Vec<Instruction>,
-    symbol_table: Vec<String>,
-}
-
 #[derive(Clone, Debug, Copy, PartialEq)]
 enum SymbolKind {
     Argument,
@@ -28,6 +15,41 @@ struct SymbolInfo {
     index: usize,
 }
 
+#[derive(Debug)]
+struct Scope {
+    symbols: HashMap<String, SymbolInfo>,
+    is_lambda: bool,
+}
+
+impl Scope {
+    pub fn new() -> Self {
+        Self {
+            symbols: HashMap::<String, SymbolInfo>::new(),
+            is_lambda: false,
+        }
+    }
+
+    pub fn new_lambda() -> Self {
+        Self {
+            symbols: HashMap::<String, SymbolInfo>::new(),
+            is_lambda: true,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Compiler {
+    global_scope: Scope,
+    local_scopes: Vec<Scope>,
+    stack_depth: usize,
+    proc_stack: Vec<Vec<Instruction>>,
+    const_section: Vec<Value>,
+    static_heap: Vec<Value>,
+    proc_section: Vec<Instruction>,
+    main_section: Vec<Instruction>,
+    symbol_table: Vec<String>,
+}
+
 impl Default for Compiler {
     fn default() -> Self {
         Self::new()
@@ -37,7 +59,7 @@ impl Default for Compiler {
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
-            global_scope: HashMap::<String, SymbolInfo>::new(),
+            global_scope: Scope::new(),
             local_scopes: vec![],
             stack_depth: 0,
             proc_stack: vec![],
@@ -70,7 +92,7 @@ impl Compiler {
             code,
             data,
             heap: self.static_heap.clone(),
-            num_globals: self.global_scope.len(),
+            num_globals: self.global_scope.symbols.len(),
             symbol_table: self.symbol_table.clone(),
         })
     }
@@ -176,35 +198,35 @@ impl Compiler {
 
     fn insert_symbol_info(&mut self, s: String) -> SymbolInfo {
         if let Some(local_scope) = self.local_scopes.last_mut() {
-            if let Some(info) = local_scope.get(&s) {
+            if let Some(info) = local_scope.symbols.get(&s) {
                 return *info;
             }
             let info = SymbolInfo {
                 kind: SymbolKind::Local,
                 index: self.stack_depth,
             };
-            local_scope.insert(s, info);
+            local_scope.symbols.insert(s, info);
             self.stack_depth += 1;
             return info;
         }
-        if let Some(info) = self.global_scope.get(&s) {
+        if let Some(info) = self.global_scope.symbols.get(&s) {
             return *info;
         }
         let info = SymbolInfo {
             kind: SymbolKind::Global,
-            index: self.global_scope.len(),
+            index: self.global_scope.symbols.len(),
         };
-        self.global_scope.insert(s, info);
+        self.global_scope.symbols.insert(s, info);
         info
     }
 
     fn get_symbol_info(&self, symbol: &String) -> Option<SymbolInfo> {
-        for env in self.local_scopes.iter().rev() {
-            if let Some(info) = env.get(symbol) {
+        for scope in self.local_scopes.iter().rev() {
+            if let Some(info) = scope.symbols.get(symbol) {
                 return Some(*info);
             }
         }
-        if let Some(info) = self.global_scope.get(symbol) {
+        if let Some(info) = self.global_scope.symbols.get(symbol) {
             return Some(*info);
         }
         None
@@ -268,16 +290,19 @@ impl Compiler {
     }
 
     fn can_optimize_call(&self, is_tail: bool, num_args: usize) -> bool {
-        let Some(local_scope) = self.local_scopes.last() else {
-            return false;
-        };
-        let mut available_arg_slots: usize = 0;
-        for v in local_scope.values() {
-            if v.kind == SymbolKind::Argument {
-                available_arg_slots += 1;
+        for local_scope in self.local_scopes.iter().rev() {
+            if !local_scope.is_lambda {
+                continue;
             }
+            let mut available_arg_slots: usize = 0;
+            for v in local_scope.symbols.values() {
+                if v.kind == SymbolKind::Argument {
+                    available_arg_slots += 1;
+                }
+            }
+            return is_tail && num_args <= available_arg_slots;
         }
-        is_tail && num_args <= available_arg_slots
+        false
     }
 
     fn prepare_call_frame(&mut self, args: &[Expr]) -> Result<(), String> {
@@ -480,7 +505,7 @@ impl Compiler {
         // save stack depth at entry
         let base_depth = self.stack_depth;
         // create local scope
-        let mut local_scope = HashMap::<String, SymbolInfo>::new();
+        let mut local_scope = Scope::new();
         // compile bindings — each compile_expr pushes a value and increments stack_depth
         for binding in bindings.iter() {
             let Expr::List(v) = binding else {
@@ -490,7 +515,7 @@ impl Compiler {
                 return Err("`let`: each binding must be a list of two elements".to_string());
             };
             // the binding value will land at current stack_depth
-            local_scope.insert(
+            local_scope.symbols.insert(
                 s.to_string(),
                 SymbolInfo {
                     kind: SymbolKind::Local,
@@ -520,12 +545,12 @@ impl Compiler {
         let saved_depth = self.stack_depth;
         self.stack_depth = 0;
         // create local scope
-        let mut local_scope = HashMap::<String, SymbolInfo>::new();
+        let mut local_scope = Scope::new_lambda();
         for (index, argument) in arguments.iter().enumerate() {
             let Expr::Symbol(s) = argument else {
                 return Err("`lambda`: the list of arguments must contain symbols".to_string());
             };
-            local_scope.insert(
+            local_scope.symbols.insert(
                 s.to_string(),
                 SymbolInfo {
                     kind: SymbolKind::Argument,
@@ -950,6 +975,16 @@ mod tests {
                 ",
                 "1024",
             ),
+            (
+                "
+                (define (count m n)
+                    (if (>= m n)
+                        m
+                        (count (+ m 1) n)))
+                (count 0 1024)
+                ",
+                "1024",
+            ),
             // newton method for square root
             (
                 "
@@ -1084,5 +1119,32 @@ mod tests {
         let mut vm = VM::new(program, 1024);
         vm.debug();
         assert_eq!(vm.heap_size(), 0)
+    }
+
+    #[test]
+    fn test_tail_recursion() {
+        let cases = vec![(
+            "
+            (define (loop n)
+              (let ((m n))
+                (if (>= m 200)
+                    m
+                    (loop (+ m 1)))))
+            (loop 0)
+            ",
+            "200",
+        )];
+
+        for (code, expected_res) in cases {
+            let exprs = parse(code).unwrap();
+            let program = Compiler::new().compile(&exprs).unwrap();
+            let mut vm = VM::new(program, 256);
+            vm.run();
+            assert_eq!(
+                vm.represent_stack_top().unwrap(),
+                expected_res,
+                "we are testing `{code}`"
+            );
+        }
     }
 }
