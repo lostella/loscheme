@@ -788,7 +788,7 @@ fn builtin_newline(values: Vec<Value>) -> Result<MaybeValue, String> {
     if !values.is_empty() {
         return Err("Newline takes no arguments".to_string());
     }
-    println!();
+    crate::utils::emit("\n");
     Ok(MaybeValue::Just(Value::Unspecified))
 }
 
@@ -799,7 +799,7 @@ fn builtin_writechar(values: Vec<Value>) -> Result<MaybeValue, String> {
     let Some(Value::Char(c)) = values.first() else {
         return Err("Write-char takes a char as argument".to_string());
     };
-    print!("{c}");
+    crate::utils::emit(&c.to_string());
     Ok(MaybeValue::Just(Value::Unspecified))
 }
 
@@ -810,7 +810,7 @@ fn builtin_writestring(values: Vec<Value>) -> Result<MaybeValue, String> {
     let Some(Value::Str(s)) = values.first() else {
         return Err("Write-string takes a string as argument".to_string());
     };
-    print!("{s}");
+    crate::utils::emit(s);
     Ok(MaybeValue::Just(Value::Unspecified))
 }
 

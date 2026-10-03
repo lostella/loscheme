@@ -18,3 +18,22 @@ pub fn read_code(filename: &str) -> Result<String, String> {
     }
     Ok(code)
 }
+
+#[cfg(all(target_arch = "wasm32", feature = "web"))]
+thread_local! {
+    static OUTPUT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// Write program output: to stdout natively, to an in-memory buffer on the web.
+pub fn emit(s: &str) {
+    #[cfg(all(target_arch = "wasm32", feature = "web"))]
+    OUTPUT.with(|out| out.borrow_mut().push_str(s));
+    #[cfg(not(all(target_arch = "wasm32", feature = "web")))]
+    print!("{s}");
+}
+
+/// Take everything written through `emit` so far, leaving the buffer empty.
+#[cfg(all(target_arch = "wasm32", feature = "web"))]
+pub fn take_output() -> String {
+    OUTPUT.with(|out| std::mem::take(&mut *out.borrow_mut()))
+}
